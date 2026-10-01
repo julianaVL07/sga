@@ -1,30 +1,23 @@
 package co.edu.uniquindio.sga.domain.valueobject;
 
+/**
+ * Estados del ciclo de vida de la reserva (sección 8). Las transiciones válidas (RN-08) las valida Reserva.
+ */
 public enum EstadoReserva {
-    PENDIENTE(true),
-    CONFIRMADA(true),
-    EN_CURSO(true),
-    FINALIZADA(false),
-    CANCELADA(false),
-    NO_SHOW(false);
+    PENDIENTE,
+    CONFIRMADA,
+    EN_CURSO,
+    FINALIZADA,
+    CANCELADA,
+    NO_SHOW;
 
-    private final boolean activa;
-
-    EstadoReserva(boolean activa) {
-        this.activa = activa;
+    /** Sección 8 y RN-12: solo las reservas activas retienen disponibilidad. */
+    public boolean retieneDisponibilidad() {
+        return this == PENDIENTE || this == CONFIRMADA || this == EN_CURSO;
     }
 
-    //Consulta estado activo PENDIENTE CONFIRMADA EN_CURSO
-    public boolean esActiva() {
-        return activa;
-    }
-
-    //Consulta estado terminal FINALIZADA CANCELADA NO_SHOW
-    public boolean esTerminal(){
-        return !activa;
-    }
-
-    public boolean retieneDisponibilidad(){
-        return activa;
+    /** FINALIZADA, CANCELADA y NO_SHOW son terminales. */
+    public boolean esTerminal() {
+        return !retieneDisponibilidad();
     }
 }
