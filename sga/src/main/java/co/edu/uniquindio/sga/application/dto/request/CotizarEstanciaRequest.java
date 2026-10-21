@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/application/dto/request/CotizarEstanciaRequest.java
 package co.edu.uniquindio.sga.application.dto.request;
 
 import jakarta.validation.Valid;

@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/application/dto/response/NovedadResponse.java
 package co.edu.uniquindio.sga.application.dto.response;
 
 import co.edu.uniquindio.sga.domain.valueobject.GravedadNovedad;

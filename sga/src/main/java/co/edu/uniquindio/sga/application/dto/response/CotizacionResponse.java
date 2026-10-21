@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/application/dto/response/CotizacionResponse.java
 package co.edu.uniquindio.sga.application.dto.response;
 
 import java.time.LocalDate;

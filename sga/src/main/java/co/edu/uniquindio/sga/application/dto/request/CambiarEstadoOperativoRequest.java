@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/application/dto/request/CambiarEstadoOperativoRequest.java
 package co.edu.uniquindio.sga.application.dto.request;
 
 import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;

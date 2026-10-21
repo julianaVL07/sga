@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/application/dto/request/RegistrarBloqueoRequest.java
 package co.edu.uniquindio.sga.application.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
