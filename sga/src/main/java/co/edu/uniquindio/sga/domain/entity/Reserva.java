@@ -273,10 +273,12 @@ public class Reserva {
                 umbral, ahora.toLocalDate());
 
         Dinero diferencia = nuevaCotizacion.valorTotal().restar(cotizacion.valorTotal());
+        // Copia antes de limpiar: si no cambian los ocupantes, nuevosOcupantes es la vista de esta misma lista.
+        List<Ocupante> ocupantesNuevos = List.copyOf(nuevosOcupantes);
         this.apartamento = nuevoApartamento.getIdentificacion();
         this.estancia = nuevaEstancia;
         this.ocupantes.clear();
-        this.ocupantes.addAll(nuevosOcupantes);
+        this.ocupantes.addAll(ocupantesNuevos);
         this.cotizacion = nuevaCotizacion;
         return diferencia;
     }

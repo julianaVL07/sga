@@ -19,6 +19,12 @@ servers:
 tags:
   - name: Reservas
     description: Ciclo de vida del agregado Reserva
+  - name: Operación en recepción
+    description: Registro de llegada y salida del grupo
+  - name: Apartamentos
+    description: Disponibilidad y operación de los apartamentos
+  - name: Cotizaciones
+    description: Valor de una estancia antes de reservar
 
 paths:
 
@@ -199,6 +205,210 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
+  # ==================== OPERACIÓN EN RECEPCIÓN (integrante 2) ====================
+
+  /api/reservas/{codigo}/registrar-llegada:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Operación en recepción]
+      summary: Registrar la llegada (CU-04)
+      description: |
+        La reserva pasa a EN_CURSO y el apartamento a OCUPADO. Exige reserva CONFIRMADA con la fecha de
+        entrada alcanzada (RN-10) y apartamento PREPARADO (RN-11). Mapea a `RegistrarLlegadaUseCase`.
+      operationId: registrarLlegada
+      responses:
+        '200':
+          description: Llegada registrada; devuelve la reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/registrar-salida:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Operación en recepción]
+      summary: Registrar la salida (CU-05)
+      description: |
+        La reserva pasa a FINALIZADA (RN-12) y el apartamento a PENDIENTE_PREPARACION. El folio debe quedar
+        cerrado: saldo en cero o autorización del administrador (RN-17). Mapea a `RegistrarSalidaUseCase`.
+      operationId: registrarSalida
+      responses:
+        '200':
+          description: Salida registrada; devuelve la reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== APARTAMENTOS (integrante 2) ====================
+
+  /api/apartamentos/disponibles:
+    get:
+      tags: [Apartamentos]
+      summary: Buscar apartamentos disponibles (CU-01)
+      description: |
+        Apartamentos libres en todas las noches de la estancia y con capacidad para el grupo
+        (RN-01, RN-02, RN-07, RN-20). Solo consulta. Mapea a `BuscarApartamentoDisponibleUseCase`.
+      operationId: buscarApartamentosDisponibles
+      parameters:
+        - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
+        - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
+        - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+      responses:
+        '200':
+          description: Apartamentos disponibles (puede ser una lista vacía)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApartamentoResponse' }
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/apartamentos/{id}/bloqueos:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    post:
+      tags: [Apartamentos]
+      summary: Registrar un bloqueo (CU-13)
+      description: |
+        Retira el apartamento de la venta en un rango de fechas; se rechaza si hay reservas activas en esas
+        noches (7.3, RN-01). Mapea a `RegistrarBloqueoUseCase`.
+      operationId: registrarBloqueo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarBloqueoRequest'
+            example:
+              fechaInicio: '2026-12-01'
+              fechaFin: '2026-12-03'
+              motivo: Mantenimiento del aire acondicionado
+      responses:
+        '201':
+          description: Bloqueo registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloqueoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/apartamentos/{id}/estado-operativo:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Cambiar el estado operativo (CU-16)
+      description: |
+        Solo por las transiciones permitidas (7.6). FUERA_DE_SERVICIO lo decide el administrador.
+        Mapea a `CambiarEstadoOperativoUseCase`.
+      operationId: cambiarEstadoOperativo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiarEstadoOperativoRequest'
+            example:
+              nuevoEstado: EN_PREPARACION
+      responses:
+        '200':
+          description: Estado cambiado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/apartamentos/{id}/novedades:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    post:
+      tags: [Apartamentos]
+      summary: Registrar una novedad (CU-17)
+      description: Daño, faltante o incidencia con autor, descripción y gravedad (7.6). Mapea a `RegistrarNovedadUseCase`.
+      operationId: registrarNovedad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarNovedadRequest'
+            example:
+              autor: Pedro Ruiz
+              descripcion: Copa de cristal rota en la cocina
+              gravedad: BAJA
+      responses:
+        '201':
+          description: Novedad registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NovedadResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  # ==================== COTIZACIONES (integrante 2) ====================
+
+  /api/cotizaciones:
+    post:
+      tags: [Cotizaciones]
+      summary: Cotizar una estancia (CU-02)
+      description: |
+        Calcula noche a noche con la tarifa de cada temporada (RN-06, RP-01) y solo cobra a los ocupantes
+        desde 6 años (RN-05). No crea la reserva. Mapea a `CotizarEstanciaUseCase`.
+      operationId: cotizarEstancia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CotizarEstanciaRequest'
+            example:
+              identificacionApartamento: APT-101
+              fechaEntrada: '2026-11-20'
+              fechaSalida: '2026-11-22'
+              ocupantes:
+                - nombre: Ana Gómez
+                  fechaNacimiento: '1990-05-20'
+                - nombre: Sofía Gómez
+                  fechaNacimiento: '2021-03-02'
+      responses:
+        '200':
+          description: Cotización con el detalle por noche
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
 components:
 
   parameters:
@@ -211,6 +421,14 @@ components:
         type: string
         pattern: '^RES-\d{4}-\d{5}$'
         example: RES-2026-00001
+    IdApartamento:
+      name: id
+      in: path
+      required: true
+      description: Identificación del apartamento
+      schema:
+        type: string
+        example: APT-101
 
   responses:
     DatosInvalidos:
@@ -233,6 +451,103 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    # ---------- Apartamentos y operación (integrante 2) ----------
+
+    EstadoOperativo:
+      type: string
+      enum: [ PREPARADO, OCUPADO, PENDIENTE_PREPARACION, EN_PREPARACION, FUERA_DE_SERVICIO ]
+
+    GravedadNovedad:
+      type: string
+      enum: [ BAJA, MEDIA, ALTA ]
+
+    CotizarEstanciaRequest:
+      type: object
+      required: [ identificacionApartamento, fechaEntrada, fechaSalida, ocupantes ]
+      properties:
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        ocupantes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+
+    RegistrarBloqueoRequest:
+      type: object
+      required: [ fechaInicio, fechaFin, motivo ]
+      properties:
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date, description: Primera noche que ya no queda bloqueada }
+        motivo: { type: string }
+
+    CambiarEstadoOperativoRequest:
+      type: object
+      required: [ nuevoEstado ]
+      properties:
+        nuevoEstado: { $ref: '#/components/schemas/EstadoOperativo' }
+
+    RegistrarNovedadRequest:
+      type: object
+      required: [ autor, descripcion, gravedad ]
+      properties:
+        autor: { type: string }
+        descripcion: { type: string }
+        gravedad: { $ref: '#/components/schemas/GravedadNovedad' }
+
+    ApartamentoResponse:
+      type: object
+      properties:
+        identificacion: { type: string, example: APT-101 }
+        nombre: { type: string }
+        descripcion: { type: string }
+        dormitorios: { type: integer }
+        capacidadMaxima: { type: integer }
+        dotacion: { type: array, items: { type: string } }
+        imagenes: { type: array, items: { type: string, format: uri } }
+        estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
+
+    DetalleNocheResponse:
+      type: object
+      properties:
+        fecha: { type: string, format: date }
+        temporada: { type: string, example: Base }
+        tarifaAplicada: { type: integer, format: int64, description: Pesos por ocupante facturable }
+        ocupantesFacturables: { type: integer }
+        subtotal: { type: integer, format: int64 }
+
+    CotizacionResponse:
+      type: object
+      properties:
+        identificacionApartamento: { type: string }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        noches: { type: integer }
+        detalles:
+          type: array
+          items: { $ref: '#/components/schemas/DetalleNocheResponse' }
+        valorTotal: { type: integer, format: int64 }
+
+    BloqueoResponse:
+      type: object
+      properties:
+        id: { type: string }
+        identificacionApartamento: { type: string }
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+        motivo: { type: string }
+        vigente: { type: boolean }
+
+    NovedadResponse:
+      type: object
+      properties:
+        id: { type: string }
+        identificacionApartamento: { type: string }
+        fecha: { type: string, format: date }
+        autor: { type: string }
+        descripcion: { type: string }
+        gravedad: { $ref: '#/components/schemas/GravedadNovedad' }
+        fechaAtencion: { type: string, format: date, nullable: true }
 
     ErrorResponse:
       type: object
