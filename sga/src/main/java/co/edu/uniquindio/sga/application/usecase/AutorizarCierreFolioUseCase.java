@@ -1,12 +1,14 @@
 package co.edu.uniquindio.sga.application.usecase;
 
+import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.domain.entity.Folio;
-import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.valueobject.AutorizacionCierre;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -18,6 +20,8 @@ import java.util.Objects;
  * Extiende a CU-06. Que solo lo ejecute el administrador lo controla la seguridad de infraestructura:
  * el dominio no conoce usuarios (glosario, "Persona y usuario").
  */
+
+@Service
 public class AutorizarCierreFolioUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -31,10 +35,11 @@ public class AutorizarCierreFolioUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
+    @Transactional
     public Folio ejecutar(CodigoReserva codigo, String autorizadoPor, String motivo) {
         verificarQueExiste(codigo);
         Folio folio = folioRepository.buscarPorReserva(codigo)
-                .orElseThrow(() -> new ReglaDominioException("7.7: La reserva " + codigo.valor() + " no tiene folio"));
+                .orElseThrow(() -> new FolioNoEncontradoException(codigo));
         folio.cerrarConAutorizacion(new AutorizacionCierre(autorizadoPor, motivo, LocalDate.now(reloj)));
         return folioRepository.guardar(folio);
     }
