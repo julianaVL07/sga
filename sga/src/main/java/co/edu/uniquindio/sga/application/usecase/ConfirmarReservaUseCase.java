@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +39,6 @@ public class ConfirmarReservaUseCase {
      * @param horaEstimadaLlegada opcional: si la reserva aún no la tiene (por ejemplo, llegó por el canal externo),
      *                            se registra antes de confirmar (RN-09).
      */
-
     @Transactional
     public Reserva ejecutar(CodigoReserva codigo, LocalTime horaEstimadaLlegada) {
         verificarQueExiste(codigo);

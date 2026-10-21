@@ -4,33 +4,28 @@ import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 
 /**
- * CU-18. Consultar Reserva.
- * GET /api/reservas/{codigo}
- * Caso de uso de consulta que recupera una reserva por su código único de dominio.
- * Utiliza @Transactional(readOnly = true) para optimizar la lectura y no alterar el estado.
+ * CU-18. GET /api/reservas/{codigo}
+ * Consulta el detalle de una reserva por su código (7.5): estado, estancia, titular, ocupantes y el valor y la
+ * política congelados (RN-22). Solo lee; no cambia el estado de nada.
+ * Actores: recepcionista o administrador.
  */
+
 @Service
 public class ConsultarReservaUseCase {
 
     private final ReservaRepository reservaRepository;
 
     public ConsultarReservaUseCase(ReservaRepository reservaRepository) {
-        this.reservaRepository = Objects.requireNonNull(reservaRepository, "El repositorio de reservas es obligatorio");
+        this.reservaRepository = Objects.requireNonNull(reservaRepository);
     }
 
-    /**
-     * Ejecuta la consulta de la reserva.
-     *
-     * @param codigo Código único de la reserva (ej. RES-2026-00001).
-     * @return La entidad Reserva encontrada.
-     * @throws ReservaNoEncontradaException Si la reserva no existe en el sistema (traducido a HTTP 404).
-     */
     @Transactional(readOnly = true)
     public Reserva ejecutar(CodigoReserva codigo) {
         if (codigo == null) {
