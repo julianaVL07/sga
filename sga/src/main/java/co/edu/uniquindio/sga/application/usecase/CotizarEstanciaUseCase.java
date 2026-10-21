@@ -5,6 +5,8 @@ import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +17,8 @@ import java.util.Objects;
  * Calcula el valor noche por noche con su desglose, sin guardar nada (RN-05, RN-06).
  * Usa el umbral de edad configurado en el alojamiento (L-09). Actores: huésped y recepcionista.
  */
+
+@Service
 public class CotizarEstanciaUseCase {
 
     private final CotizadorEstanciaService cotizadorService;
@@ -23,6 +27,7 @@ public class CotizarEstanciaUseCase {
         this.cotizadorService = Objects.requireNonNull(cotizadorService);
     }
 
+    @Transactional(readOnly = true)
     public Cotizacion ejecutar(IdentificacionApartamento apartamento, LocalDate fechaEntrada, LocalDate fechaSalida,
                                List<Ocupante> ocupantes) {
         return cotizadorService.cotizar(apartamento, new Estancia(fechaEntrada, fechaSalida), ocupantes, null);

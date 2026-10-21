@@ -8,6 +8,9 @@ import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.ResultadoEventoCanal;
 import co.edu.uniquindio.sga.domain.valueobject.TipoEventoCanal;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,6 +25,7 @@ import java.util.Objects;
  * incluye CU-03 (la reserva nace PENDIENTE con su folio). Todo mensaje queda en la bitácora (7.8).
  * Actor: canal externo.
  */
+@Service
 public class RecibirReservaExternaUseCase {
 
     private final ConciliacionCanalExternoService conciliacionService;
@@ -33,6 +37,7 @@ public class RecibirReservaExternaUseCase {
     }
 
     /** Consulta de disponibilidad del canal por rango de fechas y composición del grupo (10.3.1, operación 1). */
+    @Transactional(readOnly = true)
     public List<Apartamento> consultarDisponibilidad(LocalDate fechaEntrada, LocalDate fechaSalida,
                                                      int totalOcupantes) {
         return conciliacionService.consultarDisponibilidad(CanalOrigen.EXTERNO,
@@ -40,12 +45,14 @@ public class RecibirReservaExternaUseCase {
     }
 
     /** Creación de una reserva enviada por el canal. */
+    @Transactional
     public ResultadoEventoCanal ejecutar(String identificadorExterno, DatosReservaExterna datos) {
         return conciliacionService.procesarMensajeExterno(CanalOrigen.EXTERNO, identificadorExterno,
                 TipoEventoCanal.CREACION_RESERVA, datos, LocalDateTime.now(reloj));
     }
 
     /** Cancelación enviada por el canal para una reserva que él mismo creó. */
+    @Transactional
     public ResultadoEventoCanal cancelar(String identificadorExterno) {
         return conciliacionService.procesarMensajeExterno(CanalOrigen.EXTERNO, identificadorExterno,
                 TipoEventoCanal.CANCELACION_RESERVA, null, LocalDateTime.now(reloj));

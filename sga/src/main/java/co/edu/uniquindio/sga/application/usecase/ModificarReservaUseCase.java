@@ -10,6 +10,9 @@ import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,6 +27,8 @@ import java.util.Objects;
  *
  * Un dato en null se conserva: para cambiar solo las fechas, apartamento y ocupantes van en null.
  */
+
+@Service
 public class ModificarReservaUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -38,6 +43,7 @@ public class ModificarReservaUseCase {
     }
 
     /** @return la diferencia asentada en el folio (negativa si baja el valor). */
+    @Transactional
     public Dinero ejecutar(CodigoReserva codigo, IdentificacionApartamento nuevoApartamento, LocalDate nuevaFechaEntrada,
                            LocalDate nuevaFechaSalida, List<Ocupante> nuevosOcupantes) {
         verificarQueExiste(codigo);
