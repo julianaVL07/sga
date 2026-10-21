@@ -6,9 +6,6 @@ import co.edu.uniquindio.sga.domain.service.CancelarReservaService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -21,8 +18,6 @@ import java.util.Objects;
  *
  * @return la retención; lo pagado por encima de ella queda como saldo a favor para devolver fuera del sistema.
  */
-
-@Service
 public class CancelarReservaUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -36,7 +31,6 @@ public class CancelarReservaUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
-    @Transactional
     public Dinero ejecutar(CodigoReserva codigo, String motivo) {
         verificarQueExiste(codigo);
         return cancelarReservaService.cancelar(codigo, LocalDate.now(reloj), motivo);

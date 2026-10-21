@@ -6,9 +6,6 @@ import co.edu.uniquindio.sga.domain.service.DeclararNoShowService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -18,8 +15,6 @@ import java.util.Objects;
  * Desde la hora límite del día de entrada (22:00 en Coral, L-15) marca NO_SHOW, aplica la consecuencia de la
  * política congelada (RN-13) y libera las noches (RN-12). Actores: recepcionista o administrador.
  */
-
-@Service
 public class DeclararNoShowUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -33,7 +28,6 @@ public class DeclararNoShowUseCase {
     }
 
     /** @return la retención asentada en el folio. */
-    @Transactional
     public Dinero ejecutar(CodigoReserva codigo) {
         verificarQueExiste(codigo);
         return noShowService.declararNoShow(codigo, LocalDateTime.now(reloj));

@@ -1,16 +1,14 @@
 package co.edu.uniquindio.sga.application.usecase;
 
-import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.domain.entity.Folio;
+import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.MedioPago;
 import co.edu.uniquindio.sga.domain.valueobject.Pago;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -24,8 +22,6 @@ import java.util.Objects;
  * El sistema registra el movimiento de dinero; no lo ejecuta (glosario, "Pago").
  * Actor: recepcionista.
  */
-
-@Service
 public class RegistrarPagoUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -39,13 +35,12 @@ public class RegistrarPagoUseCase {
     }
 
     /** @return el folio con el pago registrado, para mostrar el nuevo saldo. */
-    @Transactional
     public Folio ejecutar(CodigoReserva codigo, Dinero valor, MedioPago medio) {
         if (codigo == null || reservaRepository.buscarPorCodigo(codigo).isEmpty()) {
             throw new ReservaNoEncontradaException(codigo);
         }
         Folio folio = folioRepository.buscarPorReserva(codigo)
-                .orElseThrow(() -> new FolioNoEncontradoException(codigo));
+                .orElseThrow(() -> new ReglaDominioException("7.7: La reserva " + codigo.valor() + " no tiene folio"));
         folio.registrarPago(new Pago(valor, medio, LocalDate.now(reloj)));
         return folioRepository.guardar(folio);
     }

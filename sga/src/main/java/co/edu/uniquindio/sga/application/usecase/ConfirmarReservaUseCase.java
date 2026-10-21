@@ -6,9 +6,6 @@ import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -20,8 +17,6 @@ import java.util.Objects;
  * como el alojamiento Coral exige anticipo del 50 %, que los pagos del folio lo cubran (L-11).
  * Actores: recepcionista o administrador.
  */
-
-@Service
 public class ConfirmarReservaUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -39,7 +34,6 @@ public class ConfirmarReservaUseCase {
      * @param horaEstimadaLlegada opcional: si la reserva aún no la tiene (por ejemplo, llegó por el canal externo),
      *                            se registra antes de confirmar (RN-09).
      */
-    @Transactional
     public Reserva ejecutar(CodigoReserva codigo, LocalTime horaEstimadaLlegada) {
         verificarQueExiste(codigo);
         if (horaEstimadaLlegada != null) {
