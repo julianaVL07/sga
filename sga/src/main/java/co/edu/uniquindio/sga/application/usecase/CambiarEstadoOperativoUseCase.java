@@ -1,11 +1,11 @@
 package co.edu.uniquindio.sga.application.usecase;
 
+import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
-import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
-import org.springframework.stereotype.Service;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
@@ -17,8 +17,6 @@ import java.util.Objects;
  * restricción de rol que verifica la infraestructura. Un cambio de estado no crea ni levanta bloqueos (3.3).
  * Actores: personal de servicio y administrador.
  */
-
-@Service
 public class CambiarEstadoOperativoUseCase {
 
     private final ApartamentoRepository apartamentoRepository;
@@ -30,7 +28,7 @@ public class CambiarEstadoOperativoUseCase {
     @Transactional
     public Apartamento ejecutar(IdentificacionApartamento identificacion, EstadoOperativo nuevoEstado) {
         Apartamento apartamento = apartamentoRepository.buscarPorIdentificacion(identificacion)
-                .orElseThrow(() -> new ReglaDominioException("No existe el apartamento " + identificacion.codigo()));
+                .orElseThrow(() -> new ApartamentoNoEncontradoException(identificacion));
         apartamento.cambiarEstadoOperativo(nuevoEstado);
         return apartamentoRepository.guardar(apartamento);
     }
