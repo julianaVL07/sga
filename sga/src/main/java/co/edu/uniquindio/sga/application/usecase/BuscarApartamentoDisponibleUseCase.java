@@ -25,7 +25,7 @@ public class BuscarApartamentoDisponibleUseCase {
         this.disponibilidadService = Objects.requireNonNull(disponibilidadService);
     }
 
-    @Transactional
+    @Transactional (readOnly = true)
     public List<Apartamento> ejecutar(LocalDate fechaEntrada, LocalDate fechaSalida, int totalOcupantes) {
         return disponibilidadService.buscarDisponibles(new Estancia(fechaEntrada, fechaSalida), totalOcupantes);
     }

@@ -27,7 +27,7 @@ public class CotizarEstanciaUseCase {
         this.cotizadorService = Objects.requireNonNull(cotizadorService);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Cotizacion ejecutar(IdentificacionApartamento apartamento, LocalDate fechaEntrada, LocalDate fechaSalida,
                                List<Ocupante> ocupantes) {
         return cotizadorService.cotizar(apartamento, new Estancia(fechaEntrada, fechaSalida), ocupantes, null);
