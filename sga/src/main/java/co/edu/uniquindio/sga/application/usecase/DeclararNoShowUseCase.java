@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.DeclararNoShowService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +32,8 @@ public class DeclararNoShowUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
-    @Transactional
     /** @return la retención asentada en el folio. */
+    @Transactional
     public Dinero ejecutar(CodigoReserva codigo) {
         verificarQueExiste(codigo);
         return noShowService.declararNoShow(codigo, LocalDateTime.now(reloj));
