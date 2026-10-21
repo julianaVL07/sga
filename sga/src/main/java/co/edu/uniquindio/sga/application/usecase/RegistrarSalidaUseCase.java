@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.LiquidacionSalidaService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -18,6 +19,8 @@ import java.util.Objects;
  * aquí; si no, primero hay que pagar o el administrador debe autorizar el cierre (CU-07).
  * Actor: recepcionista.
  */
+
+@Service
 public class RegistrarSalidaUseCase {
 
     private final ReservaRepository reservaRepository;

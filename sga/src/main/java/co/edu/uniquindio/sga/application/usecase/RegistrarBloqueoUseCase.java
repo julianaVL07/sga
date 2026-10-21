@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
 
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -16,6 +17,8 @@ import java.util.Objects;
  * noches (7.3, RN-01). Desde ese momento las noches no aparecen como disponibles (RN-07).
  * Actor: administrador.
  */
+
+@Service
 public class RegistrarBloqueoUseCase {
 
     private final RegistrarBloqueoService registrarBloqueoService;
