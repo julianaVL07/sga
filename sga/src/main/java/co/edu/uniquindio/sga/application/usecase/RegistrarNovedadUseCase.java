@@ -6,6 +6,8 @@ import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.repository.NovedadRepository;
 import co.edu.uniquindio.sga.domain.valueobject.GravedadNovedad;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -18,6 +20,8 @@ import java.util.UUID;
  * gravedad (7.6). La gravedad la elige quien reporta; la sugerencia del modelo de IA (L-21) es opcional.
  * Actores: personal de servicio y recepcionista.
  */
+
+@Service
 public class RegistrarNovedadUseCase {
 
     private final ApartamentoRepository apartamentoRepository;
@@ -31,6 +35,7 @@ public class RegistrarNovedadUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
+    @Transactional
     public Novedad ejecutar(IdentificacionApartamento apartamento, String autor, String descripcion,
                             GravedadNovedad gravedad) {
         if (apartamento == null || !apartamentoRepository.existe(apartamento)) {

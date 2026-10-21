@@ -4,6 +4,8 @@ import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.EntregaApartamentoService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -15,6 +17,8 @@ import java.util.Objects;
  * Reglas RN-10 (reserva CONFIRMADA y fecha de entrada alcanzada) y RN-11 (apartamento PREPARADO).
  * Actor: recepcionista.
  */
+
+@Service
 public class RegistrarLlegadaUseCase {
 
     private final ReservaRepository reservaRepository;
@@ -28,6 +32,7 @@ public class RegistrarLlegadaUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
+    @Transactional
     public void ejecutar(CodigoReserva codigo) {
         verificarQueExiste(codigo);
         entregaService.autorizarEntrega(codigo, LocalDate.now(reloj));
