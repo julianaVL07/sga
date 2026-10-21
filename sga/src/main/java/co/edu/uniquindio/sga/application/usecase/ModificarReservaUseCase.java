@@ -9,6 +9,7 @@ import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +43,6 @@ public class ModificarReservaUseCase {
     }
 
     /** @return la diferencia asentada en el folio (negativa si baja el valor). */
-
     @Transactional
     public Dinero ejecutar(CodigoReserva codigo, IdentificacionApartamento nuevoApartamento, LocalDate nuevaFechaEntrada,
                            LocalDate nuevaFechaSalida, List<Ocupante> nuevosOcupantes) {
