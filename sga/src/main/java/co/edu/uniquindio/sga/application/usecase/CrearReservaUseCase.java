@@ -10,6 +10,7 @@ import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
