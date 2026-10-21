@@ -10,6 +10,8 @@ import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -24,6 +26,8 @@ import java.util.Objects;
  * (RP-03), y congela cotización y política (RN-22). Incluye CU-01 y CU-02 (disponibilidad y cotización).
  * Actores: huésped (canal PORTAL) y recepcionista (canal DIRECTO). El canal EXTERNO entra por CU-08.
  */
+
+@Service
 public class CrearReservaUseCase {
 
     /** Datos de la solicitud. La cotización es la que vio el titular; puede venir null. */
@@ -47,6 +51,7 @@ public class CrearReservaUseCase {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
+    @Transactional
     public Reserva ejecutar(SolicitudReserva solicitud) {
         if (solicitud == null) throw new ReglaDominioException("La solicitud de reserva es obligatoria");
         if (solicitud.canal() == CanalOrigen.EXTERNO) {

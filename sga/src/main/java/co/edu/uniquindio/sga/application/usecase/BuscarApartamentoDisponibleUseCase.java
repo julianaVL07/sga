@@ -3,6 +3,8 @@ package co.edu.uniquindio.sga.application.usecase;
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.service.DisponibilidadApartamentoService;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -13,6 +15,8 @@ import java.util.Objects;
  * Solo consulta: no modifica datos. Reglas RN-01, RN-02, RN-07, RN-20 y RP-01 (en DisponibilidadApartamentoService).
  * Actores: huésped y recepcionista.
  */
+
+@Service
 public class BuscarApartamentoDisponibleUseCase {
 
     private final DisponibilidadApartamentoService disponibilidadService;
@@ -21,6 +25,7 @@ public class BuscarApartamentoDisponibleUseCase {
         this.disponibilidadService = Objects.requireNonNull(disponibilidadService);
     }
 
+    @Transactional
     public List<Apartamento> ejecutar(LocalDate fechaEntrada, LocalDate fechaSalida, int totalOcupantes) {
         return disponibilidadService.buscarDisponibles(new Estancia(fechaEntrada, fechaSalida), totalOcupantes);
     }
