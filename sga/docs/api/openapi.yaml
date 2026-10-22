@@ -25,6 +25,10 @@ tags:
     description: Disponibilidad y operación de los apartamentos
   - name: Cotizaciones
     description: Valor de una estancia antes de reservar
+  - name: Folio
+    description: Cuenta de la reserva con cargos, pagos, saldo y cierre
+  - name: Canal externo
+    description: Integración con plataformas de terceros
 
 paths:
 
@@ -205,7 +209,7 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
-  # ==================== OPERACIÓN EN RECEPCIÓN (integrante 2) ====================
+  # ==================== OPERACIÓN EN RECEPCIÓN ====================
 
   /api/reservas/{codigo}/registrar-llegada:
     parameters:
@@ -251,7 +255,7 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
-  # ==================== APARTAMENTOS (integrante 2) ====================
+  # ==================== APARTAMENTOS ====================
 
   /api/apartamentos/disponibles:
     get:
@@ -372,7 +376,7 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
 
-  # ==================== COTIZACIONES (integrante 2) ====================
+  # ==================== COTIZACIONES ====================
 
   /api/cotizaciones:
     post:
@@ -409,6 +413,191 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
+  # ==================== FOLIO ====================
+
+  /api/reservas/{codigo}/folio/pagos:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar un pago (CU-15)
+      description: |
+        Abono contra el folio con su medio y su fecha (RN-15). Admite pagos parciales; un pago no se edita
+        ni se borra (RN-16). Mapea a `RegistrarPagoUseCase`.
+      operationId: registrarPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarPagoRequest'
+            example:
+              valor: 310000
+              medio: TRANSFERENCIA_BANCARIA
+      responses:
+        '201':
+          description: Pago registrado; devuelve el folio con el nuevo saldo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/folio/cerrar:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [ Folio ]
+      summary: Cerrar el folio (CU-06)
+      description: Solo si el saldo es exactamente cero (RN-17). Mapea a `CerrarFolioUseCase`.
+      operationId: cerrarFolio
+      responses:
+        '200':
+          description: Folio cerrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/folio/autorizacion-cierre:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Autorizar el cierre con saldo (CU-07)
+      description: |
+        El administrador cierra el folio aunque tenga saldo; queda registrado quién autoriza y por qué
+        (RN-17). Mapea a `AutorizarCierreFolioUseCase`.
+      operationId: autorizarCierreFolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutorizarCierreFolioRequest'
+            example:
+              autorizadoPor: Marta Ríos (administradora)
+              motivo: Saldo de $5.000 por redondeo aceptado por el huésped
+      responses:
+        '200':
+          description: Folio cerrado con autorización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== CANAL EXTERNO ====================
+
+  /api/canales/{canal}/disponibilidad:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+    get:
+      tags: [ Canal externo ]
+      summary: Consultar disponibilidad desde el canal (CU-08)
+      description: |
+        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01.
+        Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
+      operationId: consultarDisponibilidadCanal
+      parameters:
+        - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
+        - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
+        - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+      responses:
+        '200':
+          description: Apartamentos disponibles (puede ser una lista vacía)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApartamentoResponse' }
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/canales/{canal}/reservas:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+    post:
+      tags: [ Canal externo ]
+      summary: Recibir una reserva del canal (CU-08)
+      description: |
+        Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). Si ya están
+        vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el identificador externo ya llegó,
+        DUPLICADO_IGNORADO (RN-19). El rechazo no es un error HTTP. Mapea a `RecibirReservaExternaUseCase.ejecutar`.
+      operationId: recibirReservaExterna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaExternaRequest'
+            example:
+              identificadorExterno: BK-889201
+              identificacionApartamento: APT-101
+              fechaEntrada: '2026-11-20'
+              fechaSalida: '2026-11-22'
+              titular:
+                nombre: Ana Gómez
+                tipoDocumento: CC
+                numeroDocumento: '1094000111'
+                email: ana@example.com
+                telefono: '3001234567'
+              ocupantes:
+                - nombre: Ana Gómez
+                  tipoDocumento: CC
+                  numeroDocumento: '1094000111'
+                  fechaNacimiento: '1990-05-20'
+      responses:
+        '200':
+          description: Mensaje procesado; el resultado va en el cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/canales/{canal}/reservas/{identificadorExterno}/cancelar:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+      - name: identificadorExterno
+        in: path
+        required: true
+        description: Identificador de la reserva en el canal
+        schema:
+          type: string
+          example: BK-889201
+    put:
+      tags: [ Canal externo ]
+      summary: Cancelar una reserva del canal (CU-08)
+      description: |
+        Cancela la reserva que el mismo canal creó con ese identificador; una cancelación repetida responde
+        DUPLICADO_IGNORADO (RN-19). Mapea a `RecibirReservaExternaUseCase.cancelar`.
+      operationId: cancelarReservaExterna
+      responses:
+        '200':
+          description: Mensaje procesado; el resultado va en el cuerpo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+
 components:
 
   parameters:
@@ -429,6 +618,14 @@ components:
       schema:
         type: string
         example: APT-101
+    Canal:
+      name: canal
+      in: path
+      required: true
+      description: Nombre de la plataforma externa que llama; para el dominio es el canal EXTERNO
+      schema:
+        type: string
+        example: booking
 
   responses:
     DatosInvalidos:
@@ -451,7 +648,7 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
-    # ---------- Apartamentos y operación (integrante 2) ----------
+    # ---------- Apartamentos y operación ----------
 
     EstadoOperativo:
       type: string
@@ -677,4 +874,92 @@ components:
         codigo: { type: string }
         estado: { $ref: '#/components/schemas/EstadoReserva' }
         retencion: { type: integer, format: int64, description: En pesos (RN-13) }
-  
+
+    # ---------- Folio y canal externo ----------
+
+    MedioPago:
+      type: string
+      enum: [ TARJETA_DEBITO_CREDITO, TRANSFERENCIA_BANCARIA ]
+
+    TipoCargo:
+      type: string
+      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW ]
+
+    TipoEventoCanal:
+      type: string
+      enum: [ CONSULTA_DISPONIBILIDAD, CREACION_RESERVA, CANCELACION_RESERVA ]
+
+    ResultadoEventoCanal:
+      type: string
+      enum: [ ACEPTADO, RECHAZADO_CONFLICTO, RECHAZADO_INVALIDO, DUPLICADO_IGNORADO ]
+
+    RegistrarPagoRequest:
+      type: object
+      required: [ valor, medio ]
+      properties:
+        valor: { type: integer, format: int64, minimum: 1, description: Pesos enteros }
+        medio: { $ref: '#/components/schemas/MedioPago' }
+
+    AutorizarCierreFolioRequest:
+      type: object
+      required: [ autorizadoPor, motivo ]
+      properties:
+        autorizadoPor: { type: string }
+        motivo: { type: string }
+
+    ReservaExternaRequest:
+      type: object
+      required: [ identificadorExterno, identificacionApartamento, fechaEntrada, fechaSalida, titular, ocupantes ]
+      properties:
+        identificadorExterno: { type: string, example: BK-889201 }
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        horaEstimadaLlegada: { type: string, format: time, nullable: true, example: '16:30:00' }
+        titular: { $ref: '#/components/schemas/TitularRequest' }
+        ocupantes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+
+    CargoResponse:
+      type: object
+      properties:
+        tipo: { $ref: '#/components/schemas/TipoCargo' }
+        concepto: { type: string }
+        valor: { type: integer, format: int64, description: Negativo si es un ajuste a la baja o un movimiento inverso }
+        fecha: { type: string, format: date }
+
+    PagoResponse:
+      type: object
+      properties:
+        valor: { type: integer, format: int64 }
+        medio: { $ref: '#/components/schemas/MedioPago' }
+        fecha: { type: string, format: date }
+
+    FolioResponse:
+      type: object
+      properties:
+        codigoReserva: { type: string, example: RES-2026-00001 }
+        fechaApertura: { type: string, format: date }
+        depositoGarantia: { type: integer, format: int64, example: 250000 }
+        cargos:
+          type: array
+          items: { $ref: '#/components/schemas/CargoResponse' }
+        pagos:
+          type: array
+          items: { $ref: '#/components/schemas/PagoResponse' }
+        totalCargos: { type: integer, format: int64 }
+        totalPagado: { type: integer, format: int64 }
+        saldo: { type: integer, format: int64, description: Cargos menos pagos; negativo si hay saldo a favor }
+        cerrado: { type: boolean }
+        fechaCierre: { type: string, format: date, nullable: true }
+        autorizadoPor: { type: string, nullable: true }
+        motivoAutorizacion: { type: string, nullable: true }
+
+    EventoCanalResponse:
+      type: object
+      properties:
+        identificadorExterno: { type: string }
+        tipoEvento: { $ref: '#/components/schemas/TipoEventoCanal' }
+        resultado: { $ref: '#/components/schemas/ResultadoEventoCanal' }
