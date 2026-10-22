@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,8 +32,8 @@ import java.util.List;
 /**
  * Adaptador REST del canal externo (Guía 08): las tres operaciones de CU-08 (10.3.1).
  * {canal} es el nombre de la plataforma que llama (por ejemplo "booking"); para el dominio todas son el canal
- * EXTERNO. Un rechazo por conflicto (RN-18) o un mensaje repetido (RN-19) no es un error HTTP: el canal recibe
- * 200 con el resultado en el cuerpo, y el mensaje queda en la bitácora (7.8).
+ * EXTERNO. Todo mensaje queda en la bitácora (7.8), también los rechazados: por eso el caso de uso devuelve el
+ * resultado en vez de lanzar una excepción, y este controlador lo traduce al código HTTP (estadoHttp).
  */
 @RestController
 @RequestMapping("/api/canales/{canal}")
@@ -65,8 +66,11 @@ public class CanalExternoController {
             description = "Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). "
                     + "Si ya están vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el "
                     + "identificador externo ya llegó, DUPLICADO_IGNORADO (RN-19)")
-    @ApiResponse(responseCode = "200", description = "Mensaje procesado; el resultado va en el cuerpo")
+    @ApiResponse(responseCode = "201", description = "ACEPTADO: reserva creada PENDIENTE")
+    @ApiResponse(responseCode = "200", description = "DUPLICADO_IGNORADO: el mensaje ya había llegado (RN-19)")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "409", description = "RECHAZADO_CONFLICTO: noches vendidas o bloqueadas (RN-18)")
+    @ApiResponse(responseCode = "422", description = "RECHAZADO_INVALIDO: los datos no cumplen las reglas de la reserva")
     public ResponseEntity<EventoCanalResponse> recibirReserva(@PathVariable String canal,
                                                               @Valid @RequestBody ReservaExternaRequest request) {
         DatosReservaExterna datos = new DatosReservaExterna(
@@ -76,8 +80,8 @@ public class CanalExternoController {
                 reservaMapper.aOcupantes(request.ocupantes()),
                 request.horaEstimadaLlegada());
         ResultadoEventoCanal resultado = recibirReservaExternaUseCase.ejecutar(request.identificadorExterno(), datos);
-        return ResponseEntity.ok(new EventoCanalResponse(request.identificadorExterno(),
-                TipoEventoCanal.CREACION_RESERVA, resultado));
+        return ResponseEntity.status(estadoHttp(resultado, HttpStatus.CREATED))
+                .body(new EventoCanalResponse(request.identificadorExterno(), TipoEventoCanal.CREACION_RESERVA, resultado));
     }
 
     /** CU-08, operación 3. PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar */
@@ -85,11 +89,26 @@ public class CanalExternoController {
     @Operation(summary = "Cancelar una reserva del canal",
             description = "Cancela la reserva que el mismo canal creó con ese identificador externo; una "
                     + "cancelación repetida responde DUPLICADO_IGNORADO (RN-19)")
-    @ApiResponse(responseCode = "200", description = "Mensaje procesado; el resultado va en el cuerpo")
+    @ApiResponse(responseCode = "200", description = "ACEPTADO o DUPLICADO_IGNORADO (RN-19)")
+    @ApiResponse(responseCode = "422", description = "RECHAZADO_INVALIDO: no hay una reserva del canal con ese identificador "
+            + "o ya no se puede cancelar")
     public ResponseEntity<EventoCanalResponse> cancelarReserva(@PathVariable String canal,
                                                                @PathVariable String identificadorExterno) {
         ResultadoEventoCanal resultado = recibirReservaExternaUseCase.cancelar(identificadorExterno);
-        return ResponseEntity.ok(new EventoCanalResponse(identificadorExterno,
-                TipoEventoCanal.CANCELACION_RESERVA, resultado));
+        return ResponseEntity.status(estadoHttp(resultado, HttpStatus.OK))
+                .body(new EventoCanalResponse(identificadorExterno, TipoEventoCanal.CANCELACION_RESERVA, resultado));
+    }
+
+    /**
+     * El caso de uso no lanza excepción en un rechazo para que el evento quede en la bitácora (7.8); aquí solo se
+     * traduce el resultado al código HTTP que corresponde.
+     */
+    private HttpStatus estadoHttp(ResultadoEventoCanal resultado, HttpStatus siAceptado) {
+        return switch (resultado) {
+            case ACEPTADO -> siAceptado;
+            case DUPLICADO_IGNORADO -> HttpStatus.OK;                        // RN-19: idempotente, el canal no reintenta
+            case RECHAZADO_CONFLICTO -> HttpStatus.CONFLICT;                 // RN-18
+            case RECHAZADO_INVALIDO -> HttpStatus.UNPROCESSABLE_CONTENT;
+        };
     }
 }
