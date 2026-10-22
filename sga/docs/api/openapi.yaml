@@ -539,7 +539,8 @@ paths:
       description: |
         Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). Si ya están
         vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el identificador externo ya llegó,
-        DUPLICADO_IGNORADO (RN-19). El rechazo no es un error HTTP. Mapea a `RecibirReservaExternaUseCase.ejecutar`.
+        DUPLICADO_IGNORADO (RN-19). Todo mensaje queda en la bitácora (7.8), también los rechazados.
+        Mapea a `RecibirReservaExternaUseCase.ejecutar`.
       operationId: recibirReservaExterna
       requestBody:
         required: true
@@ -564,14 +565,33 @@ paths:
                   numeroDocumento: '1094000111'
                   fechaNacimiento: '1990-05-20'
       responses:
+        '201':
+          description: ACEPTADO, la reserva nace PENDIENTE con su folio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
         '200':
-          description: Mensaje procesado; el resultado va en el cuerpo
+          description: DUPLICADO_IGNORADO, el mensaje ya había llegado (RN-19)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventoCanalResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: RECHAZADO_CONFLICTO, las noches ya están vendidas o bloqueadas (RN-18)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '422':
+          description: RECHAZADO_INVALIDO, los datos no cumplen las reglas de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+
 
   /api/canales/{canal}/reservas/{identificadorExterno}/cancelar:
     parameters:
@@ -592,7 +612,13 @@ paths:
       operationId: cancelarReservaExterna
       responses:
         '200':
-          description: Mensaje procesado; el resultado va en el cuerpo
+          description: ACEPTADO o DUPLICADO_IGNORADO (RN-19)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '422':
+          description: RECHAZADO_INVALIDO, no hay una reserva del canal con ese identificador o ya no se puede cancelar
           content:
             application/json:
               schema:
