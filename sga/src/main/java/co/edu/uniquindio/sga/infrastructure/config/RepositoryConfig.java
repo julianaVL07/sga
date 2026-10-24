@@ -17,7 +17,9 @@ import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.ConflictoCanalR
 import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.EventoCanalRepositoryInMemory;
 import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.FolioRepositoryInMemory;
 import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.NovedadRepositoryInMemory;
-import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.ReservaRepositoryInMemory;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ReservaPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.ServicioAdicionalRepositoryInMemory;
 import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.TemporadaRepositoryInMemory;
 import org.springframework.context.annotation.Bean;
@@ -67,9 +69,11 @@ public class RepositoryConfig {
         return new NovedadRepositoryInMemory();
     }
 
+    /** Fase 4: Reserva ya se guarda en H2 con su adaptador JPA. */
     @Bean
-    public ReservaRepository reservaRepository() {
-        return new ReservaRepositoryInMemory();
+    public ReservaRepository reservaRepository(ReservaJpaDataRepository dataRepository,
+                                               ReservaPersistenceMapper mapper) {
+        return new ReservaJpaRepository(dataRepository, mapper);
     }
 
     @Bean
