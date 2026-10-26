@@ -10,15 +10,18 @@ import co.edu.uniquindio.sga.domain.repository.NovedadRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.repository.ServicioAdicionalRepository;
 import co.edu.uniquindio.sga.domain.repository.TemporadaRepository;
-import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.ConflictoCanalRepositoryInMemory;
-import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.EventoCanalRepositoryInMemory;
-import co.edu.uniquindio.sga.infrastructure.persistence.inmemory.FolioRepositoryInMemory;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.AlojamientoJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.AlojamientoJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ApartamentoJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ApartamentoJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.BloqueoJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.BloqueoJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ConflictoCanalJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ConflictoCanalJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.EventoCanalJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.EventoCanalJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.FolioJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.FolioJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaDataRepository;
@@ -29,6 +32,8 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.TemporadaJpaDataRepo
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.TemporadaJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.AlojamientoPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ApartamentoPersistenceMapper;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.CanalPersistenceMapper;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.FolioPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.NovedadPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ReservaPersistenceMapper;
 import org.springframework.context.annotation.Bean;
@@ -36,9 +41,9 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Único lugar donde se elige qué adaptador implementa cada puerto *Repository del dominio.
- * Fases 1 a 3: adaptadores en memoria. En la Fase 4 se cambia el cuerpo de cada método por el adaptador JPA
- * y ninguna otra clase se entera (arquitectura hexagonal). Las clases en memoria no llevan @Repository:
- * si lo tuvieran, Spring encontraría dos beans del mismo tipo.
+ * Fases 1 a 3: adaptadores en memoria. En la Fase 4 se cambió el cuerpo de cada método por el adaptador JPA
+ * y ninguna otra clase se enteró (arquitectura hexagonal). Las clases en memoria se conservan para las pruebas
+ * y no llevan @Repository: si lo tuvieran, Spring encontraría dos beans del mismo tipo.
  */
 @Configuration
 public class RepositoryConfig {
@@ -65,18 +70,20 @@ public class RepositoryConfig {
     }
 
     @Bean
-    public ConflictoCanalRepository conflictoCanalRepository() {
-        return new ConflictoCanalRepositoryInMemory();
+    public ConflictoCanalRepository conflictoCanalRepository(ConflictoCanalJpaDataRepository dataRepository,
+                                                             CanalPersistenceMapper mapper) {
+        return new ConflictoCanalJpaRepository(dataRepository, mapper);
     }
 
     @Bean
-    public EventoCanalRepository eventoCanalRepository() {
-        return new EventoCanalRepositoryInMemory();
+    public EventoCanalRepository eventoCanalRepository(EventoCanalJpaDataRepository dataRepository,
+                                                       CanalPersistenceMapper mapper) {
+        return new EventoCanalJpaRepository(dataRepository, mapper);
     }
 
     @Bean
-    public FolioRepository folioRepository() {
-        return new FolioRepositoryInMemory();
+    public FolioRepository folioRepository(FolioJpaDataRepository dataRepository, FolioPersistenceMapper mapper) {
+        return new FolioJpaRepository(dataRepository, mapper);
     }
 
     @Bean
@@ -85,7 +92,6 @@ public class RepositoryConfig {
         return new NovedadJpaRepository(dataRepository, mapper);
     }
 
-    /** Fase 4: Reserva ya se guarda en H2 con su adaptador JPA. */
     @Bean
     public ReservaRepository reservaRepository(ReservaJpaDataRepository dataRepository,
                                                ReservaPersistenceMapper mapper) {
