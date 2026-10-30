@@ -34,6 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * venta, bloqueos, estado operativo y novedades por HTTP contra la aplicación completa sobre H2 con los datos
  * iniciales del Coral (12.3: APT-202 fuera de servicio y bloqueado de hoy+3 a hoy+15, APT-301 bloqueado de hoy+20
  * a hoy+25).
+ * Los datos iniciales de reservas (DatosInicialesReservasConfig) ocupan APT-101, APT-102 y APT-201 entre hoy-10 y
+ * hoy+22; las búsquedas usan hoy+5, hoy+21 y hoy+40, que no chocan con reservas activas, y el retiro usa APT-301,
+ * que no tiene reservas.
  * Usa su propia base H2 (sga-apartamentos) para que retirar un apartamento no afecte a las demás pruebas de
  * integración; la prueba que retira deja el contexto sucio y la siguiente arranca con los datos iniciales.
  */
@@ -282,22 +285,28 @@ class ApartamentoControllerIntegracionTest {
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
     @DisplayName("CU-21: retirar responde 200 y el apartamento deja de salir en el listado, el detalle y la búsqueda")
     void retirarApartamento() throws Exception {
+        // APT-301 no tiene reservas en los datos iniciales; su bloqueo vigente (12.3) no impide retirarlo,
+        // porque 7.3 solo exige que no haya reservas activas ni futuras.
         LocalDate entrada = LocalDate.now(BOGOTA).plusDays(40);
-        put("/api/apartamentos/APT-201/retirar", "")
+        get("/api/apartamentos/APT-301")
+                .andExpect(jsonPath("$.bloqueosVigentes[*].motivo", hasItem("Mantenimiento de la piscina de inmersión")));
+        get(disponibles(entrada, 2, "")).andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-301")));
+
+        put("/api/apartamentos/APT-301/retirar", "")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.identificacion").value("APT-201"))
+                .andExpect(jsonPath("$.identificacion").value("APT-301"))
                 .andExpect(jsonPath("$.eliminado").value(true))
                 .andExpect(jsonPath("$.activo").value(false));
 
         get("/api/apartamentos")
                 .andExpect(jsonPath("$.totalElementos").value(4))
-                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-201"))));
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-301"))));
         get(disponibles(entrada, 2, ""))
-                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-201"))));
-        get("/api/apartamentos/APT-201").andExpect(status().isNotFound());
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-301"))));
+        get("/api/apartamentos/APT-301").andExpect(status().isNotFound());
 
         // Ya retirado: retirarlo otra vez es una regla de negocio (7.3)
-        put("/api/apartamentos/APT-201/retirar", "")
+        put("/api/apartamentos/APT-301/retirar", "")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("7.3")));
     }
