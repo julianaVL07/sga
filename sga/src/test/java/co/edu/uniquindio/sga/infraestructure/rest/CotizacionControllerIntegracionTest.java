@@ -1,4 +1,4 @@
-package co.edu.uniquindio.sga.infrastructure.rest;
+package co.edu.uniquindio.sga.infraestructure.rest;
 
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;

@@ -1,4 +1,4 @@
-package co.edu.uniquindio.sga.infrastructure.rest;
+package co.edu.uniquindio.sga.infraestructure.rest;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
