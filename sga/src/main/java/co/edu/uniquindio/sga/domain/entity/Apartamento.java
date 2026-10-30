@@ -266,6 +266,24 @@ public class Apartamento {
         this.eliminado = true;
     }
 
+    /**
+     * CU-21 (7.3): retira el apartamento de la venta. La eliminación es lógica (12.4): queda eliminado e inactivo,
+     * deja de salir en listados y búsquedas y las reservas históricas lo siguen referenciando.
+     * RetiroApartamentoService consulta las reservas y le dice al agregado si hay activas o futuras.
+     */
+    public void retirarDeLaVenta(boolean tieneReservasActivasOFuturas) {
+        if (eliminado) {
+            throw new ReglaDominioException("7.3: El apartamento " + identificacion.codigo()
+                    + " ya fue retirado de la venta");
+        }
+        if (tieneReservasActivasOFuturas) {
+            throw new ReglaDominioException("7.3: El apartamento " + identificacion.codigo()
+                    + " tiene reservas activas o futuras y no puede retirarse de la venta");
+        }
+        this.eliminado = true;
+        this.activo = false;
+    }
+
     public boolean estaVigenteParaVenta() {
         return activo && !eliminado;
     }
