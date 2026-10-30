@@ -15,6 +15,13 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -23,7 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integración del agregado Reserva: levanta la aplicación completa (controladores, casos de uso, dominio,
  * JPA sobre H2 y los datos iniciales del Coral) y la recorre por HTTP como lo haría Postman.
- * Cubre el ciclo completo, la cancelación, la modificación y un 400, un 404 y un 409 de ReservaController.
+ * Cubre el ciclo completo, la cancelación, la modificación, el listado (CU-19) y un 400, un 404 y un 409 de
+ * ReservaController.
  * Las pruebas comparten la base H2, por eso cada una usa su propio apartamento o sus propias fechas.
  * Las fechas se calculan con el reloj de Colombia, el mismo que usa el SGA (L-13, RN-10).
  */
@@ -146,6 +154,72 @@ class ReservaControllerIntegracionTest {
         post("/api/reservas", reserva("APT-202", entrada.plusDays(1), entrada.plusDays(3), "16:00", "PORTAL"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("RN-01")));
+    }
+
+
+    // ==================== CU-19: listado ====================
+
+    @Test
+    @DisplayName("CU-19: el listado muestra primero la reserva más reciente")
+    void listarOrdenaDeLaMasRecienteALaMasAntigua() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(200);
+        String primera = codigo(crear("APT-102", entrada, entrada.plusDays(2), "16:00", "PORTAL"));
+        String segunda = codigo(crear("APT-102", entrada.plusDays(5), entrada.plusDays(7), "16:00", "PORTAL"));
+
+        get("/api/reservas")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.contenido[0].codigo").value(segunda))
+                .andExpect(jsonPath("$.contenido[1].codigo").value(primera))
+                .andExpect(jsonPath("$.contenido[0].apartamento").value("APT-102"))
+                .andExpect(jsonPath("$.contenido[0].nombreTitular").value("Ana Gomez"))
+                .andExpect(jsonPath("$.contenido[0].totalOcupantes").value(1));
+    }
+
+    @Test
+    @DisplayName("CU-19: el filtro por estado solo devuelve reservas en ese estado")
+    void listarFiltraPorEstado() throws Exception {
+        get("/api/reservas?estado=CANCELADA")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", not(empty())))
+                .andExpect(jsonPath("$.contenido[*].estado", everyItem(is("CANCELADA"))));
+    }
+
+    @Test
+    @DisplayName("CU-19: el filtro por canal solo devuelve reservas de ese canal")
+    void listarFiltraPorCanal() throws Exception {
+        get("/api/reservas?canal=EXTERNO")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", not(empty())))
+                .andExpect(jsonPath("$.contenido[*].canalOrigen", everyItem(is("EXTERNO"))));
+    }
+
+    @Test
+    @DisplayName("CU-19: cada página trae como máximo 10 reservas (12.4)")
+    void listarPaginaDeAMaximoDiez() throws Exception {
+        // Con los datos de prueba (7 reservas) y estas 4 hay al menos 11: no caben en una sola página
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(300);
+        for (int i = 0; i < 4; i++) {
+            crear("APT-101", entrada.plusDays(3L * i), entrada.plusDays(3L * i + 2), "16:00", "DIRECTO");
+        }
+
+        get("/api/reservas?pagina=0")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.contenido", hasSize(10)))
+                .andExpect(jsonPath("$.totalElementos", greaterThan(10)))
+                .andExpect(jsonPath("$.totalPaginas", greaterThan(1)));
+        get("/api/reservas?pagina=1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(1))
+                .andExpect(jsonPath("$.contenido", hasSize(lessThanOrEqualTo(10))))
+                .andExpect(jsonPath("$.contenido", not(empty())));
+    }
+
+    @Test
+    @DisplayName("CU-19, 400: la página no puede ser negativa")
+    void listarConPaginaNegativaResponde400() throws Exception {
+        get("/api/reservas?pagina=-1").andExpect(status().isBadRequest());
     }
 
 
