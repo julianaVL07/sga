@@ -5,15 +5,21 @@ import co.edu.uniquindio.sga.application.dto.request.ConfirmarReservaRequest;
 import co.edu.uniquindio.sga.application.dto.request.CrearReservaRequest;
 import co.edu.uniquindio.sga.application.dto.request.ModificarReservaRequest;
 import co.edu.uniquindio.sga.application.dto.response.ModificacionReservaResponse;
+import co.edu.uniquindio.sga.application.dto.response.PaginaResponse;
 import co.edu.uniquindio.sga.application.dto.response.ReservaDetalleResponse;
+import co.edu.uniquindio.sga.application.dto.response.ReservaResumenResponse;
 import co.edu.uniquindio.sga.application.dto.response.RetencionResponse;
 import co.edu.uniquindio.sga.application.usecase.CancelarReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConfirmarReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.CrearReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.DeclararNoShowUseCase;
+import co.edu.uniquindio.sga.application.usecase.ListarReservasUseCase;
 import co.edu.uniquindio.sga.application.usecase.ModificarReservaUseCase;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
+import co.edu.uniquindio.sga.domain.repository.FiltroReservas;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
+import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
@@ -22,6 +28,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,13 +37,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.time.LocalDate;
 
 /**
- * Adaptador REST del agregado Reserva (Guía 08): CU-03, CU-09, CU-10, CU-11, CU-12 y CU-18.
+ * Adaptador REST del agregado Reserva (Guía 08): CU-03, CU-09, CU-10, CU-11, CU-12, CU-18 y CU-19.
  * No tiene reglas ni try/catch: convierte el DTO a tipos del dominio, llama al caso de uso y mapea la respuesta.
  * Los errores los traduce GlobalExceptionHandler (400, 404, 409). La fecha y hora las pone el reloj del SGA,
  * nunca el cliente. El registro de llegada y salida (CU-04, CU-05) está en OperacionReservaController.
@@ -53,6 +62,7 @@ public class ReservaController {
     private final ModificarReservaUseCase modificarReservaUseCase;
     private final CancelarReservaUseCase cancelarReservaUseCase;
     private final DeclararNoShowUseCase declararNoShowUseCase;
+    private final ListarReservasUseCase listarReservasUseCase;
     private final ReservaMapper mapper;
 
     /** CU-03. POST /api/reservas */
@@ -70,6 +80,29 @@ public class ReservaController {
                 .buildAndExpand(reserva.getCodigo().valor())
                 .toUri();
         return ResponseEntity.created(location).body(mapper.aDetalle(reserva));
+    }
+
+    /** CU-19. GET /api/reservas?estado=&apartamento=&canal=&titular=&desde=&hasta=&pagina=0 */
+    @GetMapping
+    @Operation(summary = "Listar reservas",
+            description = "Reservas de la más reciente a la más antigua, 10 por página (7.5, 12.4). Todos los filtros "
+                    + "son opcionales; desde y hasta acotan la fecha de entrada (ambas incluidas) y titular es el "
+                    + "número de documento del titular. La numeración de páginas empieza en 0")
+    @ApiResponse(responseCode = "200", description = "Página de reservas (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Página negativa, o estado, canal o fecha mal escritos")
+    @ApiResponse(responseCode = "409", description = "La fecha desde es posterior a la fecha hasta")
+    public ResponseEntity<PaginaResponse<ReservaResumenResponse>> listar(
+            @RequestParam(required = false) EstadoReserva estado,
+            @RequestParam(required = false) String apartamento,
+            @RequestParam(required = false) CanalOrigen canal,
+            @RequestParam(required = false) String titular,
+            @RequestParam(required = false) LocalDate desde,
+            @RequestParam(required = false) LocalDate hasta,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
+        FiltroReservas filtro = new FiltroReservas(estado, mapper.aIdentificacion(apartamento), canal, titular,
+                desde, hasta);
+        Pagina<Reserva> reservas = listarReservasUseCase.ejecutar(filtro, pagina);
+        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
     }
 
     /** CU-18. GET /api/reservas/{codigo} */

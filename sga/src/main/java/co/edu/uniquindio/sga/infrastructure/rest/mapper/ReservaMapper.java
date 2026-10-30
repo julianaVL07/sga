@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.application.dto.request.OcupanteRequest;
 import co.edu.uniquindio.sga.application.dto.request.TitularRequest;
 import co.edu.uniquindio.sga.application.dto.response.OcupanteResponse;
 import co.edu.uniquindio.sga.application.dto.response.ReservaDetalleResponse;
+import co.edu.uniquindio.sga.application.dto.response.ReservaResumenResponse;
 import co.edu.uniquindio.sga.application.dto.response.TitularResponse;
 import co.edu.uniquindio.sga.application.usecase.CrearReservaUseCase;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
@@ -75,6 +76,16 @@ public interface ReservaMapper {
     @Mapping(target = "valorTotal", expression = "java(aPesos(reserva.valorTotal()))")
     @Mapping(target = "versionPoliticaCancelacion", source = "politicaCancelacion.version")
     ReservaDetalleResponse aDetalle(Reserva reserva);
+
+    /** CU-19: fila del listado. */
+    @Mapping(target = "codigo", source = "codigo.valor")
+    @Mapping(target = "apartamento", source = "apartamento.codigo")
+    @Mapping(target = "fechaEntrada", source = "estancia.fechaEntrada")
+    @Mapping(target = "fechaSalida", source = "estancia.fechaSalida")
+    @Mapping(target = "nombreTitular", source = "titular.nombre")
+    @Mapping(target = "totalOcupantes", expression = "java(reserva.totalOcupantes())")
+    @Mapping(target = "valorTotal", expression = "java(aPesos(reserva.valorTotal()))")
+    ReservaResumenResponse aResumen(Reserva reserva);
 
     @Mapping(target = "tipoDocumento", source = "documento.tipo")
     @Mapping(target = "numeroDocumento", source = "documento.numero")

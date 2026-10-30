@@ -35,6 +35,33 @@ paths:
   # ==================== RESERVAS ====================
 
   /api/reservas:
+    get:
+      tags: [Reservas]
+      summary: Listar reservas (CU-19)
+      description: |
+        Reservas de la más reciente a la más antigua, 10 por página (7.5 "Listados", 12.4). Todos los filtros
+        son opcionales; desde y hasta acotan la fecha de entrada de la estancia (ambas incluidas).
+        La numeración de páginas empieza en 0. Mapea a `ListarReservasUseCase`.
+      operationId: listarReservas
+      parameters:
+        - { name: estado, in: query, required: false, schema: { $ref: '#/components/schemas/EstadoReserva' } }
+        - { name: apartamento, in: query, required: false, schema: { type: string }, example: APT-101 }
+        - { name: canal, in: query, required: false, schema: { $ref: '#/components/schemas/CanalOrigen' } }
+        - { name: titular, in: query, required: false, description: Número de documento del titular, schema: { type: string }, example: '1094000000' }
+        - { name: desde, in: query, required: false, schema: { type: string, format: date }, example: '2026-11-01' }
+        - { name: hasta, in: query, required: false, schema: { type: string, format: date }, example: '2026-11-30' }
+        - { name: pagina, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Página de reservas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
     post:
       tags: [Reservas]
       summary: Crear una reserva (CU-03)
@@ -1091,6 +1118,31 @@ components:
         codigo: { type: string }
         estado: { $ref: '#/components/schemas/EstadoReserva' }
         retencion: { type: integer, format: int64, description: En pesos (RN-13) }
+
+    ReservaResumenResponse:
+      type: object
+      properties:
+        codigo: { type: string, example: RES-2026-00001 }
+        estado: { $ref: '#/components/schemas/EstadoReserva' }
+        apartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        nombreTitular: { type: string }
+        totalOcupantes: { type: integer }
+        canalOrigen: { $ref: '#/components/schemas/CanalOrigen' }
+        valorTotal: { type: integer, format: int64, description: Valor congelado en pesos (RN-22) }
+
+    PaginaReservaResumen:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ReservaResumenResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
 
     # ---------- Folio y canal externo ----------
 

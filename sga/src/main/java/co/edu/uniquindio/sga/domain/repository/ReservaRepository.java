@@ -41,4 +41,11 @@ public interface ReservaRepository {
 
     /** 7.5: todas las reservas, de la más reciente a la más antigua. */
     List<Reserva> listarTodas();
+
+    /**
+     * CU-19 (7.5, 12.4): reservas que cumplen el filtro, de la más reciente a la más antigua, una página a la vez.
+     * @param pagina número de página, empieza en 0.
+     * @param tamano cantidad máxima de reservas por página.
+     */
+    Pagina<Reserva> listar(FiltroReservas filtro, int pagina, int tamano);
 }
