@@ -257,30 +257,147 @@ paths:
 
   # ==================== APARTAMENTOS ====================
 
+  /api/apartamentos:
+    get:
+      tags: [Apartamentos]
+      summary: Listar apartamentos (CU-20)
+      description: |
+        Apartamentos no eliminados del alojamiento, ordenados por identificación, 10 por página (7.3, 12.4).
+        Los retirados de la venta (eliminación lógica) no aparecen. Solo consulta.
+        Mapea a `ConsultarApartamentosUseCase.listar`.
+      operationId: listarApartamentos
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
   /api/apartamentos/disponibles:
     get:
       tags: [Apartamentos]
-      summary: Buscar apartamentos disponibles (CU-01)
+      summary: Buscar apartamentos disponibles con filtros y paginación (CU-01)
       description: |
         Apartamentos libres en todas las noches de la estancia y con capacidad para el grupo
-        (RN-01, RN-02, RN-07, RN-20). Solo consulta. Mapea a `BuscarApartamentoDisponibleUseCase`.
+        (RN-01, RN-02, RN-07, RN-20, RP-01). La disponibilidad la decide `DisponibilidadApartamentoService`;
+        sobre ese resultado se aplican los filtros opcionales y luego la paginación (10 por página, 7.5, 12.4).
+        Solo consulta. Mapea a `BuscarApartamentoDisponibleUseCase.buscar`.
+
+        - **valorEstimado** es el valor de toda la estancia para el grupo (RN-05, RN-06). Si no se envían
+          `fechasNacimiento`, todos los ocupantes cuentan como facturables (el estimado es el máximo posible).
+        - **precioMinimo / precioMaximo** se comparan con ese valor estimado, no con la tarifa de una noche.
+        - **caracteristica** busca un texto dentro de la dotación del apartamento, sin distinguir mayúsculas
+          ni tildes (por ejemplo `hidromasaje`).
+        - **Sin filtro de servicios:** los servicios de 7.5 son del alojamiento (servicios adicionales como
+          la recepción nocturna o el paseo por la bahía) y se ofrecen igual en todos los apartamentos, así que
+          no sirven para distinguir uno de otro. Lo que distingue a un apartamento es su dotación, que se filtra
+          con `caracteristica`.
+        - Un apartamento FUERA_DE_SERVICIO no sale de la búsqueda por su estado (3.3); sale cuando tiene un
+          bloqueo en esas noches (RN-07).
       operationId: buscarApartamentosDisponibles
       parameters:
         - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
         - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
         - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+        - name: fechasNacimiento
+          in: query
+          required: false
+          description: Una fecha por ocupante para aplicar el umbral de edad facturable (RN-06)
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string, format: date } }
+          example: [ '1990-05-20', '2022-03-01' ]
+        - { name: capacidadMinima, in: query, required: false, schema: { type: integer, minimum: 1 }, example: 4 }
+        - name: precioMinimo
+          in: query
+          required: false
+          description: Valor estimado mínimo de la estancia, en pesos
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: precioMaximo
+          in: query
+          required: false
+          description: Valor estimado máximo de la estancia, en pesos; debe ser mayor o igual que precioMinimo
+          schema: { type: integer, format: int64, minimum: 0 }
+          example: 2000000
+        - name: caracteristica
+          in: query
+          required: false
+          description: Texto que debe aparecer en algún elemento de la dotación
+          schema: { type: string }
+          example: hidromasaje
+        - $ref: '#/components/parameters/PaginaApartamentos'
       responses:
         '200':
-          description: Apartamentos disponibles (puede ser una lista vacía)
+          description: Página de apartamentos disponibles (el contenido puede venir vacío)
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApartamentoResponse' }
+                $ref: '#/components/schemas/PaginaApartamentoDisponibleResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '409':
-          $ref: '#/components/responses/ReglaDeNegocio'
+          description: |
+            Las fechas no forman una estancia válida (RN-03, RN-04, RP-01) o los filtros son inconsistentes
+            (7.5: capacidad mínima <= 0, precio negativo, precioMinimo > precioMaximo, fechas de nacimiento
+            que no coinciden con los ocupantes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el detalle de un apartamento (CU-20)
+      description: |
+        Datos, dotación, imágenes con la principal, capacidad, estado operativo, tarifas por temporada y
+        bloqueos vigentes (7.3). Un apartamento retirado de la venta responde 404.
+        Mapea a `ConsultarApartamentosUseCase.detalle`.
+      operationId: consultarApartamento
+      responses:
+        '200':
+          description: Detalle del apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /api/apartamentos/{id}/retirar:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Retirar un apartamento de la venta (CU-21)
+      description: |
+        Eliminación lógica (12.4): el apartamento queda eliminado e inactivo, deja de salir en el listado y en
+        la búsqueda, y las reservas históricas lo siguen referenciando. No existe DELETE: retirar es una
+        operación de negocio que exige que no haya reservas activas ni futuras (7.3).
+        Mapea a `RetirarApartamentoUseCase`.
+      operationId: retirarApartamento
+      responses:
+        '200':
+          description: Apartamento retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Tiene reservas activas o futuras, o ya estaba retirado (7.3)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/apartamentos/{id}/bloqueos:
     parameters:
@@ -644,6 +761,12 @@ components:
       schema:
         type: string
         example: APT-101
+    PaginaApartamentos:
+      name: pagina
+      in: query
+      required: false
+      description: Número de página, empieza en 0 (10 resultados por página, 12.4)
+      schema: { type: integer, minimum: 0, default: 0 }
     Canal:
       name: canal
       in: path
@@ -729,6 +852,74 @@ components:
         dotacion: { type: array, items: { type: string } }
         imagenes: { type: array, items: { type: string, format: uri } }
         estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
+
+    PaginaApartamentoResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ApartamentoResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64, example: 5 }
+        totalPaginas: { type: integer, example: 1 }
+
+    ApartamentoDisponibleResponse:
+      type: object
+      description: Tarjeta del resultado de la búsqueda (7.5)
+      properties:
+        identificacion: { type: string, example: APT-301 }
+        nombre: { type: string, example: Gran Coral Imperial }
+        imagenPrincipal: { type: string, format: uri }
+        capacidadMaxima: { type: integer, example: 6 }
+        valorEstimado: { type: integer, format: int64, description: Valor de toda la estancia en pesos, example: 1000000 }
+        latitud: { type: number, format: double, description: Del alojamiento, example: 10.3975 }
+        longitud: { type: number, format: double, description: Del alojamiento, example: -75.559 }
+
+    PaginaApartamentoDisponibleResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ApartamentoDisponibleResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    ApartamentoDetalleResponse:
+      type: object
+      properties:
+        identificacion: { type: string, example: APT-301 }
+        nombre: { type: string }
+        descripcion: { type: string }
+        dormitorios: { type: integer }
+        capacidadMaxima: { type: integer }
+        dotacion: { type: array, items: { type: string } }
+        imagenes:
+          type: array
+          items:
+            type: object
+            properties:
+              url: { type: string, format: uri }
+              principal: { type: boolean }
+        imagenPrincipal: { type: string, format: uri }
+        estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
+        activo: { type: boolean }
+        eliminado: { type: boolean, description: Eliminación lógica (12.4) }
+        tarifas:
+          type: array
+          description: Valor por ocupante facturable y por noche en cada temporada (7.4)
+          items:
+            type: object
+            properties:
+              idTemporada: { type: string, example: T-BASE }
+              valorPorOcupante: { type: integer, format: int64, example: 250000 }
+        bloqueosVigentes:
+          type: array
+          items: { $ref: '#/components/schemas/BloqueoResponse' }
 
     DetalleNocheResponse:
       type: object
