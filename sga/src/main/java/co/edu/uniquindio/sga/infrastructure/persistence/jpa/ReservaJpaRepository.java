@@ -2,6 +2,8 @@ package co.edu.uniquindio.sga.infrastructure.persistence.jpa;
 
 import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
+import co.edu.uniquindio.sga.domain.repository.FiltroReservas;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
@@ -10,6 +12,10 @@ import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ReservaEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ReservaPersistenceMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -122,6 +128,19 @@ public class ReservaJpaRepository implements ReservaRepository {
     @Transactional(readOnly = true)
     public List<Reserva> listarTodas() {
         return aDominio(dataRepository.findAllByOrderByFechaCreacionDesc());
+    }
+
+    /** CU-19: la más reciente primero; el id desempata dos reservas creadas en el mismo instante. */
+    @Override
+    @Transactional(readOnly = true)
+    public Pagina<Reserva> listar(FiltroReservas filtro, int pagina, int tamano) {
+        FiltroReservas criterios = filtro == null ? FiltroReservas.sinFiltro() : filtro;
+        Pageable pageable = PageRequest.of(pagina, tamano,
+                Sort.by(Sort.Direction.DESC, "fechaCreacion").and(Sort.by(Sort.Direction.DESC, "id")));
+        Page<ReservaEntity> resultado = dataRepository.buscarConFiltro(criterios.estado(),
+                criterios.apartamento() == null ? null : criterios.apartamento().codigo(),
+                criterios.canal(), criterios.documentoTitular(), criterios.desde(), criterios.hasta(), pageable);
+        return mapper.aPagina(resultado);
     }
 
     private List<Reserva> aDominio(List<ReservaEntity> entidades) {

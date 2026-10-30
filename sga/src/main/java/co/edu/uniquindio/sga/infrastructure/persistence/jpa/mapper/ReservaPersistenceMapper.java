@@ -1,6 +1,7 @@
 package co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper;
 
 import co.edu.uniquindio.sga.domain.entity.Reserva;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.DetalleNoche;
@@ -18,6 +19,7 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.OcupanteEmbed
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ReservaEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.TitularEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.TramoCancelacionEmbedable;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -81,6 +83,12 @@ public class ReservaPersistenceMapper {
     }
 
     // ==================== TABLA → DOMINIO ====================
+
+    /** CU-19: la Page de Spring Data se vuelve Pagina del dominio, que no depende de Spring. */
+    public Pagina<Reserva> aPagina(Page<ReservaEntity> pagina) {
+        return new Pagina<>(pagina.getContent().stream().map(this::aDominio).toList(),
+                pagina.getNumber(), pagina.getSize(), pagina.getTotalElements());
+    }
 
     public Reserva aDominio(ReservaEntity e) {
         return Reserva.reconstruir(
