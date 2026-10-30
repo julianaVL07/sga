@@ -6,6 +6,7 @@ import co.edu.uniquindio.sga.domain.entity.ServicioAdicional;
 import co.edu.uniquindio.sga.domain.entity.Temporada;
 import co.edu.uniquindio.sga.domain.repository.AlojamientoRepository;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
+import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
 import co.edu.uniquindio.sga.domain.valueobject.Capacidad;
 import co.edu.uniquindio.sga.domain.valueobject.CargoAseoMascota;
 import co.edu.uniquindio.sga.domain.valueobject.Coordenada;
@@ -26,7 +27,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -37,6 +40,11 @@ import java.util.List;
  * La carga usa las fábricas del dominio, así que pasa por las mismas reglas (F-05, 7.4, L-03, L-04).
  * Los parámetros que ya están en application.properties se leen de ahí (L-13: configuración, nunca constante).
  * Las temporadas se registran con la fecha final excluida (nota de A.3).
+ *
+ * Datos de prueba (12.3): APT-202 queda FUERA_DE_SERVICIO con un bloqueo de hoy+3 a hoy+15 (3.3: el estado no
+ * retira la venta futura, el bloqueo sí) y APT-301 tiene un bloqueo vigente de hoy+20 a hoy+25. No se tocan
+ * APT-101, APT-102 ni APT-201, que son los de las reservas de prueba. Corre con @Order(1), antes que cualquier
+ * otro cargador de datos.
  */
 @Configuration
 public class DatosInicialesCoralConfig {
@@ -48,9 +56,12 @@ public class DatosInicialesCoralConfig {
     private static final String ALTA = "T-ALTA";
 
     @Bean
+    @Order(1)
     public CommandLineRunner cargarDatosCoral(
             AlojamientoRepository alojamientoRepository,
             ApartamentoRepository apartamentoRepository,
+            RegistrarBloqueoService registrarBloqueoService,
+            Clock reloj,
             @Value("${sga.alojamiento.umbral-edad-facturable}") int umbralEdad,
             @Value("${sga.alojamiento.hora-entrada}") LocalTime horaEntrada,
             @Value("${sga.alojamiento.hora-salida}") LocalTime horaSalida,
@@ -139,6 +150,20 @@ public class DatosInicialesCoralConfig {
                 apartamentoRepository.guardar(apartamento);
             }
             alojamientoRepository.guardar(coral);
+
+            // 12.3: APT-202 fuera de servicio por decisión administrativa (7.6) y bloqueado para la venta (3.3)
+            LocalDate hoy = LocalDate.now(reloj);
+            IdentificacionApartamento apt202 = new IdentificacionApartamento("APT-202");
+            Apartamento fueraDeServicio = apartamentoRepository.buscarPorIdentificacion(apt202).orElseThrow();
+            fueraDeServicio.ponerFueraDeServicio();
+            apartamentoRepository.guardar(fueraDeServicio);
+            registrarBloqueoService.registrarBloqueo(apt202, new RangoFechas(hoy.plusDays(3), hoy.plusDays(15)),
+                    "Fuera de servicio: reparación de la cocina integral");
+
+            // 12.3: bloqueo vigente sobre APT-301 (RN-07)
+            registrarBloqueoService.registrarBloqueo(new IdentificacionApartamento("APT-301"),
+                    new RangoFechas(hoy.plusDays(20), hoy.plusDays(25)), "Mantenimiento de la piscina de inmersión");
+
             log.info("Datos iniciales del alojamiento Coral cargados: {} apartamentos", inventario.size());
         };
     }
