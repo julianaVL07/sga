@@ -40,8 +40,8 @@ class OperacionReservaControllerIntegracionTest {
         Confirmada reserva = reservaConfirmada("APT-202", hoy, hoy.plusDays(2));
         String codigo = reserva.codigo();
 
-        // RN-11: si el apartamento no está PREPARADO no recibe al grupo
-        cambiarEstado("APT-202", "FUERA_DE_SERVICIO").andExpect(status().isOk());
+        // RN-11: si el apartamento no está PREPARADO no recibe al grupo. Los datos iniciales (12.3) lo dejan
+        // FUERA_DE_SERVICIO, así que el personal debe prepararlo antes de la llegada.
         llegada(codigo).andExpect(status().isConflict()).andExpect(jsonPath("$.mensaje", startsWith("RN-11")));
         cambiarEstado("APT-202", "PENDIENTE_PREPARACION").andExpect(status().isOk());
         cambiarEstado("APT-202", "EN_PREPARACION").andExpect(status().isOk());

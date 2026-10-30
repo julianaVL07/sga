@@ -2,6 +2,7 @@ package co.edu.uniquindio.sga.infrastructure.persistence.inmemory;
 
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 
 import java.util.Comparator;
@@ -51,5 +52,10 @@ public class ApartamentoRepositoryInMemory implements ApartamentoRepository {
                 .filter(a -> !a.isEliminado())
                 .sorted(POR_CODIGO)
                 .toList();
+    }
+
+    @Override
+    public Pagina<Apartamento> listarNoEliminados(int pagina, int tamano) {
+        return Pagina.de(listarNoEliminados(), pagina, tamano);
     }
 }

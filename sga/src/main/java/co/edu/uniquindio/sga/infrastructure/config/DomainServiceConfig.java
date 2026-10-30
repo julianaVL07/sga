@@ -19,6 +19,7 @@ import co.edu.uniquindio.sga.domain.service.EntregaApartamentoService;
 import co.edu.uniquindio.sga.domain.service.LiquidacionSalidaService;
 import co.edu.uniquindio.sga.domain.service.ModificacionReservaService;
 import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
+import co.edu.uniquindio.sga.domain.service.RetiroApartamentoService;
 import co.edu.uniquindio.sga.domain.service.VencimientoReservasService;
 import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
@@ -34,7 +35,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 /**
- * Construye los 12 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 13 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -68,11 +69,12 @@ public class DomainServiceConfig {
                         new TramoCancelacion(0, 50)));
     }
 
+    /** 7.5: recibe el cotizador para estimar el valor de la estancia y filtrar por precio. */
     @Bean
     public DisponibilidadApartamentoService disponibilidadApartamentoService(
             ReservaRepository reservas, ApartamentoRepository apartamentos,
-            BloqueoRepository bloqueos, AlojamientoRepository alojamientos) {
-        return new DisponibilidadApartamentoService(reservas, apartamentos, bloqueos, alojamientos);
+            BloqueoRepository bloqueos, AlojamientoRepository alojamientos, CotizadorEstanciaService cotizador) {
+        return new DisponibilidadApartamentoService(reservas, apartamentos, bloqueos, alojamientos, cotizador);
     }
 
     @Bean
@@ -136,6 +138,13 @@ public class DomainServiceConfig {
                                                            ApartamentoRepository apartamentos,
                                                            ReservaRepository reservas) {
         return new RegistrarBloqueoService(bloqueos, apartamentos, reservas);
+    }
+
+    /** CU-21 (7.3): retiro de un apartamento de la venta, con eliminación lógica (12.4). */
+    @Bean
+    public RetiroApartamentoService retiroApartamentoService(ApartamentoRepository apartamentos,
+                                                             ReservaRepository reservas) {
+        return new RetiroApartamentoService(apartamentos, reservas);
     }
 
     @Bean

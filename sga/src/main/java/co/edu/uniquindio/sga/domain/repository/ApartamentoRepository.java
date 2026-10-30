@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /**
  * Puerto de persistencia de apartamentos. No hay borrado físico: la eliminación es lógica
- * (Apartamento.desactivar) y se persiste con guardar (7.3, 12.4).
+ * (Apartamento.retirarDeLaVenta) y se persiste con guardar (7.3, 12.4).
  */
 public interface ApartamentoRepository {
 
@@ -24,4 +24,10 @@ public interface ApartamentoRepository {
 
     /** Todos los no eliminados, para la administración. */
     List<Apartamento> listarNoEliminados();
+
+    /**
+     * CU-20 (7.3, 12.4): una página de los apartamentos no eliminados, ordenados por identificación.
+     * La numeración de páginas empieza en 0.
+     */
+    Pagina<Apartamento> listarNoEliminados(int pagina, int tamano);
 }

@@ -1,5 +1,7 @@
 package co.edu.uniquindio.sga.infrastructure.rest.mapper;
 
+import co.edu.uniquindio.sga.application.dto.response.ApartamentoDetalleResponse;
+import co.edu.uniquindio.sga.application.dto.response.ApartamentoDisponibleResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoResponse;
 import co.edu.uniquindio.sga.application.dto.response.BloqueoResponse;
 import co.edu.uniquindio.sga.application.dto.response.CotizacionResponse;
@@ -8,10 +10,12 @@ import co.edu.uniquindio.sga.application.dto.response.NovedadResponse;
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
 import co.edu.uniquindio.sga.domain.entity.Novedad;
+import co.edu.uniquindio.sga.domain.valueobject.ApartamentoDisponible;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.DetalleNoche;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.Imagen;
+import co.edu.uniquindio.sga.domain.valueobject.Tarifa;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -36,6 +40,46 @@ public interface ApartamentoMapper {
     ApartamentoResponse aResponse(Apartamento apartamento);
 
     List<ApartamentoResponse> aResponses(List<Apartamento> apartamentos);
+
+    // ==================== RESULTADO DE LA BÚSQUEDA (CU-01, 7.5) ====================
+
+    @Mapping(target = "identificacion", source = "apartamento.identificacion.codigo")
+    @Mapping(target = "nombre", source = "apartamento.nombre")
+    @Mapping(target = "imagenPrincipal", expression = "java(aUrl(disponible.apartamento().imagenPrincipal()))")
+    @Mapping(target = "capacidadMaxima", source = "apartamento.capacidad.maximo")
+    @Mapping(target = "valorEstimado", source = "valorEstimado")
+    @Mapping(target = "latitud", source = "ubicacion.latitud")
+    @Mapping(target = "longitud", source = "ubicacion.longitud")
+    ApartamentoDisponibleResponse aDisponibleResponse(ApartamentoDisponible disponible);
+
+    // ==================== DETALLE (CU-20, CU-21) ====================
+
+    /** Solo los bloqueos vigentes; las imágenes conservan cuál es la principal. */
+    default ApartamentoDetalleResponse aDetalleResponse(Apartamento apartamento) {
+        if (apartamento == null) {
+            return null;
+        }
+        return new ApartamentoDetalleResponse(
+                apartamento.getIdentificacion().codigo(),
+                apartamento.getNombre(),
+                apartamento.getDescripcion(),
+                apartamento.getDormitorios(),
+                apartamento.getCapacidad().maximo(),
+                apartamento.getDotacion().elementos(),
+                apartamento.getImagenes().stream()
+                        .map(i -> new ApartamentoDetalleResponse.ImagenResponse(i.url(), i.esPrincipal()))
+                        .toList(),
+                aUrl(apartamento.imagenPrincipal()),
+                apartamento.getEstadoOperativo(),
+                apartamento.isActivo(),
+                apartamento.isEliminado(),
+                apartamento.getTarifas().stream().map(this::aTarifaResponse).toList(),
+                apartamento.getBloqueos().stream().filter(Bloqueo::isVigente).map(this::aBloqueoResponse).toList());
+    }
+
+    default ApartamentoDetalleResponse.TarifaResponse aTarifaResponse(Tarifa tarifa) {
+        return new ApartamentoDetalleResponse.TarifaResponse(tarifa.idTemporada(), aPesos(tarifa.valorPorOcupante()));
+    }
 
     /** Cada imagen viaja como su URL. */
     default String aUrl(Imagen imagen) {

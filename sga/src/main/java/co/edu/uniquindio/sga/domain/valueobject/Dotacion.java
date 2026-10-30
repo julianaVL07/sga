@@ -2,7 +2,9 @@ package co.edu.uniquindio.sga.domain.valueobject;
 
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Dotación y características de un apartamento (L-06). Ej.: tina de hidromasaje, cava de vinos.
@@ -22,5 +24,23 @@ public record Dotacion(List<String> elementos) {
 
     public boolean contieneElemento(String elemento) {
         return elemento != null && elementos.stream().anyMatch(e -> e.equalsIgnoreCase(elemento.trim()));
+    }
+
+    /**
+     * 7.5: algún elemento menciona la característica buscada, sin distinguir mayúsculas ni tildes.
+     * Ej.: "hidromasaje" coincide con "Balcón con tina de hidromasaje privada".
+     */
+    public boolean mencionaCaracteristica(String caracteristica) {
+        if (caracteristica == null || caracteristica.isBlank()) {
+            return false;
+        }
+        String buscada = normalizar(caracteristica.trim());
+        return elementos.stream().anyMatch(e -> normalizar(e).contains(buscada));
+    }
+
+    private static String normalizar(String texto) {
+        return Normalizer.normalize(texto, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT);
     }
 }

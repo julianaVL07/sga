@@ -1,31 +1,43 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integración del agregado Apartamento: disponibilidad, bloqueos, estado operativo y novedades por HTTP
- * contra la aplicación completa sobre H2 con los datos iniciales del Coral.
- * Comparte la base con las demás pruebas de integración, por eso usa fechas y apartamentos propios:
- * APT-301 y APT-102 lejos en el calendario y APT-301 para el ciclo de preparación.
+ * Integración del agregado Apartamento: disponibilidad con filtros y paginación, listado, detalle, retiro de la
+ * venta, bloqueos, estado operativo y novedades por HTTP contra la aplicación completa sobre H2 con los datos
+ * iniciales del Coral (12.3: APT-202 fuera de servicio y bloqueado de hoy+3 a hoy+15, APT-301 bloqueado de hoy+20
+ * a hoy+25).
+ * Usa su propia base H2 (sga-apartamentos) para que retirar un apartamento no afecte a las demás pruebas de
+ * integración; la prueba que retira deja el contexto sucio y la siguiente arranca con los datos iniciales.
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:sga-apartamentos")
 @AutoConfigureMockMvc
 class ApartamentoControllerIntegracionTest {
 
@@ -42,7 +54,7 @@ class ApartamentoControllerIntegracionTest {
                 + "&ocupantes=2";
         get(disponibles)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].identificacion", hasItem("APT-301")));
+                .andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-301")));
 
         String bloqueo = "{\"fechaInicio\":\"" + inicio + "\",\"fechaFin\":\"" + inicio.plusDays(2)
                 + "\",\"motivo\":\"Mantenimiento de la piscina\"}";
@@ -53,8 +65,8 @@ class ApartamentoControllerIntegracionTest {
 
         get(disponibles)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].identificacion", not(hasItem("APT-301"))))
-                .andExpect(jsonPath("$[*].identificacion", hasItem("APT-201")));
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-301"))))
+                .andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-201")));
     }
 
     @Test
@@ -116,6 +128,198 @@ class ApartamentoControllerIntegracionTest {
         post("/api/apartamentos/APT-999/novedades",
                 "{\"autor\":\"Luz\",\"descripcion\":\"Grieta\",\"gravedad\":\"MEDIA\"}")
                 .andExpect(status().isNotFound());
+    }
+
+    // ==================== CU-01: búsqueda con filtros y paginación (7.5) ====================
+
+    @Test
+    @DisplayName("7.5: la búsqueda responde una página de máximo 10 tarjetas con valor estimado y ubicación")
+    void busquedaPaginadaConTarjetas() throws Exception {
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.contenido.length()", lessThanOrEqualTo(10)))
+                .andExpect(jsonPath("$.totalElementos").value(5))
+                .andExpect(jsonPath("$.totalPaginas").value(1))
+                .andExpect(jsonPath("$.contenido[0].identificacion").value("APT-101"))
+                .andExpect(jsonPath("$.contenido[0].imagenPrincipal", startsWith("https://")))
+                .andExpect(jsonPath("$.contenido[0].valorEstimado", greaterThan(0)))
+                .andExpect(jsonPath("$.contenido[0].latitud").value(10.3975))
+                .andExpect(jsonPath("$.contenido[0].longitud").value(-75.559));
+
+        // Una página fuera de rango llega vacía pero conserva el total
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, "&pagina=1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(0)))
+                .andExpect(jsonPath("$.totalElementos").value(5));
+    }
+
+    @Test
+    @DisplayName("7.5: filtro por capacidad mínima")
+    void filtroPorCapacidadMinima() throws Exception {
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, "&capacidadMinima=6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido[*].identificacion", contains("APT-301")));
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, "&capacidadMinima=4"))
+                .andExpect(jsonPath("$.contenido[*].identificacion", contains("APT-201", "APT-202", "APT-301")));
+    }
+
+    @Test
+    @DisplayName("7.5: filtro por característica de la dotación, sin distinguir mayúsculas")
+    void filtroPorCaracteristica() throws Exception {
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, "&caracteristica=HIDROMASAJE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido[*].identificacion", contains("APT-101", "APT-201")));
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 2, "&caracteristica=helipuerto"))
+                .andExpect(jsonPath("$.contenido", hasSize(0)))
+                .andExpect(jsonPath("$.totalElementos").value(0));
+    }
+
+    @Test
+    @DisplayName("7.5: filtro por rango de precio sobre el valor estimado de la estancia")
+    void filtroPorPrecio() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(40);
+        List<Number> valores = JsonPath.read(get(disponibles(entrada, 2, "")).andReturn().getResponse()
+                .getContentAsString(), "$.contenido[*].valorEstimado");
+        long minimo = valores.stream().mapToLong(Number::longValue).min().orElseThrow();
+        long maximo = valores.stream().mapToLong(Number::longValue).max().orElseThrow();
+
+        List<Number> baratos = JsonPath.read(get(disponibles(entrada, 2, "&precioMaximo=" + minimo))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),
+                "$.contenido[*].valorEstimado");
+        assertFalse(baratos.isEmpty());
+        assertTrue(baratos.size() < valores.size());
+        assertTrue(baratos.stream().allMatch(v -> v.longValue() <= minimo));
+
+        List<Number> caros = JsonPath.read(get(disponibles(entrada, 2, "&precioMinimo=" + maximo))
+                .andReturn().getResponse().getContentAsString(), "$.contenido[*].valorEstimado");
+        assertFalse(caros.isEmpty());
+        assertTrue(caros.stream().allMatch(v -> v.longValue() >= maximo));
+
+        get(disponibles(entrada, 2, "&precioMinimo=900000&precioMaximo=100000"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("7.5")));
+    }
+
+    @Test
+    @DisplayName("7.5 y RN-06: con fechas de nacimiento el niño no facturable baja el valor estimado")
+    void fechasDeNacimientoAjustanElValorEstimado() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(40);
+        Number sinFechas = JsonPath.read(get(disponibles(entrada, 2, "&capacidadMinima=6")).andReturn()
+                .getResponse().getContentAsString(), "$.contenido[0].valorEstimado");
+        Number conNino = JsonPath.read(get(disponibles(entrada, 2,
+                        "&capacidadMinima=6&fechasNacimiento=1990-05-20&fechasNacimiento=" + entrada.minusYears(2)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),
+                "$.contenido[0].valorEstimado");
+
+        assertEquals(sinFechas.longValue() / 2, conNino.longValue());
+    }
+
+    @Test
+    @DisplayName("12.3: APT-202 está fuera de servicio y bloqueado, no aparece como disponible en esas noches")
+    void apartamentoFueraDeServicioNoApareceEnElBloqueo() throws Exception {
+        LocalDate hoy = LocalDate.now(BOGOTA);
+        get(disponibles(hoy.plusDays(5), 2, ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-202"))));
+
+        get("/api/apartamentos/APT-202")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estadoOperativo").value("FUERA_DE_SERVICIO"))
+                .andExpect(jsonPath("$.bloqueosVigentes", hasSize(1)))
+                .andExpect(jsonPath("$.bloqueosVigentes[0].fechaInicio").value(hoy.plusDays(3).toString()))
+                .andExpect(jsonPath("$.bloqueosVigentes[0].fechaFin").value(hoy.plusDays(15).toString()));
+    }
+
+    @Test
+    @DisplayName("12.3: APT-301 no aparece en las fechas de su bloqueo vigente y sí fuera de ellas (RN-07)")
+    void apartamentoBloqueadoNoApareceEnLasFechasDelBloqueo() throws Exception {
+        LocalDate hoy = LocalDate.now(BOGOTA);
+        get(disponibles(hoy.plusDays(21), 2, ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-301"))));
+        get(disponibles(hoy.plusDays(40), 2, ""))
+                .andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-301")));
+    }
+
+    // ==================== CU-20: listado y detalle (7.3, 12.4) ====================
+
+    @Test
+    @DisplayName("CU-20: el listado de apartamentos es paginado de 10 en 10 y ordenado por identificación")
+    void listadoPaginado() throws Exception {
+        get("/api/apartamentos")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.contenido.length()", lessThanOrEqualTo(10)))
+                .andExpect(jsonPath("$.totalElementos").value(5))
+                .andExpect(jsonPath("$.contenido[*].identificacion",
+                        contains("APT-101", "APT-102", "APT-201", "APT-202", "APT-301")));
+        get("/api/apartamentos?pagina=1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(0)));
+        get("/api/apartamentos?pagina=-1").andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("CU-20: el detalle trae dotación, imágenes, tarifas por temporada y bloqueos vigentes")
+    void detalleDelApartamento() throws Exception {
+        get("/api/apartamentos/APT-301")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identificacion").value("APT-301"))
+                .andExpect(jsonPath("$.capacidadMaxima").value(6))
+                .andExpect(jsonPath("$.imagenes[0].principal").value(true))
+                .andExpect(jsonPath("$.imagenPrincipal", startsWith("https://")))
+                .andExpect(jsonPath("$.tarifas", hasSize(3)))
+                .andExpect(jsonPath("$.bloqueosVigentes[*].motivo", hasItem("Mantenimiento de la piscina de inmersión")))
+                .andExpect(jsonPath("$.eliminado").value(false));
+        get("/api/apartamentos/APT-999").andExpect(status().isNotFound());
+    }
+
+    // ==================== CU-21: retiro de la venta (7.3, 12.4) ====================
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    @DisplayName("CU-21: retirar responde 200 y el apartamento deja de salir en el listado, el detalle y la búsqueda")
+    void retirarApartamento() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(40);
+        put("/api/apartamentos/APT-201/retirar", "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identificacion").value("APT-201"))
+                .andExpect(jsonPath("$.eliminado").value(true))
+                .andExpect(jsonPath("$.activo").value(false));
+
+        get("/api/apartamentos")
+                .andExpect(jsonPath("$.totalElementos").value(4))
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-201"))));
+        get(disponibles(entrada, 2, ""))
+                .andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-201"))));
+        get("/api/apartamentos/APT-201").andExpect(status().isNotFound());
+
+        // Ya retirado: retirarlo otra vez es una regla de negocio (7.3)
+        put("/api/apartamentos/APT-201/retirar", "")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("7.3")));
+    }
+
+    @Test
+    @DisplayName("CU-21: 409 al retirar un apartamento con reservas activas o futuras, 404 si no existe")
+    void retirarConReservasActivasResponde409() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(90);
+        post("/api/reservas", reserva("APT-102", entrada, entrada.plusDays(2))).andExpect(status().isCreated());
+
+        put("/api/apartamentos/APT-102/retirar", "")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("7.3")));
+        get("/api/apartamentos/APT-102")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eliminado").value(false));
+        put("/api/apartamentos/APT-999/retirar", "").andExpect(status().isNotFound());
+    }
+
+    private static String disponibles(LocalDate entrada, int ocupantes, String filtros) {
+        return "/api/apartamentos/disponibles?entrada=" + entrada + "&salida=" + entrada.plusDays(3)
+                + "&ocupantes=" + ocupantes + filtros;
     }
 
     private ResultActions cambiarEstado(String apartamento, String estado) throws Exception {
