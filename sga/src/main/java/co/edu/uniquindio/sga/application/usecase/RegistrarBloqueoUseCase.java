@@ -1,6 +1,8 @@
 package co.edu.uniquindio.sga.application.usecase;
 
+import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
+import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
@@ -21,9 +23,12 @@ import java.util.Objects;
 @Service
 public class RegistrarBloqueoUseCase {
 
+    private final ApartamentoRepository apartamentoRepository;
     private final RegistrarBloqueoService registrarBloqueoService;
 
-    public RegistrarBloqueoUseCase(RegistrarBloqueoService registrarBloqueoService) {
+    public RegistrarBloqueoUseCase(ApartamentoRepository apartamentoRepository,
+                                   RegistrarBloqueoService registrarBloqueoService) {
+        this.apartamentoRepository = Objects.requireNonNull(apartamentoRepository);
         this.registrarBloqueoService = Objects.requireNonNull(registrarBloqueoService);
     }
 
@@ -31,6 +36,9 @@ public class RegistrarBloqueoUseCase {
     @Transactional
     public Bloqueo ejecutar(IdentificacionApartamento apartamento, LocalDate fechaInicio, LocalDate fechaFin,
                             String motivo) {
+        if (apartamento == null || !apartamentoRepository.existe(apartamento)) {
+            throw new ApartamentoNoEncontradoException(apartamento);
+        }
         return registrarBloqueoService.registrarBloqueo(apartamento, new RangoFechas(fechaInicio, fechaFin), motivo);
     }
 }

@@ -1,4 +1,3 @@
-// src/main/java/co/edu/uniquindio/sga/infrastructure/rest/CotizacionController.java
 package co.edu.uniquindio.sga.infrastructure.rest;
 
 import co.edu.uniquindio.sga.application.dto.request.CotizarEstanciaRequest;
@@ -40,6 +39,7 @@ public class CotizacionController {
                     + "ocupantes desde 6 años (RN-05). No crea la reserva")
     @ApiResponse(responseCode = "200", description = "Cotización con el detalle por noche")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Fechas inválidas, estancia mínima o apartamento sin tarifa")
     public ResponseEntity<CotizacionResponse> cotizar(@Valid @RequestBody CotizarEstanciaRequest request) {
         Cotizacion cotizacion = cotizarEstanciaUseCase.ejecutar(

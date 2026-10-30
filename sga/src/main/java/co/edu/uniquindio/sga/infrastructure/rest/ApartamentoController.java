@@ -73,7 +73,8 @@ public class ApartamentoController {
                     + "activas en esas noches (7.3, RN-01)")
     @ApiResponse(responseCode = "201", description = "Bloqueo registrado")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
-    @ApiResponse(responseCode = "409", description = "Rango inválido, apartamento inexistente o noches con reservas activas")
+    @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
+    @ApiResponse(responseCode = "409", description = "Rango inválido o noches con reservas activas")
     public ResponseEntity<BloqueoResponse> registrarBloqueo(@PathVariable String id,
                                                             @Valid @RequestBody RegistrarBloqueoRequest request) {
         Bloqueo bloqueo = registrarBloqueoUseCase.ejecutar(new IdentificacionApartamento(id),
