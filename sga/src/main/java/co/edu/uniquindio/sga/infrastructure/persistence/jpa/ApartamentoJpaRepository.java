@@ -2,11 +2,16 @@ package co.edu.uniquindio.sga.infrastructure.persistence.jpa;
 
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
+import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ApartamentoEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.BloqueoEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ApartamentoPersistenceMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -71,6 +76,19 @@ public class ApartamentoJpaRepository implements ApartamentoRepository {
     @Transactional(readOnly = true)
     public List<Apartamento> listarNoEliminados() {
         return dataRepository.findByEliminadoFalseOrderByIdentificacionAsc().stream().map(this::aDominio).toList();
+    }
+
+    /** CU-20: la página la arma la base de datos con Pageable; aquí solo se traduce a Pagina del dominio. */
+    @Override
+    @Transactional(readOnly = true)
+    public Pagina<Apartamento> listarNoEliminados(int pagina, int tamano) {
+        if (pagina < 0 || tamano <= 0) {
+            throw new ReglaDominioException("12.4: la página no puede ser negativa y el tamaño debe ser mayor que cero");
+        }
+        Page<ApartamentoEntity> resultado = dataRepository.findByEliminadoFalse(
+                PageRequest.of(pagina, tamano, Sort.by("identificacion").ascending()));
+        return new Pagina<>(resultado.getContent().stream().map(this::aDominio).toList(),
+                pagina, tamano, resultado.getTotalElements());
     }
 
     private void guardarBloqueo(Bloqueo bloqueo) {
