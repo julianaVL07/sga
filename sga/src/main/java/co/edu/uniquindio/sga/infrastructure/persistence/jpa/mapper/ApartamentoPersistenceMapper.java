@@ -8,11 +8,13 @@ import co.edu.uniquindio.sga.domain.valueobject.Dotacion;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Imagen;
 import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
+import co.edu.uniquindio.sga.domain.valueobject.RegistroTarifa;
 import co.edu.uniquindio.sga.domain.valueobject.Tarifa;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ApartamentoEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.BloqueoEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ImagenEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.RangoFechasEmbedable;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.RegistroTarifaEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.TarifaEmbedable;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +44,10 @@ public class ApartamentoPersistenceMapper {
         e.setTarifas(new ArrayList<>(a.getTarifas().stream()
                 .map(t -> new TarifaEmbedable(t.idTemporada(), t.valorPorOcupante().monto()))
                 .toList()));
+        e.setHistoricoTarifas(new ArrayList<>(a.getHistoricoTarifasEnOrdenDeRegistro().stream()
+                .map(r -> new RegistroTarifaEmbedable(r.idTemporada(), r.valorPorOcupante().monto(),
+                        r.vigenteDesde(), r.vigenteHasta()))
+                .toList()));
         return e;
     }
 
@@ -54,6 +60,10 @@ public class ApartamentoPersistenceMapper {
                 bloqueos.stream().map(this::aDominio).toList(),
                 e.getTarifas().stream()
                         .map(t -> new Tarifa(t.getIdTemporada(), new Dinero(t.getValorPorOcupante())))
+                        .toList(),
+                e.getHistoricoTarifas().stream()
+                        .map(r -> new RegistroTarifa(r.getIdTemporada(), new Dinero(r.getValorPorOcupante()),
+                                r.getVigenteDesde(), r.getVigenteHasta()))
                         .toList());
     }
 
