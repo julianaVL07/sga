@@ -7,21 +7,26 @@ import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Imagen;
+import co.edu.uniquindio.sga.domain.valueobject.RegistroTarifa;
 import co.edu.uniquindio.sga.domain.valueobject.Tarifa;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Unidad vendible: vivienda autónoma e identificada, entregada en exclusiva a un grupo (F-01).
  *
  * Reglas que valida: RN-02 (capacidad), RN-07 (bloqueos), RN-11 (solo recibe grupo si está PREPARADO),
  * transiciones de estado operativo (7.6), imágenes 1..10 con una principal (7.3),
- * tarifas completas para activarse (7.4), retiro de venta sin reservas activas ni futuras (7.3).
+ * tarifas completas para activarse (7.4), histórico de tarifas (CU-24, 7.4),
+ * retiro de venta sin reservas activas ni futuras (7.3).
  *
  * RN-01 y RN-20 comparan varias reservas entre sí, por eso viven en DisponibilidadApartamentoService.
  */
@@ -42,11 +47,13 @@ public class Apartamento {
     private boolean eliminado;
     private final List<Bloqueo> bloqueos;
     private final List<Tarifa> tarifas;
+    /** CU-24: registros de tarifas en el orden en que se definieron; los vigentes no tienen fecha de reemplazo. */
+    private final List<RegistroTarifa> historicoTarifas;
 
     private Apartamento(IdentificacionApartamento identificacion, String nombre, String descripcion, int dormitorios,
                         Capacidad capacidad, Dotacion dotacion, List<Imagen> imagenes,
                         EstadoOperativo estadoOperativo, boolean activo, boolean eliminado,
-                        List<Bloqueo> bloqueos, List<Tarifa> tarifas) {
+                        List<Bloqueo> bloqueos, List<Tarifa> tarifas, List<RegistroTarifa> historicoTarifas) {
         this.identificacion = identificacion;
         this.nombre = nombre;
         this.descripcion = descripcion;
@@ -59,6 +66,7 @@ public class Apartamento {
         this.eliminado = eliminado;
         this.bloqueos = new ArrayList<>(bloqueos);
         this.tarifas = new ArrayList<>(tarifas);
+        this.historicoTarifas = new ArrayList<>(historicoTarifas);
     }
 
     /**
@@ -74,16 +82,27 @@ public class Apartamento {
         requerido(dotacion, "La dotación del apartamento es obligatoria (L-06)");
         validarImagenes(imagenes);
         return new Apartamento(identificacion, nombre.trim(), descripcion, dormitorios, capacidad, dotacion,
-                imagenes, EstadoOperativo.PREPARADO, false, false, List.of(), List.of());
+                imagenes, EstadoOperativo.PREPARADO, false, false, List.of(), List.of(), List.of());
     }
 
     public static Apartamento reconstruir(IdentificacionApartamento identificacion, String nombre, String descripcion,
                                           int dormitorios, Capacidad capacidad, Dotacion dotacion,
                                           List<Imagen> imagenes, EstadoOperativo estadoOperativo, boolean activo,
                                           boolean eliminado, List<Bloqueo> bloqueos, List<Tarifa> tarifas) {
+        return reconstruir(identificacion, nombre, descripcion, dormitorios, capacidad, dotacion, imagenes,
+                estadoOperativo, activo, eliminado, bloqueos, tarifas, List.of());
+    }
+
+    /** Reconstruye el agregado con su histórico de tarifas (CU-24), en el orden en que se definieron. */
+    public static Apartamento reconstruir(IdentificacionApartamento identificacion, String nombre, String descripcion,
+                                          int dormitorios, Capacidad capacidad, Dotacion dotacion,
+                                          List<Imagen> imagenes, EstadoOperativo estadoOperativo, boolean activo,
+                                          boolean eliminado, List<Bloqueo> bloqueos, List<Tarifa> tarifas,
+                                          List<RegistroTarifa> historicoTarifas) {
         return new Apartamento(identificacion, nombre, descripcion, dormitorios, capacidad, dotacion,
                 imagenes == null ? List.of() : imagenes, estadoOperativo, activo, eliminado,
-                bloqueos == null ? List.of() : bloqueos, tarifas == null ? List.of() : tarifas);
+                bloqueos == null ? List.of() : bloqueos, tarifas == null ? List.of() : tarifas,
+                historicoTarifas == null ? List.of() : historicoTarifas);
     }
 
     // ---------------------------------------------------------------- Capacidad (RN-02)
@@ -223,11 +242,84 @@ public class Apartamento {
 
     // ---------------------------------------------------------------- Tarifas y activación (7.4)
 
-    /** Define (o reemplaza) la tarifa del apartamento para una temporada. */
+    /**
+     * Define la tarifa de una temporada sin fecha de vigencia (carga inicial del catálogo). No deja registro en el
+     * histórico; si la temporada ya tiene una tarifa con fecha, hay que reemplazarla con
+     * {@link #definirTarifa(Tarifa, LocalDate)} para no perder la historia (CU-24).
+     */
     public void definirTarifa(Tarifa tarifa) {
         requerido(tarifa, "La tarifa es obligatoria");
+        if (buscarRegistroVigente(tarifa.idTemporada()).isPresent()) {
+            throw new ReglaDominioException("7.4: La tarifa de la temporada " + tarifa.idTemporada()
+                    + " tiene histórico; indique la fecha desde la que rige la nueva tarifa");
+        }
         tarifas.removeIf(t -> t.idTemporada().equals(tarifa.idTemporada()));
         tarifas.add(tarifa);
+    }
+
+    /**
+     * CU-24 (7.4): define o reemplaza la tarifa de una temporada a partir de la fecha dada. La tarifa anterior no se
+     * pierde: queda en el histórico con la fecha desde la que estuvo vigente y la fecha en que se reemplazó.
+     * La cotización y las reservas siguen usando solo la tarifa vigente (RN-05).
+     */
+    public void definirTarifa(Tarifa tarifa, LocalDate vigenteDesde) {
+        requerido(tarifa, "La tarifa es obligatoria");
+        requerido(vigenteDesde, "7.4: La fecha desde la que rige la tarifa es obligatoria");
+        Optional<RegistroTarifa> registroVigente = buscarRegistroVigente(tarifa.idTemporada());
+        if (registroVigente.isPresent()) {
+            RegistroTarifa anterior = registroVigente.get();
+            if (anterior.vigenteDesde() != null && vigenteDesde.isBefore(anterior.vigenteDesde())) {
+                throw new ReglaDominioException("7.4: La nueva tarifa de la temporada " + tarifa.idTemporada()
+                        + " no puede regir antes que la vigente (" + anterior.vigenteDesde() + ")");
+            }
+            historicoTarifas.set(historicoTarifas.indexOf(anterior), anterior.reemplazadaEl(vigenteDesde));
+        } else {
+            // Tarifa cargada sin fecha (datos iniciales): se conserva sin fecha de inicio conocida.
+            buscarTarifa(tarifa.idTemporada()).ifPresent(sinFecha -> historicoTarifas.add(new RegistroTarifa(
+                    sinFecha.idTemporada(), sinFecha.valorPorOcupante(), null, vigenteDesde)));
+        }
+        tarifas.removeIf(t -> t.idTemporada().equals(tarifa.idTemporada()));
+        tarifas.add(tarifa);
+        historicoTarifas.add(RegistroTarifa.vigenteDesde(tarifa, vigenteDesde));
+    }
+
+    /**
+     * CU-22 y CU-24 (7.4): define una o varias tarifas a la vez. Cada temporada debe existir en el alojamiento y
+     * aparecer una sola vez; si alguna tarifa no cumple, no se aplica ninguna.
+     */
+    public void definirTarifas(List<Tarifa> nuevas, List<Temporada> temporadasDelAlojamiento, LocalDate vigenteDesde) {
+        if (nuevas == null || nuevas.isEmpty()) {
+            throw new ReglaDominioException("7.4: Debe indicar al menos una tarifa");
+        }
+        requerido(temporadasDelAlojamiento, "Las temporadas del alojamiento son obligatorias");
+        Set<String> vistas = new HashSet<>();
+        for (Tarifa tarifa : nuevas) {
+            requerido(tarifa, "La tarifa es obligatoria");
+            boolean existe = temporadasDelAlojamiento.stream().anyMatch(t -> t.getId().equals(tarifa.idTemporada()));
+            if (!existe) {
+                throw new ReglaDominioException("7.4: La temporada " + tarifa.idTemporada()
+                        + " no existe en el alojamiento");
+            }
+            if (!vistas.add(tarifa.idTemporada())) {
+                throw new ReglaDominioException("7.4: La temporada " + tarifa.idTemporada()
+                        + " aparece más de una vez");
+            }
+        }
+        nuevas.forEach(tarifa -> definirTarifa(tarifa, vigenteDesde));
+    }
+
+    /** CU-24: histórico de tarifas, de la más reciente a la más antigua; las vigentes no tienen fecha de reemplazo. */
+    public List<RegistroTarifa> getHistoricoTarifas() {
+        List<RegistroTarifa> recientesPrimero = new ArrayList<>(historicoTarifas);
+        Collections.reverse(recientesPrimero);
+        recientesPrimero.sort(Comparator.comparing(RegistroTarifa::vigenteDesde,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return Collections.unmodifiableList(recientesPrimero);
+    }
+
+    /** CU-24: registros en el orden en que se definieron, tal como se persisten. */
+    public List<RegistroTarifa> getHistoricoTarifasEnOrdenDeRegistro() {
+        return Collections.unmodifiableList(historicoTarifas);
     }
 
     /** RN-05: tarifa vigente del apartamento en la temporada de esa noche. */
@@ -353,7 +445,17 @@ public class Apartamento {
     // ---------------------------------------------------------------- Validaciones internas
 
     private Optional<Tarifa> buscarTarifa(Temporada temporada) {
-        return tarifas.stream().filter(t -> t.idTemporada().equals(temporada.getId())).findFirst();
+        return buscarTarifa(temporada.getId());
+    }
+
+    private Optional<Tarifa> buscarTarifa(String idTemporada) {
+        return tarifas.stream().filter(t -> t.idTemporada().equals(idTemporada)).findFirst();
+    }
+
+    private Optional<RegistroTarifa> buscarRegistroVigente(String idTemporada) {
+        return historicoTarifas.stream()
+                .filter(r -> r.esDeTemporada(idTemporada) && r.estaVigente())
+                .findFirst();
     }
 
     private void validarSinReservasPendientes(List<Estancia> estanciasActivasOFuturas) {

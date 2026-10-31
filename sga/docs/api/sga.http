@@ -1305,3 +1305,332 @@ Content-Type: application/json
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}
+
+### Sección 9: CU-22 a CU-25 ADMINISTRACIÓN DE APARTAMENTOS Y TARIFAS (7.3, 7.4)
+
+# ====================================================================================================
+# 9. CU-22 a CU-25: registrar, definir tarifas (con histórico), activar y actualizar un apartamento
+#    Flujo con APT-401, que no existe en los datos iniciales: crear (inactivo) → tarifas → activar →
+#    buscar → reservar 3 ocupantes → bajar la capacidad a 2 (advierte la reserva) → histórico.
+#    Usa APT-202, retirado de la venta en 2.3, para los casos del apartamento eliminado.
+# ====================================================================================================
+
+### 9.0 Fechas propias de la sección: la reserva de APT-401 va de hoy+60 a hoy+63
+GET {{host}}/api/apartamentos
+
+> {%
+    client.test("9.0 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("cu22Hoy", fecha(0));
+    client.global.set("cu22Entrada", fecha(60));
+    client.global.set("cu22Salida", fecha(63));
+%}
+
+### 9.1 CU-22 Registrar APT-401 con tarifa solo en temporada Base: 201 + Location, nace INACTIVO
+POST {{host}}/api/apartamentos
+Content-Type: application/json
+
+{
+  "identificacion": "APT-401",
+  "nombre": "Coral Esmeralda",
+  "descripcion": "Unidad nueva con vista a la bahía, pensada para familias pequeñas.",
+  "dormitorios": 2,
+  "capacidadMaxima": 4,
+  "dotacion": ["Cama extragrande", "Dormitorio con dos camas sencillas", "Cocina equipada", "Balcón con vista a la bahía"],
+  "imagenes": [
+    { "url": "https://coral.co/img/apt-401-sala.jpg", "principal": true },
+    { "url": "https://coral.co/img/apt-401-balcon.jpg", "principal": false }
+  ],
+  "tarifas": [
+    { "idTemporada": "T-BASE", "valorPorOcupante": 300000 }
+  ]
+}
+
+> {%
+    client.test("9.1 201 apartamento registrado e inactivo", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.headers.valueOf("Location") != null, "Falta la cabecera Location");
+        client.assert(response.body.activo === false, "El apartamento nuevo debe nacer inactivo (7.4)");
+        client.assert(response.body.estadoOperativo === "PREPARADO", "El apartamento nuevo nace PREPARADO");
+    });
+    client.global.set("locationApt401", response.headers.valueOf("Location"));
+%}
+
+### 9.2 CU-22 Consultar APT-401 en la URL del Location
+GET {{locationApt401}}
+
+> {%
+    client.test("9.2 200 detalle del apartamento nuevo", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.identificacion === "APT-401", "Se esperaba APT-401");
+    });
+%}
+
+### 9.3 409 L-04 La identificación ya existe (APT-101, en minúsculas: es la misma)
+POST {{host}}/api/apartamentos
+Content-Type: application/json
+
+{
+  "identificacion": "apt-101",
+  "nombre": "Copia de Coral Luminoso",
+  "dormitorios": 1,
+  "capacidadMaxima": 2,
+  "dotacion": ["Cama extragrande"],
+  "imagenes": [ { "url": "https://coral.co/img/copia.jpg", "principal": true } ]
+}
+
+> {%
+    client.test("9.3 409 L-04 identificación duplicada", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("L-04") === 0, "Se esperaba L-04: " + response.body.mensaje);
+    });
+%}
+
+### 9.4 409 7.3 Las imágenes deben tener exactamente una principal (aquí hay dos)
+POST {{host}}/api/apartamentos
+Content-Type: application/json
+
+{
+  "identificacion": "APT-402",
+  "nombre": "Coral Ámbar",
+  "dormitorios": 1,
+  "capacidadMaxima": 2,
+  "dotacion": ["Cama extragrande"],
+  "imagenes": [
+    { "url": "https://coral.co/img/apt-402-a.jpg", "principal": true },
+    { "url": "https://coral.co/img/apt-402-b.jpg", "principal": true }
+  ]
+}
+
+> {%
+    client.test("9.4 409 imagen principal única", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("imagen principal") >= 0, "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 9.5 409 7.4 Activar APT-401 sin tarifa en todas las temporadas (le faltan Media y Alta)
+PUT {{host}}/api/apartamentos/APT-401/activar
+
+> {%
+    client.test("9.5 409 7.4 activar sin tarifas completas", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+    });
+%}
+
+### 9.6 409 7.4 Definir una tarifa para una temporada que no existe
+PUT {{host}}/api/apartamentos/APT-401/tarifas
+Content-Type: application/json
+
+{
+  "tarifas": [ { "idTemporada": "T-NAVIDAD", "valorPorOcupante": 900000 } ]
+}
+
+> {%
+    client.test("9.6 409 7.4 temporada inexistente", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+    });
+%}
+
+### 9.7 409 7.4 El valor de la tarifa debe ser mayor que cero
+PUT {{host}}/api/apartamentos/APT-401/tarifas
+Content-Type: application/json
+
+{
+  "tarifas": [ { "idTemporada": "T-MEDIA", "valorPorOcupante": 0 } ]
+}
+
+> {%
+    client.test("9.7 409 7.4 valor no positivo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+    });
+%}
+
+### 9.8 400 La lista de tarifas no puede venir vacía (forma del mensaje)
+PUT {{host}}/api/apartamentos/APT-401/tarifas
+Content-Type: application/json
+
+{
+  "tarifas": []
+}
+
+> {%
+    client.test("9.8 400 sin tarifas", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 9.9 CU-24 Definir las tres tarifas: la Base de 300.000 se reemplaza por 320.000 y pasa al histórico
+PUT {{host}}/api/apartamentos/APT-401/tarifas
+Content-Type: application/json
+
+{
+  "tarifas": [
+    { "idTemporada": "T-BASE", "valorPorOcupante": 320000 },
+    { "idTemporada": "T-MEDIA", "valorPorOcupante": 440000 },
+    { "idTemporada": "T-ALTA", "valorPorOcupante": 630000 }
+  ]
+}
+
+> {%
+    client.test("9.9 200 tarifas definidas", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tarifas.length === 3, "Se esperaban 3 tarifas vigentes");
+        client.assert(response.body.activo === false, "Definir tarifas no activa el apartamento");
+    });
+%}
+
+### 9.10 CU-25 Activar APT-401: ya tiene tarifa en todas las temporadas
+PUT {{host}}/api/apartamentos/APT-401/activar
+
+> {%
+    client.test("9.10 200 apartamento activo", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.activo === true, "El apartamento debía quedar activo");
+    });
+%}
+
+### 9.11 CU-01 APT-401 ya aparece en la búsqueda de disponibles
+GET {{host}}/api/apartamentos/disponibles?entrada={{cu22Entrada}}&salida={{cu22Salida}}&ocupantes=3
+
+> {%
+    client.test("9.11 200 APT-401 disponible", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var ids = response.body.contenido.map(function (a) { return a.identificacion; });
+        client.assert(ids.indexOf("APT-401") >= 0, "APT-401 debía estar disponible: " + ids);
+    });
+%}
+
+### 9.12 CU-03 Reservar APT-401 para un grupo de 3 (de hoy+60 a hoy+63)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-401",
+  "fechaEntrada": "{{cu22Entrada}}",
+  "fechaSalida": "{{cu22Salida}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": {
+    "nombre": "Laura Rivera",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1094400401",
+    "email": "laura.rivera@correo.co",
+    "telefono": "3005550401"
+  },
+  "ocupantes": [
+    { "nombre": "Laura Rivera", "tipoDocumento": "CC", "numeroDocumento": "1094400401", "fechaNacimiento": "1992-04-10" },
+    { "nombre": "Andrés Rivera", "tipoDocumento": "CC", "numeroDocumento": "1094400402", "fechaNacimiento": "1990-08-22" },
+    { "nombre": "Marta Rivera", "tipoDocumento": "CC", "numeroDocumento": "1094400403", "fechaNacimiento": "1965-01-30" }
+  ]
+}
+
+> {%
+    client.test("9.12 201 reserva de 3 ocupantes", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+    client.global.set("codigoApt401", response.body.codigo);
+%}
+
+### 9.13 CU-23 Actualizar APT-401 y bajar la capacidad a 2: advierte la reserva de 3, que no se modifica (7.3)
+PUT {{host}}/api/apartamentos/APT-401
+Content-Type: application/json
+
+{
+  "nombre": "Coral Esmeralda Suite",
+  "descripcion": "Remodelado como suite para parejas.",
+  "dormitorios": 1,
+  "capacidadMaxima": 2,
+  "dotacion": ["Cama extragrande", "Cocina equipada", "Balcón con tina de hidromasaje"]
+}
+
+> {%
+    client.test("9.13 200 actualizado con advertencia de capacidad", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.apartamento.capacidadMaxima === 2, "La capacidad debía quedar en 2");
+        client.assert(response.body.reservasSobreCapacidad.indexOf(client.global.get("codigoApt401")) >= 0,
+            "Debía listar la reserva " + client.global.get("codigoApt401"));
+        client.assert(response.body.advertencia.indexOf("7.3") === 0, "La advertencia debía citar 7.3");
+    });
+%}
+
+### 9.14 La reserva sigue intacta con sus 3 ocupantes
+GET {{host}}/api/reservas/{{codigoApt401}}
+
+> {%
+    client.test("9.14 200 reserva sin cambios", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.ocupantes.length === 3, "La reserva debía conservar sus 3 ocupantes");
+    });
+%}
+
+### 9.15 CU-24 Histórico de tarifas: de la más reciente a la más antigua; la Base anterior quedó cerrada hoy
+GET {{host}}/api/apartamentos/APT-401/tarifas/historico?pagina=0
+
+> {%
+    client.test("9.15 200 histórico conserva la tarifa anterior", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.totalElementos === 4, "Se esperaban 4 registros y llegaron " + response.body.totalElementos);
+        var anterior = response.body.contenido.filter(function (r) { return r.valorPorOcupante === 300000; })[0];
+        client.assert(anterior != null, "Falta la tarifa Base anterior de 300.000");
+        client.assert(anterior.vigente === false, "La tarifa anterior ya no está vigente");
+        client.assert(anterior.vigenteDesde === client.global.get("cu22Hoy"), "vigenteDesde debía ser hoy");
+        client.assert(anterior.vigenteHasta === client.global.get("cu22Hoy"), "vigenteHasta debía ser hoy");
+        client.assert(response.body.contenido[response.body.contenido.length - 1].valorPorOcupante === 300000,
+            "La más antigua va de última");
+    });
+%}
+
+### 9.16 409 RN-02 La capacidad debe ser de al menos una persona
+PUT {{host}}/api/apartamentos/APT-401
+Content-Type: application/json
+
+{
+  "nombre": "Coral Esmeralda Suite",
+  "dormitorios": 1,
+  "capacidadMaxima": 0,
+  "dotacion": ["Cama extragrande"]
+}
+
+> {%
+    client.test("9.16 409 RN-02 capacidad mínima", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("RN-02") === 0, "Se esperaba RN-02: " + response.body.mensaje);
+    });
+%}
+
+### 9.17 409 7.3 Un apartamento retirado de la venta no puede activarse (APT-202, retirado en 2.3)
+PUT {{host}}/api/apartamentos/APT-202/activar
+
+> {%
+    client.test("9.17 409 7.3 activar retirado", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.3") === 0, "Se esperaba 7.3: " + response.body.mensaje);
+    });
+%}
+
+### 9.18 404 Un apartamento retirado de la venta no se actualiza (APT-202)
+PUT {{host}}/api/apartamentos/APT-202
+Content-Type: application/json
+
+{
+  "nombre": "Bahía Cristal",
+  "dormitorios": 2,
+  "capacidadMaxima": 4,
+  "dotacion": ["Cocina integral"]
+}
+
+> {%
+    client.test("9.18 404 actualizar retirado", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}

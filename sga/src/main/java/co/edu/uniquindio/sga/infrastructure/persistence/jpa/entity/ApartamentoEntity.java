@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fila de la tabla apartamento. Dotación, imágenes y tarifas son objetos de valor y van en tablas hijas.
+ * Fila de la tabla apartamento. Dotación, imágenes, tarifas y su histórico son objetos de valor y van en tablas hijas.
  * Los bloqueos viven en la tabla bloqueo, que también usa BloqueoRepository: así un bloqueo se guarda una sola vez
  * y el adaptador de apartamentos los lee de ahí al reconstruir el agregado.
  */
@@ -72,4 +72,10 @@ public class ApartamentoEntity {
     @CollectionTable(name = "apartamento_tarifa", joinColumns = @JoinColumn(name = "apartamento_id"))
     @OrderColumn(name = "posicion")
     private List<TarifaEmbedable> tarifas = new ArrayList<>();
+
+    /** CU-24 (7.4): histórico de tarifas en el orden en que se definieron, incluidas las vigentes. */
+    @ElementCollection
+    @CollectionTable(name = "apartamento_tarifa_historico", joinColumns = @JoinColumn(name = "apartamento_id"))
+    @OrderColumn(name = "posicion")
+    private List<RegistroTarifaEmbedable> historicoTarifas = new ArrayList<>();
 }

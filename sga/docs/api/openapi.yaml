@@ -307,6 +307,46 @@ paths:
         '400':
           $ref: '#/components/responses/DatosInvalidos'
 
+    # CU-22 (agregado): registrar un apartamento
+    post:
+      tags: [Apartamentos]
+      summary: Registrar un apartamento (CU-22)
+      description: |
+        Crea el apartamento con identificación, nombre, descripción, dormitorios, capacidad, dotación,
+        imágenes (1 a 10, exactamente una principal) y, opcionalmente, tarifas por temporada que rigen desde hoy.
+        Nace PREPARADO e INACTIVO: no sale en la búsqueda hasta activarlo con CU-25 (7.3, 7.4).
+        El DTO solo revisa la forma (400); las reglas las valida el dominio (409).
+        Mapea a `RegistrarApartamentoUseCase` y `AdministracionApartamentoService.registrar`.
+      operationId: registrarApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarApartamentoRequest'
+      responses:
+        '201':
+          description: Apartamento registrado (inactivo)
+          headers:
+            Location:
+              description: URL del detalle del apartamento, por ejemplo /api/apartamentos/APT-401
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Identificación repetida (L-04), máximo de apartamentos (L-03), imágenes fuera de 1..10 o sin una
+            única principal, capacidad o dormitorios menores que 1, dotación vacía (L-06), o una tarifa
+            con temporada inexistente o valor no mayor que cero (7.4)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/apartamentos/disponibles:
     get:
       tags: [Apartamentos]
@@ -399,6 +439,44 @@ paths:
                 $ref: '#/components/schemas/ApartamentoDetalleResponse'
         '404':
           $ref: '#/components/responses/NoEncontrado'
+
+    # CU-23 (agregado): actualizar un apartamento
+    put:
+      tags: [Apartamentos]
+      summary: Actualizar un apartamento (CU-23)
+      description: |
+        Reemplaza nombre, descripción, dormitorios, dotación y capacidad. Cambiar la capacidad NO afecta las
+        reservas ya creadas, pero la respuesta lista los códigos de las reservas activas o futuras cuyo grupo
+        supera la nueva capacidad (7.3); el cálculo lo hace `AdministracionApartamentoService`.
+        Un apartamento retirado de la venta responde 404. Mapea a `ActualizarApartamentoUseCase`.
+      operationId: actualizarApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarApartamentoRequest'
+      responses:
+        '200':
+          description: Apartamento actualizado, con la advertencia de capacidad si aplica
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActualizacionApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Capacidad menor que 1 (RN-02), dormitorios menores que 1 o dotación vacía (L-06)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/apartamentos/{id}/retirar:
     parameters:
@@ -773,6 +851,104 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventoCanalResponse'
+
+  # ==================== CU-22 a CU-25: ADMINISTRACIÓN Y TARIFAS (7.3, 7.4) ====================
+  # POST /api/apartamentos (CU-22) y PUT /api/apartamentos/{id} (CU-23) están en sus rutas de arriba.
+
+  /api/apartamentos/{id}/tarifas:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Definir tarifas por temporada (CU-24)
+      description: |
+        Una o varias tarifas por ocupante facturable y por noche que rigen desde hoy. La tarifa anterior de
+        cada temporada no se pierde: queda en el histórico con la fecha desde la que estuvo vigente y la fecha
+        en que se reemplazó (7.4). La cotización y las reservas siguen usando solo la tarifa vigente (RN-05).
+        Si una tarifa no cumple, no se aplica ninguna. Un apartamento retirado de la venta responde 404.
+        Mapea a `TarifasApartamentoUseCase.definir`.
+      operationId: definirTarifasApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefinirTarifasRequest'
+      responses:
+        '200':
+          description: Tarifas definidas; el detalle trae las vigentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La temporada no existe en el alojamiento, está repetida o el valor no es mayor que cero (7.4)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/tarifas/historico:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el histórico de tarifas (CU-24)
+      description: |
+        Tarifas vigentes (vigenteHasta null) y reemplazadas, de la más reciente a la más antigua,
+        10 por página (7.4, 12.4). Solo consulta. Mapea a `TarifasApartamentoUseCase.historico`.
+      operationId: historicoTarifasApartamento
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página del histórico (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaRegistroTarifaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/activar:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Activar un apartamento (CU-25)
+      description: |
+        Pone el apartamento a la venta. Exige tarifa en todas las temporadas del alojamiento (7.4);
+        uno retirado de la venta no puede activarse (7.3). Mapea a `ActivarApartamentoUseCase`.
+      operationId: activarApartamento
+      responses:
+        '200':
+          description: Apartamento activo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Le falta tarifa en alguna temporada (7.4) o fue retirado de la venta (7.3)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
 
@@ -1238,3 +1414,97 @@ components:
         identificadorExterno: { type: string }
         tipoEvento: { $ref: '#/components/schemas/TipoEventoCanal' }
         resultado: { $ref: '#/components/schemas/ResultadoEventoCanal' }
+
+    # ---------- CU-22 a CU-25: administración y tarifas (7.3, 7.4) ----------
+
+    ImagenRequest:
+      type: object
+      required: [ url ]
+      properties:
+        url: { type: string, example: 'https://coral.co/img/apt-401-sala.jpg', description: 'Debe empezar por http:// o https://' }
+        principal: { type: boolean, default: false, description: Exactamente una imagen debe ser la principal }
+
+    TarifaRequest:
+      type: object
+      required: [ idTemporada, valorPorOcupante ]
+      properties:
+        idTemporada: { type: string, example: T-BASE, description: Debe existir en el alojamiento (7.4) }
+        valorPorOcupante: { type: integer, format: int64, example: 300000, description: Pesos por ocupante facturable y por noche; mayor que cero (7.4) }
+
+    RegistrarApartamentoRequest:
+      type: object
+      required: [ identificacion, nombre, dormitorios, capacidadMaxima, dotacion, imagenes ]
+      properties:
+        identificacion: { type: string, example: APT-401, description: Única en el alojamiento (L-04) }
+        nombre: { type: string, example: Coral Esmeralda }
+        descripcion: { type: string, nullable: true }
+        dormitorios: { type: integer, example: 1, description: Al menos 1 }
+        capacidadMaxima: { type: integer, example: 3, description: Al menos 1 (RN-02) }
+        dotacion:
+          type: array
+          description: Al menos un elemento (L-06)
+          items: { type: string }
+        imagenes:
+          type: array
+          description: Entre 1 y 10, exactamente una principal (7.3)
+          items: { $ref: '#/components/schemas/ImagenRequest' }
+        tarifas:
+          type: array
+          nullable: true
+          description: Opcional; sin tarifa en todas las temporadas el apartamento no puede activarse (7.4)
+          items: { $ref: '#/components/schemas/TarifaRequest' }
+
+    ActualizarApartamentoRequest:
+      type: object
+      required: [ nombre, dormitorios, capacidadMaxima, dotacion ]
+      properties:
+        nombre: { type: string, example: Coral Esmeralda Renovado }
+        descripcion: { type: string, nullable: true }
+        dormitorios: { type: integer, example: 2 }
+        capacidadMaxima: { type: integer, example: 2, description: No modifica las reservas ya creadas (7.3) }
+        dotacion:
+          type: array
+          items: { type: string }
+
+    DefinirTarifasRequest:
+      type: object
+      required: [ tarifas ]
+      properties:
+        tarifas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/TarifaRequest' }
+
+    ActualizacionApartamentoResponse:
+      type: object
+      properties:
+        apartamento: { $ref: '#/components/schemas/ApartamentoDetalleResponse' }
+        reservasSobreCapacidad:
+          type: array
+          description: Códigos de reservas activas o futuras cuyo grupo supera la nueva capacidad (7.3)
+          items: { type: string, example: RES-2026-00007 }
+        advertencia:
+          type: string
+          nullable: true
+          description: Presente solo si hay reservas afectadas; empieza por 7.3
+
+    RegistroTarifaResponse:
+      type: object
+      properties:
+        idTemporada: { type: string, example: T-BASE }
+        valorPorOcupante: { type: integer, format: int64, example: 300000 }
+        vigenteDesde: { type: string, format: date, nullable: true, description: Null solo para tarifas cargadas sin fecha (datos iniciales) }
+        vigenteHasta: { type: string, format: date, nullable: true, description: Fecha en que se reemplazó; null si rige hoy }
+        vigente: { type: boolean }
+
+    PaginaRegistroTarifaResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/RegistroTarifaResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
