@@ -88,7 +88,7 @@ public interface ApartamentoMapper {
 
     // ==================== COTIZACIÓN (CU-02) ====================
 
-    /** RN-06: el detalle noche a noche; el total es la suma de los subtotales. */
+    /** RN-05: el detalle noche a noche; el total es la suma de los subtotales. */
     default CotizacionResponse aCotizacionResponse(String identificacionApartamento, LocalDate fechaEntrada,
                                                    LocalDate fechaSalida, Cotizacion cotizacion) {
         return new CotizacionResponse(identificacionApartamento, fechaEntrada, fechaSalida,

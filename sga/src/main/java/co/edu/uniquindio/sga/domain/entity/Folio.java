@@ -65,7 +65,7 @@ public class Folio {
         }
         Folio folio = new Folio(id, reserva, depositoGarantia, fechaApertura, List.of(), List.of(), false, null, null);
         folio.agregarCargo(cargoAlojamiento);
-        folio.agregarCargo(depositoGarantia.generarCargoAjuste(fechaApertura));
+        folio.agregarCargo(depositoGarantia.generarCargo(fechaApertura));
         return folio;
     }
 

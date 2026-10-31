@@ -35,8 +35,8 @@ public class CotizacionController {
     /** CU-02. POST /api/cotizaciones */
     @PostMapping
     @Operation(summary = "Cotizar una estancia",
-            description = "Calcula noche a noche con la tarifa de cada temporada (RN-06, RP-01) y solo cobra a los "
-                    + "ocupantes desde 6 años (RN-05). No crea la reserva")
+            description = "Calcula noche a noche con la tarifa de cada temporada (RN-05, RP-01) y solo cobra a los "
+                    + "ocupantes desde 6 años (RN-06). No crea la reserva")
     @ApiResponse(responseCode = "200", description = "Cotización con el detalle por noche")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")

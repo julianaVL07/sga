@@ -3,8 +3,8 @@ package co.edu.uniquindio.sga.application.dto.response;
 import java.time.LocalDate;
 
 /**
- * Una noche de la cotización (RN-06): su temporada, la tarifa por ocupante aplicada, cuántos ocupantes pagan
- * (RN-05) y el subtotal. Los valores van en pesos enteros.
+ * Una noche de la cotización (RN-05): su temporada, la tarifa por ocupante aplicada, cuántos ocupantes pagan
+ * (RN-06) y el subtotal. Los valores van en pesos enteros.
  */
 public record DetalleNocheResponse(
         LocalDate fecha,
