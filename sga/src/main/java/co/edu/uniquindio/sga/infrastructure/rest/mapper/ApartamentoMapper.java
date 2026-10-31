@@ -1,5 +1,8 @@
 package co.edu.uniquindio.sga.infrastructure.rest.mapper;
 
+import co.edu.uniquindio.sga.application.dto.request.ImagenRequest;
+import co.edu.uniquindio.sga.application.dto.request.TarifaRequest;
+import co.edu.uniquindio.sga.application.dto.response.ActualizacionApartamentoResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoDetalleResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoDisponibleResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoResponse;
@@ -7,14 +10,18 @@ import co.edu.uniquindio.sga.application.dto.response.BloqueoResponse;
 import co.edu.uniquindio.sga.application.dto.response.CotizacionResponse;
 import co.edu.uniquindio.sga.application.dto.response.DetalleNocheResponse;
 import co.edu.uniquindio.sga.application.dto.response.NovedadResponse;
+import co.edu.uniquindio.sga.application.dto.response.RegistroTarifaResponse;
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
 import co.edu.uniquindio.sga.domain.entity.Novedad;
 import co.edu.uniquindio.sga.domain.valueobject.ApartamentoDisponible;
+import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.DetalleNoche;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.Imagen;
+import co.edu.uniquindio.sga.domain.valueobject.RegistroTarifa;
+import co.edu.uniquindio.sga.domain.valueobject.ResultadoActualizacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Tarifa;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -84,6 +91,37 @@ public interface ApartamentoMapper {
     /** Cada imagen viaja como su URL. */
     default String aUrl(Imagen imagen) {
         return imagen == null ? null : imagen.url();
+    }
+
+    // ==================== ADMINISTRACIÓN Y TARIFAS (CU-22 a CU-25) ====================
+
+    /** CU-22: cada imagen del request a su objeto de valor; la URL y la principal única las valida el dominio. */
+    default List<Imagen> aImagenes(List<ImagenRequest> imagenes) {
+        return imagenes == null ? List.of() : imagenes.stream().map(i -> new Imagen(i.url(), i.principal())).toList();
+    }
+
+    /** CU-22 y CU-24: pesos enteros a Dinero; el valor mayor que cero lo valida Tarifa (7.4). */
+    default List<Tarifa> aTarifas(List<TarifaRequest> tarifas) {
+        return tarifas == null ? List.of() : tarifas.stream()
+                .map(t -> new Tarifa(t.idTemporada(), Dinero.de(t.valorPorOcupante())))
+                .toList();
+    }
+
+    /** CU-23 (7.3): el apartamento y, si hay reservas por encima de la nueva capacidad, la advertencia. */
+    default ActualizacionApartamentoResponse aActualizacionResponse(ResultadoActualizacionApartamento resultado) {
+        List<String> codigos = resultado.reservasSobreCapacidad().stream().map(CodigoReserva::valor).toList();
+        String advertencia = resultado.tieneAdvertencia()
+                ? "7.3: " + codigos.size() + " reserva(s) activa(s) o futura(s) superan la nueva capacidad de "
+                        + resultado.apartamento().getCapacidad().maximo()
+                        + " ocupantes; las reservas no se modifican"
+                : null;
+        return new ActualizacionApartamentoResponse(aDetalleResponse(resultado.apartamento()), codigos, advertencia);
+    }
+
+    /** CU-24 (7.4): una entrada del histórico; vigenteHasta null indica la tarifa que rige hoy. */
+    default RegistroTarifaResponse aRegistroTarifaResponse(RegistroTarifa registro) {
+        return new RegistroTarifaResponse(registro.idTemporada(), aPesos(registro.valorPorOcupante()),
+                registro.vigenteDesde(), registro.vigenteHasta(), registro.estaVigente());
     }
 
     // ==================== COTIZACIÓN (CU-02) ====================
