@@ -7,7 +7,7 @@ import java.time.LocalDate;
 
 /**
  * Ocupante de la reserva (3.2, 7.2): el nombre y la fecha de nacimiento son obligatorios; el documento es opcional.
- * La edad nunca viaja ni se guarda: el dominio la calcula con la fecha de nacimiento (RN-05, umbral de 6 años en Coral).
+ * La edad nunca viaja ni se guarda: el dominio la calcula con la fecha de nacimiento (RN-06, umbral de 6 años en Coral).
  */
 public record OcupanteRequest(
         @NotBlank(message = "El nombre del ocupante es obligatorio")

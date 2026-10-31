@@ -1,0 +1,1307 @@
+# ====================================================================================================
+# SGA - Apartahotel Coral. Recorrido completo de la API (entrega 2)
+#
+# Cómo ejecutarlo: arranque la app desde cero (./gradlew bootRun; H2 en memoria carga los datos iniciales)
+# y en IntelliJ use "Run All Requests in File". Corre COMPLETO y en orden, sin preparar nada a mano:
+#   - Las fechas se calculan en la petición 0.1 a partir de hoy en Colombia (UTC-5), igual que los datos
+#     iniciales, que también son relativos a hoy.
+#   - Los códigos de reserva se capturan de las respuestas (client.global.set) y se reutilizan con {{...}}.
+#   - Cada petición valida su código HTTP con client.test; los 409 validan además el código de la regla.
+# Si lo ejecuta dos veces sin reiniciar, fallan las que cambian estado (la reserva ya existe, etc.).
+#
+# Datos iniciales que se evitan (DatosInicialesCoralConfig y DatosInicialesReservasConfig):
+#   APT-101  PENDIENTE hoy+10→hoy+12 (PORTAL), CANCELADA hoy+20→hoy+22, FINALIZADA hoy-10→hoy-7
+#   APT-102  CONFIRMADA hoy+12→hoy+15, NO_SHOW hoy-5→hoy-3
+#   APT-201  EN_CURSO hoy-1→hoy+2 (OCUPADO), PENDIENTE hoy+15→hoy+18 (EXTERNO, sin hora de llegada)
+#   APT-202  FUERA_DE_SERVICIO con bloqueo hoy+3→hoy+15
+#   APT-301  bloqueo hoy+20→hoy+25
+# El flujo principal usa APT-301 de hoy a hoy+3, libre y PREPARADO al arrancar.
+# ====================================================================================================
+
+@host = http://localhost:8080
+
+# ====================================================================================================
+# 0. PREPARACIÓN
+# ====================================================================================================
+
+### 0.1 Calcular las fechas del recorrido (y comprobar que la app está arriba)
+GET {{host}}/api/apartamentos
+
+> {%
+    client.test("0.1 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    // Hoy en Colombia (America/Bogota, UTC-5 sin horario de verano), la misma zona del reloj del SGA.
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("ayer", fecha(-1));
+    client.global.set("hoy", fecha(0));
+    client.global.set("hoyMas2", fecha(2));
+    client.global.set("hoyMas3", fecha(3));
+    client.global.set("hoyMas10", fecha(10));
+    client.global.set("hoyMas12", fecha(12));
+    client.global.set("hoyMas15", fecha(15));
+    client.global.set("hoyMas20", fecha(20));
+    client.global.set("hoyMas23", fecha(23));
+    client.global.set("hoyMas30", fecha(30));
+    client.global.set("hoyMas33", fecha(33));
+    client.global.set("hoyMas40", fecha(40));
+    client.global.set("hoyMas42", fecha(42));
+    client.global.set("hoyMas43", fecha(43));
+    client.global.set("hoyMas60", fecha(60));
+    // RP-01: primer viernes en temporada Alta (10-dic-2026 al 20-ene-2027) a más de 25 días de hoy (fuera de
+    // los datos iniciales). Una sola noche, de viernes a sábado.
+    var viernes = new Date(Math.max(hoy.getTime() + 26 * DIA, Date.UTC(2026, 11, 10)));
+    while (viernes.getUTCDay() !== 5) {
+        viernes = new Date(viernes.getTime() + DIA);
+    }
+    client.global.set("viernesAlta", viernes.toISOString().substring(0, 10));
+    client.global.set("sabadoAlta", new Date(viernes.getTime() + DIA).toISOString().substring(0, 10));
+%}
+
+### Sección 1: CU-19 LISTAR RESERVAS: filtros y paginación (7.5, 12.4: 10 por página, páginas desde 0)
+
+# ====================================================================================================
+# 1. CU-19 LISTAR RESERVAS: filtros y paginación (7.5, 12.4: 10 por página, páginas desde 0)
+#    Además captura los códigos de las reservas de los datos iniciales.
+# ====================================================================================================
+
+### 1.1 Todas las reservas, de la más reciente a la más antigua (página 0)
+GET {{host}}/api/reservas
+
+> {%
+    client.test("1.1 200 listado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 1.2 Página 1: vacía, porque los datos iniciales son 7 reservas (menos de 10)
+GET {{host}}/api/reservas?pagina=1
+
+> {%
+    client.test("1.2 200 página vacía", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 1.3 Filtro por estado: CONFIRMADA (APT-102, hoy+12)
+GET {{host}}/api/reservas?estado=CONFIRMADA
+
+> {%
+    client.test("1.3 200 filtro estado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    client.global.set("confirmadaInicial", response.body.contenido[0].codigo);
+%}
+
+### 1.4 Filtros combinados: estado + apartamento + canal (PENDIENTE de APT-101 por el portal, hoy+10)
+GET {{host}}/api/reservas?estado=PENDIENTE&apartamento=APT-101&canal=PORTAL
+
+> {%
+    client.test("1.4 200 filtros combinados", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    client.global.set("pendientePortal", response.body.contenido[0].codigo);
+%}
+
+### 1.5 Filtro por canal y estado: la PENDIENTE que llegó del canal externo (sin hora de llegada)
+GET {{host}}/api/reservas?estado=PENDIENTE&canal=EXTERNO
+
+> {%
+    client.test("1.5 200 filtro canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    client.global.set("pendienteExterna", response.body.contenido[0].codigo);
+    client.global.set("valorPendienteExterna", response.body.contenido[0].valorTotal);
+%}
+
+### 1.6 Filtro por estado: CANCELADA
+GET {{host}}/api/reservas?estado=CANCELADA
+
+> {%
+    client.test("1.6 200 filtro cancelada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    client.global.set("canceladaInicial", response.body.contenido[0].codigo);
+%}
+
+### 1.7 Filtro por estado: EN_CURSO (APT-201, entró ayer)
+GET {{host}}/api/reservas?estado=EN_CURSO
+
+> {%
+    client.test("1.7 200 filtro en curso", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    client.global.set("enCursoInicial", response.body.contenido[0].codigo);
+%}
+
+### 1.8 Filtro por documento del titular
+GET {{host}}/api/reservas?titular=1094999000
+
+> {%
+    client.test("1.8 200 filtro titular", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 1.9 Filtro por rango de fecha de entrada (desde y hasta incluidas)
+GET {{host}}/api/reservas?desde={{hoy}}&hasta={{hoyMas30}}
+
+> {%
+    client.test("1.9 200 filtro fechas", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### Sección 2: CU-20 CONSULTAR APARTAMENTOS y CU-21 RETIRAR APARTAMENTO (7.3, 12.4)
+
+# ====================================================================================================
+# 2. CU-20 CONSULTAR APARTAMENTOS y CU-21 RETIRAR APARTAMENTO (7.3, 12.4)
+# ====================================================================================================
+
+### 2.1 Listar apartamentos no eliminados (página 0, 10 por página)
+GET {{host}}/api/apartamentos?pagina=0
+
+> {%
+    client.test("2.1 200 listado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 2.2 Detalle de APT-301: dotación, tarifas por temporada y bloqueos vigentes
+GET {{host}}/api/apartamentos/APT-301
+
+> {%
+    client.test("2.2 200 detalle", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 2.3 Retirar APT-202 de la venta (eliminación lógica: no tiene reservas activas ni futuras)
+PUT {{host}}/api/apartamentos/APT-202/retirar
+
+> {%
+    client.test("2.3 200 retirado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.eliminado === true, "El apartamento debía quedar eliminado");
+    });
+%}
+
+### 2.4 El apartamento retirado ya no sale en el detalle (404)
+GET {{host}}/api/apartamentos/APT-202
+
+> {%
+    client.test("2.4 404 retirado", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### Sección 3: FLUJO COMPLETO DE UNA RESERVA (APT-301, de hoy a hoy+3)
+
+# ====================================================================================================
+# 3. FLUJO COMPLETO DE UNA RESERVA (APT-301, de hoy a hoy+3)
+#    Buscar → cotizar → crear → consultar → pagar anticipo → confirmar → registrar llegada → pagar saldo
+#    → cerrar folio → registrar salida.
+#    El anticipo se paga antes de confirmar porque Coral lo exige (L-11). El folio se cierra antes de la
+#    salida: registrar la salida con saldo cero ya cierra el folio, y cerrarlo después daría 409 (RN-16).
+# ====================================================================================================
+
+### 3.1 CU-01 Buscar apartamentos disponibles (dos adultos, de hoy a hoy+3)
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoy}}&salida={{hoyMas3}}&ocupantes=2
+
+> {%
+    client.test("3.1 200 disponibles", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 3.2 CU-01 con filtros de 7.5: capacidad mínima, característica de la dotación y rango de precio
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoy}}&salida={{hoyMas3}}&ocupantes=2&capacidadMinima=4&caracteristica=piscina&precioMinimo=500000&precioMaximo=5000000&pagina=0
+
+> {%
+    client.test("3.2 200 disponibles con filtros", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 3.3 CU-02 Cotizar la estancia (la niña de 5 años no paga: RN-06)
+POST {{host}}/api/cotizaciones
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoy}}",
+  "fechaSalida": "{{hoyMas3}}",
+  "ocupantes": [
+    { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" },
+    { "nombre": "Sofía Gómez", "fechaNacimiento": "2021-03-02" }
+  ]
+}
+
+> {%
+    client.test("3.3 200 cotización", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 3.4 CU-03 Crear la reserva: 201 + Location
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoy}}",
+  "fechaSalida": "{{hoyMas3}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": {
+    "nombre": "Ana Gómez",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1094200300",
+    "email": "ana.gomez@correo.co",
+    "telefono": "3005550101"
+  },
+  "ocupantes": [
+    { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "fechaNacimiento": "1990-05-20" },
+    { "nombre": "Sofía Gómez", "fechaNacimiento": "2021-03-02" }
+  ]
+}
+
+> {%
+    client.test("3.4 201 reserva creada con Location", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.estado === "PENDIENTE", "La reserva nace PENDIENTE");
+        client.assert(response.headers.valueOf("Location") != null, "Falta la cabecera Location");
+    });
+    client.global.set("codigo", response.body.codigo);
+    client.global.set("valorTotal", response.body.valorTotal);
+    client.global.set("location", response.headers.valueOf("Location"));
+%}
+
+### 3.5 CU-18 Consultar la reserva en la URL del Location
+GET {{location}}
+
+> {%
+    client.test("3.5 200 consulta", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 3.6 CU-15 Pagar el anticipo (se paga el valor de la estancia; queda pendiente el depósito RP-02)
+POST {{host}}/api/reservas/{{codigo}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": {{valorTotal}},
+  "medio": "TRANSFERENCIA_BANCARIA"
+}
+
+> {%
+    client.test("3.6 201 pago del anticipo", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+    client.global.set("saldo", response.body.saldo);
+%}
+
+### 3.7 CU-10 Confirmar la reserva (hora de llegada registrada y anticipo cubierto)
+PUT {{host}}/api/reservas/{{codigo}}/confirmar
+
+> {%
+    client.test("3.7 200 confirmada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "CONFIRMADA", "La reserva debía quedar CONFIRMADA");
+    });
+%}
+
+### 3.8 CU-04 Registrar la llegada (hoy es la fecha de entrada y APT-301 está PREPARADO)
+PUT {{host}}/api/reservas/{{codigo}}/registrar-llegada
+
+> {%
+    client.test("3.8 200 llegada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "EN_CURSO", "La reserva debía quedar EN_CURSO");
+    });
+%}
+
+### 3.9 CU-15 Pagar el saldo pendiente del folio
+POST {{host}}/api/reservas/{{codigo}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": {{saldo}},
+  "medio": "TARJETA_DEBITO_CREDITO"
+}
+
+> {%
+    client.test("3.9 201 pago del saldo", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+%}
+
+### 3.10 CU-06 Cerrar el folio (saldo exactamente cero, RN-17)
+PUT {{host}}/api/reservas/{{codigo}}/folio/cerrar
+
+> {%
+    client.test("3.10 200 folio cerrado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.cerrado === true, "El folio debía quedar cerrado");
+    });
+%}
+
+### 3.11 CU-05 Registrar la salida (APT-301 pasa a PENDIENTE_PREPARACION)
+PUT {{host}}/api/reservas/{{codigo}}/registrar-salida
+
+> {%
+    client.test("3.11 200 salida", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "FINALIZADA", "La reserva debía quedar FINALIZADA");
+    });
+%}
+
+### Sección 4: OTROS CASOS DE USO
+
+# ====================================================================================================
+# 4. OTROS CASOS DE USO
+# ====================================================================================================
+
+### 4.1 CU-11 Modificar una reserva: se agrega un ocupante y se asienta el ajuste en el folio (RN-14)
+PUT {{host}}/api/reservas/{{pendientePortal}}
+Content-Type: application/json
+
+{
+  "ocupantes": [
+    { "nombre": "Laura Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094777888", "fechaNacimiento": "1988-04-12" },
+    { "nombre": "Pedro Gómez", "fechaNacimiento": "1987-09-30" }
+  ]
+}
+
+> {%
+    client.test("4.1 200 modificada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 4.2 CU-13 Registrar un bloqueo sobre noches libres de APT-102
+POST {{host}}/api/apartamentos/APT-102/bloqueos
+Content-Type: application/json
+
+{
+  "fechaInicio": "{{hoyMas40}}",
+  "fechaFin": "{{hoyMas42}}",
+  "motivo": "Mantenimiento del aire acondicionado"
+}
+
+> {%
+    client.test("4.2 201 bloqueo", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+%}
+
+### 4.3 CU-17 Registrar una novedad del apartamento
+POST {{host}}/api/apartamentos/APT-301/novedades
+Content-Type: application/json
+
+{
+  "autor": "Personal de servicio",
+  "descripcion": "Copa de cristal rota en la cocina",
+  "gravedad": "BAJA"
+}
+
+> {%
+    client.test("4.3 201 novedad", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+%}
+
+### 4.4 CU-08 Consultar disponibilidad desde el canal externo
+GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2
+
+> {%
+    client.test("4.4 200 disponibilidad canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 4.5 CU-08 Recibir una reserva del canal: ACEPTADO (201)
+POST {{host}}/api/canales/booking/reservas
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-HTTP-0001",
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas30}}",
+  "fechaSalida": "{{hoyMas33}}",
+  "horaEstimadaLlegada": "15:30",
+  "titular": {
+    "nombre": "John Smith",
+    "tipoDocumento": "PA",
+    "numeroDocumento": "PA7770001",
+    "email": "john.smith@mail.com",
+    "telefono": "+15555550808"
+  },
+  "ocupantes": [
+    { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "fechaNacimiento": "1985-02-14" }
+  ]
+}
+
+> {%
+    client.test("4.5 201 ACEPTADO", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
+    });
+%}
+
+### 4.6 RN-19 El mismo mensaje del canal llega dos veces: DUPLICADO_IGNORADO (200, no se crea otra reserva)
+POST {{host}}/api/canales/booking/reservas
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-HTTP-0001",
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas30}}",
+  "fechaSalida": "{{hoyMas33}}",
+  "horaEstimadaLlegada": "15:30",
+  "titular": {
+    "nombre": "John Smith",
+    "tipoDocumento": "PA",
+    "numeroDocumento": "PA7770001",
+    "email": "john.smith@mail.com",
+    "telefono": "+15555550808"
+  },
+  "ocupantes": [
+    { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "fechaNacimiento": "1985-02-14" }
+  ]
+}
+
+> {%
+    client.test("4.6 200 DUPLICADO_IGNORADO", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.resultado === "DUPLICADO_IGNORADO", "El canal debía recibir DUPLICADO_IGNORADO");
+    });
+%}
+
+### 4.7 CU-08 El canal cancela su reserva: ACEPTADO (200)
+PUT {{host}}/api/canales/booking/reservas/BK-HTTP-0001/cancelar
+
+> {%
+    client.test("4.7 200 cancelación del canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
+    });
+%}
+
+### 4.8 CU-08 El canal cancela una reserva que no existe: RECHAZADO_INVALIDO (422)
+PUT {{host}}/api/canales/booking/reservas/BK-NO-EXISTE/cancelar
+
+> {%
+    client.test("4.8 422 RECHAZADO_INVALIDO", function () {
+        client.assert(response.status === 422, "Se esperaba 422 y llegó " + response.status);
+        client.assert(response.body.resultado === "RECHAZADO_INVALIDO", "El canal debía recibir RECHAZADO_INVALIDO");
+    });
+%}
+
+### Sección 5: UN 409 POR CADA REGLA DE NEGOCIO QUE EXPONE LA API
+
+# ====================================================================================================
+# 5. UN 409 POR CADA REGLA DE NEGOCIO QUE EXPONE LA API
+#    El nombre de cada petición lleva el código de la regla; el mensaje de la respuesta empieza por él.
+# ====================================================================================================
+
+### 5.1 RN-01 Solapamiento: APT-102 ya tiene una reserva CONFIRMADA de hoy+12 a hoy+15
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas12}}",
+  "fechaSalida": "{{hoyMas15}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.1 409 RN-01", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-01"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.2 RN-01 No se puede bloquear un apartamento con reservas activas en esas noches (APT-101, hoy+10)
+POST {{host}}/api/apartamentos/APT-101/bloqueos
+Content-Type: application/json
+
+{
+  "fechaInicio": "{{hoyMas10}}",
+  "fechaFin": "{{hoyMas12}}",
+  "motivo": "Pintura del balcón"
+}
+
+> {%
+    client.test("5.2 409 RN-01 bloqueo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-01"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.3 RN-02 Capacidad: APT-101 admite 2 personas y llegan 3
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas43}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [
+    { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" },
+    { "nombre": "Luis Gómez", "fechaNacimiento": "1989-01-10" },
+    { "nombre": "Sofía Gómez", "fechaNacimiento": "2021-03-02" }
+  ]
+}
+
+> {%
+    client.test("5.3 409 RN-02", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-02"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.4 RN-03 La fecha de salida debe ser posterior a la de entrada
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas43}}",
+  "fechaSalida": "{{hoyMas40}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.4 409 RN-03", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-03"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.5 RN-04 La fecha de entrada no puede estar en el pasado (ayer)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{ayer}}",
+  "fechaSalida": "{{hoyMas2}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.5 409 RN-04", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-04"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.6 RN-06 La búsqueda trae 1 fecha de nacimiento para 2 ocupantes
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43}}&ocupantes=2&fechasNacimiento=1990-05-20
+
+> {%
+    client.test("5.6 409 RN-06", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-06"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.7 RN-07 Bloqueo: APT-301 está bloqueado de hoy+20 a hoy+25
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoyMas20}}",
+  "fechaSalida": "{{hoyMas23}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.7 409 RN-07", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-07"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.8 RN-07 El rango del bloqueo debe terminar después de empezar
+POST {{host}}/api/apartamentos/APT-102/bloqueos
+Content-Type: application/json
+
+{
+  "fechaInicio": "{{hoyMas43}}",
+  "fechaFin": "{{hoyMas40}}",
+  "motivo": "Rango al revés"
+}
+
+> {%
+    client.test("5.8 409 RN-07 rango", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-07"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.9 RN-08 No se puede cancelar una reserva que ya está CANCELADA
+PUT {{host}}/api/reservas/{{canceladaInicial}}/cancelar
+Content-Type: application/json
+
+{
+  "motivo": "Segundo intento de cancelación"
+}
+
+> {%
+    client.test("5.9 409 RN-08", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-08"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.10 RN-08 Solo una reserva CONFIRMADA puede declararse no-show (esta está PENDIENTE)
+PUT {{host}}/api/reservas/{{pendienteExterna}}/no-show
+
+> {%
+    client.test("5.10 409 RN-08 no-show", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-08"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.11 L-11 Confirmar sin haber pagado el anticipo del 50 %
+PUT {{host}}/api/reservas/{{pendientePortal}}/confirmar
+
+> {%
+    client.test("5.11 409 L-11", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("L-11"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.12 (preparación de RN-09) La reserva del canal paga su valor para que el anticipo no sea el obstáculo
+POST {{host}}/api/reservas/{{pendienteExterna}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": {{valorPendienteExterna}},
+  "medio": "TRANSFERENCIA_BANCARIA"
+}
+
+> {%
+    client.test("5.12 201 pago", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+%}
+
+### 5.13 RN-09 Confirmar sin hora estimada de llegada (la reserva del canal llegó sin ella)
+PUT {{host}}/api/reservas/{{pendienteExterna}}/confirmar
+
+> {%
+    client.test("5.13 409 RN-09", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-09"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.14 RN-10 Registrar la llegada antes de la fecha de entrada (la CONFIRMADA entra en hoy+12)
+PUT {{host}}/api/reservas/{{confirmadaInicial}}/registrar-llegada
+
+> {%
+    client.test("5.14 409 RN-10", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-10"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.15 (preparación de RN-11) Nueva reserva en APT-301 desde hoy, con llegada nocturna (RP-03: cargo de recepción)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoy}}",
+  "fechaSalida": "{{hoyMas2}}",
+  "horaEstimadaLlegada": "21:00",
+  "canalOrigen": "DIRECTO",
+  "titular": { "nombre": "Jorge Pérez", "tipoDocumento": "CC", "numeroDocumento": "1094300400", "email": "jorge.perez@correo.co", "telefono": "3015550202" },
+  "ocupantes": [ { "nombre": "Jorge Pérez", "tipoDocumento": "CC", "numeroDocumento": "1094300400", "fechaNacimiento": "1979-11-03" } ]
+}
+
+> {%
+    client.test("5.15 201 reserva", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+    client.global.set("codigoNocturna", response.body.codigo);
+    client.global.set("valorNocturna", response.body.valorTotal);
+%}
+
+### 5.16 (preparación de RN-11) Pago del anticipo
+POST {{host}}/api/reservas/{{codigoNocturna}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": {{valorNocturna}},
+  "medio": "TARJETA_DEBITO_CREDITO"
+}
+
+> {%
+    client.test("5.16 201 pago", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+%}
+
+### 5.17 (preparación de RN-11) Confirmación
+PUT {{host}}/api/reservas/{{codigoNocturna}}/confirmar
+
+> {%
+    client.test("5.17 200 confirmada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 5.18 RN-11 Registrar la llegada con el apartamento sin preparar (APT-301 quedó PENDIENTE_PREPARACION en 3.11)
+PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
+
+> {%
+    client.test("5.18 409 RN-11", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-11"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.19 CU-16 El personal de servicio inicia la preparación: PENDIENTE_PREPARACION → EN_PREPARACION
+PUT {{host}}/api/apartamentos/APT-301/estado-operativo
+Content-Type: application/json
+
+{
+  "nuevoEstado": "EN_PREPARACION"
+}
+
+> {%
+    client.test("5.19 200 EN_PREPARACION", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 5.20 CU-16 Termina la preparación: EN_PREPARACION → PREPARADO
+PUT {{host}}/api/apartamentos/APT-301/estado-operativo
+Content-Type: application/json
+
+{
+  "nuevoEstado": "PREPARADO"
+}
+
+> {%
+    client.test("5.20 200 PREPARADO", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 5.21 CU-04 Ahora sí se registra la llegada
+PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
+
+> {%
+    client.test("5.21 200 llegada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 5.22 7.6 Transición de estado operativo no permitida: PREPARADO → EN_PREPARACION (APT-102)
+PUT {{host}}/api/apartamentos/APT-102/estado-operativo
+Content-Type: application/json
+
+{
+  "nuevoEstado": "EN_PREPARACION"
+}
+
+> {%
+    client.test("5.22 409 7.6", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.6"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.23 RN-14 La modificación debe cambiar al menos un dato (cuerpo sin cambios)
+PUT {{host}}/api/reservas/{{pendientePortal}}
+Content-Type: application/json
+
+{}
+
+> {%
+    client.test("5.23 409 RN-14", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-14"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.24 RN-16 Un folio cerrado no admite movimientos (pago al folio cerrado en 3.10)
+POST {{host}}/api/reservas/{{codigo}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": 10000,
+  "medio": "TARJETA_DEBITO_CREDITO"
+}
+
+> {%
+    client.test("5.24 409 RN-16", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-16"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.25 RN-17 Cerrar un folio con saldo sin autorización (la PENDIENTE del portal no ha pagado nada)
+PUT {{host}}/api/reservas/{{pendientePortal}}/folio/cerrar
+
+> {%
+    client.test("5.25 409 RN-17", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-17"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.26 RN-17 Registrar la salida con saldo en el folio (la EN_CURSO de APT-201 solo pagó el anticipo)
+PUT {{host}}/api/reservas/{{enCursoInicial}}/registrar-salida
+
+> {%
+    client.test("5.26 409 RN-17 salida", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-17"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.27 RN-18 El canal externo envía una reserva sobre noches ya vendidas: RECHAZADO_CONFLICTO
+POST {{host}}/api/canales/booking/reservas
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-HTTP-0002",
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas12}}",
+  "fechaSalida": "{{hoyMas15}}",
+  "titular": { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "email": "john.smith@mail.com", "telefono": "+15555550808" },
+  "ocupantes": [ { "nombre": "John Smith", "fechaNacimiento": "1985-02-14" } ]
+}
+
+> {%
+    client.test("5.27 409 RN-18", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.resultado === "RECHAZADO_CONFLICTO", "El canal debía recibir RECHAZADO_CONFLICTO");
+    });
+%}
+
+### 5.28 RN-19 Una reserva EXTERNO no entra por POST /api/reservas, sino por el canal (CU-08)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas43}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "EXTERNO",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.28 409 RN-19", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RN-19"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.29 RP-01 Una noche de viernes en temporada Alta: se exigen mínimo 2 noches
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{viernesAlta}}",
+  "fechaSalida": "{{sabadoAlta}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.29 409 RP-01", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("RP-01"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.30 L-15 Declarar no-show antes de la hora límite del día de entrada (la CONFIRMADA entra en hoy+12)
+PUT {{host}}/api/reservas/{{confirmadaInicial}}/no-show
+
+> {%
+    client.test("5.30 409 L-15", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("L-15"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.31 3.3 No se puede reservar un apartamento retirado de la venta (APT-202, retirado en 2.3)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-202",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas43}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("5.31 409 3.3", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("3.3"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.32 7.3 No se retira un apartamento con reservas activas o futuras (APT-101)
+PUT {{host}}/api/apartamentos/APT-101/retirar
+
+> {%
+    client.test("5.32 409 7.3", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.3"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.33 7.3 Un apartamento ya retirado no se retira otra vez (APT-202)
+PUT {{host}}/api/apartamentos/APT-202/retirar
+
+> {%
+    client.test("5.33 409 7.3 ya retirado", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.3"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.34 7.5 Búsqueda con precio mínimo mayor que el máximo
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43}}&ocupantes=1&precioMinimo=900000&precioMaximo=100000
+
+> {%
+    client.test("5.34 409 7.5 precio", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.35 7.5 Búsqueda con capacidad mínima 0
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43}}&ocupantes=1&capacidadMinima=0
+
+> {%
+    client.test("5.35 409 7.5 capacidad", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.36 7.5 Listado de reservas con fecha desde posterior a la fecha hasta
+GET {{host}}/api/reservas?desde={{hoyMas30}}&hasta={{hoy}}
+
+> {%
+    client.test("5.36 409 7.5 fechas", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.37 Formato del código de reserva (RES-YYYY-NNNNN): un código mal formado es un 409 del dominio
+GET {{host}}/api/reservas/RESERVA-1
+
+> {%
+    client.test("5.37 409 formato del código", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("El código de la reserva"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.38 3.2 El titular debe ser uno de los ocupantes facturables de la reserva
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas30}}",
+  "fechaSalida": "{{hoyMas33}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Luis Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200301", "fechaNacimiento": "1989-01-10" } ]
+}
+
+> {%
+    client.test("5.38 409 3.2", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("3.2"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### Sección 6: CASOS DE USO QUE CIERRAN EL RECORRIDO (después de los 409 que usan estas reservas)
+
+# ====================================================================================================
+# 6. CASOS DE USO QUE CIERRAN EL RECORRIDO (después de los 409 que usan estas reservas)
+# ====================================================================================================
+
+### 6.1 CU-07 El administrador autoriza cerrar con saldo el folio de la EN_CURSO de APT-201 (RN-17)
+POST {{host}}/api/reservas/{{enCursoInicial}}/folio/autorizacion-cierre
+Content-Type: application/json
+
+{
+  "autorizadoPor": "Administrador Coral",
+  "motivo": "El saldo se cobra con la garantía de la agencia"
+}
+
+> {%
+    client.test("6.1 200 cierre autorizado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.cerrado === true, "El folio debía quedar cerrado");
+    });
+%}
+
+### 6.2 CU-05 Con el cierre autorizado ya se registra la salida de APT-201
+PUT {{host}}/api/reservas/{{enCursoInicial}}/registrar-salida
+
+> {%
+    client.test("6.2 200 salida", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 6.3 CU-09 Cancelar la PENDIENTE del portal (hoy+10: entre 7 y 15 días retiene 25 %, RN-13)
+PUT {{host}}/api/reservas/{{pendientePortal}}/cancelar
+Content-Type: application/json
+
+{
+  "motivo": "El titular cambió sus planes de viaje"
+}
+
+> {%
+    client.test("6.3 200 cancelada", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "CANCELADA", "La reserva debía quedar CANCELADA");
+    });
+%}
+
+### Sección 7: ERRORES 400: el mensaje está mal escrito (validación del DTO, fechas y enums)
+
+# ====================================================================================================
+# 7. ERRORES 400: el mensaje está mal escrito (validación del DTO, fechas y enums)
+# ====================================================================================================
+
+### 7.1 400 Validación del DTO: faltan las fechas y el email no es válido (cuerpo con "errores" por campo)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "no-es-un-correo", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("7.1 400 validación", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.2 400 Validación del DTO: pago con valor negativo
+POST {{host}}/api/reservas/{{confirmadaInicial}}/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": -5000,
+  "medio": "TRANSFERENCIA_BANCARIA"
+}
+
+> {%
+    client.test("7.2 400 valor negativo", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.3 400 Fecha mal escrita en el cuerpo (30 de febrero)
+POST {{host}}/api/cotizaciones
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "2027-02-30",
+  "fechaSalida": "2027-03-02",
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("7.3 400 fecha en el cuerpo", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.4 400 Fecha mal escrita en la URL
+GET {{host}}/api/apartamentos/disponibles?entrada=31-12-2026&salida={{hoyMas3}}&ocupantes=2
+
+> {%
+    client.test("7.4 400 fecha en la URL", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.5 400 Enum inexistente en el cuerpo: canal de origen TELEFONO
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas43}}",
+  "canalOrigen": "TELEFONO",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("7.5 400 enum en el cuerpo", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.6 400 Enum inexistente en el cuerpo: estado operativo LIMPIO
+PUT {{host}}/api/apartamentos/APT-101/estado-operativo
+Content-Type: application/json
+
+{
+  "nuevoEstado": "LIMPIO"
+}
+
+> {%
+    client.test("7.6 400 enum estado operativo", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.7 400 Enum inexistente en la URL: estado PERDIDA
+GET {{host}}/api/reservas?estado=PERDIDA
+
+> {%
+    client.test("7.7 400 enum en la URL", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.8 400 Página negativa
+GET {{host}}/api/reservas?pagina=-1
+
+> {%
+    client.test("7.8 400 página negativa", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 7.9 400 Falta un parámetro obligatorio (ocupantes)
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43}}
+
+> {%
+    client.test("7.9 400 falta parámetro", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### Sección 8: ERRORES 404: el identificador no existe
+
+# ====================================================================================================
+# 8. ERRORES 404: el identificador no existe
+# ====================================================================================================
+
+### 8.1 404 Reserva inexistente
+GET {{host}}/api/reservas/RES-2026-99999
+
+> {%
+    client.test("8.1 404 reserva", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.2 404 Apartamento inexistente
+GET {{host}}/api/apartamentos/APT-999
+
+> {%
+    client.test("8.2 404 apartamento", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.3 404 Pago al folio de una reserva inexistente
+POST {{host}}/api/reservas/RES-2026-99999/folio/pagos
+Content-Type: application/json
+
+{
+  "valor": 10000,
+  "medio": "TRANSFERENCIA_BANCARIA"
+}
+
+> {%
+    client.test("8.3 404 folio", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.4 404 Cotizar un apartamento inexistente
+POST {{host}}/api/cotizaciones
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-999",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas43}}",
+  "ocupantes": [ { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("8.4 404 cotización", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.5 404 Bloquear un apartamento inexistente
+POST {{host}}/api/apartamentos/APT-999/bloqueos
+Content-Type: application/json
+
+{
+  "fechaInicio": "{{hoyMas40}}",
+  "fechaFin": "{{hoyMas42}}",
+  "motivo": "No existe"
+}
+
+> {%
+    client.test("8.5 404 bloqueo", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}

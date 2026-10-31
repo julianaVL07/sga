@@ -18,17 +18,17 @@ servers:
 
 tags:
   - name: Reservas
-    description: Ciclo de vida del agregado Reserva
+    description: Ciclo de vida del agregado Reserva en el Apartahotel Coral
   - name: Operación en recepción
     description: Registro de llegada y salida del grupo
   - name: Apartamentos
-    description: Disponibilidad y operación de los apartamentos
+    description: Disponibilidad y operación de los apartamentos del Apartahotel Coral
   - name: Cotizaciones
-    description: Valor de una estancia antes de reservar
+    description: Valor de una estancia en el Apartahotel Coral antes de reservar
   - name: Folio
-    description: Cuenta de la reserva con cargos, pagos, saldo y cierre
+    description: 'Cuenta de la reserva: cargos, pagos, saldo y cierre'
   - name: Canal externo
-    description: Integración con plataformas de terceros
+    description: Integración con plataformas de terceros (CU-08)
 
 paths:
 
@@ -124,6 +124,8 @@ paths:
                 $ref: '#/components/schemas/ReservaDetalleResponse'
         '404':
           $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
     put:
       tags: [Reservas]
       summary: Modificar una reserva (CU-11)
@@ -455,6 +457,8 @@ paths:
                 $ref: '#/components/schemas/BloqueoResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
@@ -527,8 +531,8 @@ paths:
       tags: [Cotizaciones]
       summary: Cotizar una estancia (CU-02)
       description: |
-        Calcula noche a noche con la tarifa de cada temporada (RN-06, RP-01) y solo cobra a los ocupantes
-        desde 6 años (RN-05). No crea la reserva. Mapea a `CotizarEstanciaUseCase`.
+        Calcula noche a noche con la tarifa de cada temporada (RN-05, RP-01) y solo cobra a los ocupantes
+        desde 6 años (RN-06). No crea la reserva. Mapea a `CotizarEstanciaUseCase`.
       operationId: cotizarEstancia
       requestBody:
         required: true
@@ -554,6 +558,8 @@ paths:
                 $ref: '#/components/schemas/CotizacionResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
@@ -877,7 +883,7 @@ components:
         dormitorios: { type: integer }
         capacidadMaxima: { type: integer }
         dotacion: { type: array, items: { type: string } }
-        imagenes: { type: array, items: { type: string, format: uri } }
+        imagenes: { type: array, items: { type: string } }
         estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
 
     PaginaApartamentoResponse:
@@ -898,7 +904,7 @@ components:
       properties:
         identificacion: { type: string, example: APT-301 }
         nombre: { type: string, example: Gran Coral Imperial }
-        imagenPrincipal: { type: string, format: uri }
+        imagenPrincipal: { type: string }
         capacidadMaxima: { type: integer, example: 6 }
         valorEstimado: { type: integer, format: int64, description: Valor de toda la estancia en pesos, example: 1000000 }
         latitud: { type: number, format: double, description: Del alojamiento, example: 10.3975 }
@@ -930,9 +936,9 @@ components:
           items:
             type: object
             properties:
-              url: { type: string, format: uri }
+              url: { type: string }
               principal: { type: boolean }
-        imagenPrincipal: { type: string, format: uri }
+        imagenPrincipal: { type: string }
         estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
         activo: { type: boolean }
         eliminado: { type: boolean, description: Eliminación lógica (12.4) }
@@ -1152,7 +1158,7 @@ components:
 
     TipoCargo:
       type: string
-      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW ]
+      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW, DEPOSITO_GARANTIA ]
 
     TipoEventoCanal:
       type: string
@@ -1184,7 +1190,7 @@ components:
         identificacionApartamento: { type: string, example: APT-101 }
         fechaEntrada: { type: string, format: date }
         fechaSalida: { type: string, format: date }
-        horaEstimadaLlegada: { type: string, format: time, nullable: true, example: '16:30:00' }
+        horaEstimadaLlegada: { type: string, nullable: true, example: '16:30:00' }
         titular: { $ref: '#/components/schemas/TitularRequest' }
         ocupantes:
           type: array

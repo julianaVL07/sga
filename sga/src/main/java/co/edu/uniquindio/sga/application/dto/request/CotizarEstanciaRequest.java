@@ -11,8 +11,8 @@ import java.util.List;
 /**
  * CU-02. POST /api/cotizaciones
  * Pide el valor de una estancia sin crear la reserva. Los ocupantes llevan fecha de nacimiento porque el dominio
- * decide quién es facturable con el umbral de edad del Apartahotel Coral (RN-05, 6 años) y calcula noche a noche
- * con la tarifa de su temporada (RN-06, RP-01). Las fechas y la estancia mínima las valida el dominio (409).
+ * decide quién es facturable con el umbral de edad del Apartahotel Coral (RN-06, 6 años) y calcula noche a noche
+ * con la tarifa de su temporada (RN-05, RP-01). Las fechas y la estancia mínima las valida el dominio (409).
  */
 public record CotizarEstanciaRequest(
         @NotBlank(message = "La identificación del apartamento es obligatoria")

@@ -24,15 +24,13 @@ import co.edu.uniquindio.sga.domain.service.VencimientoReservasService;
 import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
-import co.edu.uniquindio.sga.domain.valueobject.TramoCancelacion;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.List;
 
 /**
  * Construye los 13 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
@@ -40,6 +38,7 @@ import java.util.List;
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
 @Configuration
+@EnableConfigurationProperties(PoliticaCancelacionProperties.class)
 public class DomainServiceConfig {
 
     /** Toda fecha y hora del SGA es la de Colombia (America/Bogota). Un solo reloj para todos los casos de uso. */
@@ -50,23 +49,20 @@ public class DomainServiceConfig {
 
     /** RP-02: depósito de garantía que se asienta en el folio de toda reserva nueva del Apartahotel Coral. */
     @Bean
-    public DepositoGarantia depositoGarantia(@Value("${sga.alojamiento.deposito-garantia}") long pesos) {
-        return DepositoGarantia.de("Depósito de garantía por inventario y cristalería fina", Dinero.de(pesos));
+    public DepositoGarantia depositoGarantia(
+            @Value("${sga.alojamiento.deposito-garantia-concepto}") String concepto,
+            @Value("${sga.alojamiento.deposito-garantia}") long pesos) {
+        return DepositoGarantia.de(concepto, Dinero.de(pesos));
     }
 
     /**
-     * RN-22: política de cancelación vigente que se congela en cada reserva nueva. Tramos del Anexo A (A.4):
-     * más de 15 días retiene 0 %, entre 7 y 15 días retiene 25 %, menos de 7 días o no-show retiene 50 %
-     * del valor total de la estancia (RN-13). L-10: al menos dos tramos y uno desde 0 días.
+     * RN-22: política de cancelación vigente que se congela en cada reserva nueva. Versión, vigencia, consecuencia
+     * del no-show y tramos (A.4) salen de sga.politica-cancelacion.* (L-13: configuración, nunca constante).
+     * L-10 (al menos dos tramos y uno desde 0 días) lo valida PoliticaCancelacion al construirse.
      */
     @Bean
-    public PoliticaCancelacion politicaVigente() {
-        return new PoliticaCancelacion(1, LocalDate.of(2026, 1, 1),
-                "Se retiene el 50% del valor total de la estancia como penalidad; la reserva transita a NO_SHOW "
-                        + "y se liberan de inmediato todas las noches en el inventario (RN-12, RN-13).",
-                List.of(new TramoCancelacion(16, 0),
-                        new TramoCancelacion(7, 25),
-                        new TramoCancelacion(0, 50)));
+    public PoliticaCancelacion politicaVigente(PoliticaCancelacionProperties propiedades) {
+        return propiedades.aPolitica();
     }
 
     /** 7.5: recibe el cotizador para estimar el valor de la estancia y filtrar por precio. */
