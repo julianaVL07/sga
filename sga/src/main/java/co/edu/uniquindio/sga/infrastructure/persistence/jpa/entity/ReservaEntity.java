@@ -82,6 +82,9 @@ public class ReservaEntity {
     @Column(nullable = false)
     private BigDecimal valorTotal;
 
+    @Embedded
+    private MascotasEmbedable mascotas;                  // L-16
+
     // Política de cancelación congelada (RN-13, RN-22)
     private int politicaVersion;
     private LocalDate politicaFechaVigencia;

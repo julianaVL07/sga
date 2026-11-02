@@ -1,6 +1,7 @@
 package co.edu.uniquindio.sga.application.dto.request;
 import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +15,8 @@ import java.util.List;
  * Solo trae lo que decide quien reserva. No trae lo que genera el SGA: el código RES-YYYY-NNNNN, el estado
  * (siempre nace PENDIENTE), la fecha de creación ni la cotización (la calcula CotizadorEstanciaService).
  * Las reglas de fechas (RN-03, RN-04), capacidad (RN-02) y solapamiento (RN-01) las valida el dominio (409),
- * no este DTO: aquí solo se revisa la forma del mensaje (400).
+ * no este DTO: aquí solo se revisa la forma del mensaje (400). Lo mismo con las mascotas: el límite de cantidad y
+ * de peso (L-16) lo decide el dominio con la política del alojamiento; aquí solo se exige que no sean negativos.
  */
 public record CrearReservaRequest(
         @NotBlank(message = "La identificación del apartamento es obligatoria")
@@ -36,6 +38,12 @@ public record CrearReservaRequest(
         TitularRequest titular,
 
         @NotEmpty(message = "La reserva debe tener al menos un ocupante")
-        List<@Valid OcupanteRequest> ocupantes
+        List<@Valid OcupanteRequest> ocupantes,
+
+        @Min(value = 0, message = "La cantidad de mascotas no puede ser negativa")
+        Integer cantidadMascotas,                   // opcional; sin dato = 0 (L-16)
+
+        @Min(value = 0, message = "El peso de la mascota no puede ser negativo")
+        Integer pesoMascotaMasPesadaKg              // opcional; sin dato = 0 (L-16)
 ) {
 }

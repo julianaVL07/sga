@@ -12,6 +12,7 @@ import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.valueobject.DocumentoIdentidad;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
 import org.mapstruct.Mapper;
@@ -62,7 +63,13 @@ public interface ReservaMapper {
                 aIdentificacion(r.identificacionApartamento()),
                 r.fechaEntrada(), r.fechaSalida(),
                 aTitular(r.titular()), aOcupantes(r.ocupantes()),
-                r.horaEstimadaLlegada(), null, r.canalOrigen());
+                r.horaEstimadaLlegada(), null, r.canalOrigen(),
+                aMascotas(r.cantidadMascotas(), r.pesoMascotaMasPesadaKg()));
+    }
+
+    /** L-16: los dos datos son opcionales; el que no venga cuenta como 0. */
+    default Mascotas aMascotas(Integer cantidad, Integer pesoMasPesadaKg) {
+        return new Mascotas(cantidad == null ? 0 : cantidad, pesoMasPesadaKg == null ? 0 : pesoMasPesadaKg);
     }
 
     // ==================== DOMINIO → RESPONSE ====================
@@ -75,6 +82,8 @@ public interface ReservaMapper {
     @Mapping(target = "totalOcupantes", expression = "java(reserva.totalOcupantes())")
     @Mapping(target = "valorTotal", expression = "java(aPesos(reserva.valorTotal()))")
     @Mapping(target = "versionPoliticaCancelacion", source = "politicaCancelacion.version")
+    @Mapping(target = "cantidadMascotas", source = "mascotas.cantidad")
+    @Mapping(target = "pesoMascotaMasPesadaKg", source = "mascotas.pesoMayorKg")
     ReservaDetalleResponse aDetalle(Reserva reserva);
 
     /** CU-19: fila del listado. */

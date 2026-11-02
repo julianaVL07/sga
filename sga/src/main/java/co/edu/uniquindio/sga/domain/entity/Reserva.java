@@ -9,6 +9,7 @@ import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.PlazoConfirmacion;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
@@ -38,7 +39,8 @@ import java.util.Objects;
  * Reglas que dependen de otras reservas o agregados y por eso viven en servicios de dominio:
  * RN-01 y RN-07 y RN-20 (DisponibilidadApartamentoService), RP-01 (Alojamiento.validarEstanciaMinima),
  * RP-02 y RP-03 (Folio / CreacionReservaService), L-11 anticipo (ConfirmacionReservaService),
- * RN-17 antes de la salida (LiquidacionSalidaService), RN-18 (ConciliacionCanalExternoService).
+ * RN-17 antes de la salida (LiquidacionSalidaService), RN-18 (ConciliacionCanalExternoService),
+ * L-16 mascotas admitidas y cargo de aseo (CreacionReservaService y ModificacionReservaService).
  */
 public class Reserva {
 
@@ -51,6 +53,7 @@ public class Reserva {
     private final String identificadorCanalExterno;
     private RegistroLlegadaNocturna registroLlegada;
     private Cotizacion cotizacion;
+    private Mascotas mascotas;                           // L-16
     private final PoliticaCancelacion politicaCancelacion;
     private EstadoReserva estado;
     private final LocalDateTime fechaCreacion;
@@ -62,8 +65,8 @@ public class Reserva {
 
     private Reserva(CodigoReserva codigo, IdentificacionApartamento apartamento, Estancia estancia, Titular titular,
                     List<Ocupante> ocupantes, CanalOrigen canalOrigen, String identificadorCanalExterno,
-                    LocalTime horaEstimadaLlegada, Cotizacion cotizacion, PoliticaCancelacion politicaCancelacion,
-                    EstadoReserva estado, LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
+                    LocalTime horaEstimadaLlegada, Cotizacion cotizacion, Mascotas mascotas,
+                    PoliticaCancelacion politicaCancelacion, EstadoReserva estado, LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
                     LocalDate fechaRegistro, LocalDate fechaSalidaEfectiva, LocalDate fechaCancelacion,
                     String motivoCancelacion) {
         this.codigo = codigo;
@@ -75,6 +78,7 @@ public class Reserva {
         this.identificadorCanalExterno = identificadorCanalExterno;
         this.registroLlegada = horaEstimadaLlegada == null ? null : new RegistroLlegadaNocturna(horaEstimadaLlegada);
         this.cotizacion = cotizacion;
+        this.mascotas = mascotas == null ? Mascotas.ninguna() : mascotas;
         this.politicaCancelacion = politicaCancelacion;
         this.estado = estado;
         this.fechaCreacion = fechaCreacion;
@@ -99,6 +103,19 @@ public class Reserva {
                                 LocalTime horaEstimadaLlegada, Cotizacion cotizacion,
                                 PoliticaCancelacion politicaVigente, UmbralEdadFacturable umbral,
                                 LocalDateTime ahora) {
+        return crear(codigo, apartamento, estancia, titular, ocupantes, canalOrigen, identificadorCanalExterno,
+                horaEstimadaLlegada, cotizacion, Mascotas.ninguna(), politicaVigente, umbral, ahora);
+    }
+
+    /**
+     * Igual que el anterior, con las mascotas del grupo (L-16). Que la política del alojamiento las admita lo
+     * verifica CreacionReservaService, que conoce el Alojamiento.
+     */
+    public static Reserva crear(CodigoReserva codigo, Apartamento apartamento, Estancia estancia, Titular titular,
+                                List<Ocupante> ocupantes, CanalOrigen canalOrigen, String identificadorCanalExterno,
+                                LocalTime horaEstimadaLlegada, Cotizacion cotizacion, Mascotas mascotas,
+                                PoliticaCancelacion politicaVigente, UmbralEdadFacturable umbral,
+                                LocalDateTime ahora) {
         requerido(codigo, "El código de la reserva es obligatorio");
         requerido(titular, "La reserva debe tener un titular");
         requerido(canalOrigen, "El canal de origen es obligatorio");
@@ -108,7 +125,7 @@ public class Reserva {
         String idExterno = validarIdentificadorExterno(canalOrigen, identificadorCanalExterno);
 
         return new Reserva(codigo, apartamento.getIdentificacion(), estancia, titular, ocupantes, canalOrigen, idExterno,
-                horaEstimadaLlegada, cotizacion, politicaVigente, EstadoReserva.PENDIENTE, ahora,
+                horaEstimadaLlegada, cotizacion, mascotas, politicaVigente, EstadoReserva.PENDIENTE, ahora,
                 null, null, null, null, null);
     }
 
@@ -120,8 +137,23 @@ public class Reserva {
                                       LocalDateTime fechaConfirmacion, LocalDate fechaRegistro,
                                       LocalDate fechaSalidaEfectiva, LocalDate fechaCancelacion,
                                       String motivoCancelacion) {
+        return reconstruir(codigo, apartamento, estancia, titular, ocupantes, canalOrigen, identificadorCanalExterno,
+                horaEstimadaLlegada, cotizacion, Mascotas.ninguna(), politicaCancelacion, estado, fechaCreacion,
+                fechaConfirmacion, fechaRegistro, fechaSalidaEfectiva, fechaCancelacion, motivoCancelacion);
+    }
+
+    /** Reconstrucción con las mascotas guardadas (L-16); null equivale a sin mascotas. */
+    public static Reserva reconstruir(CodigoReserva codigo, IdentificacionApartamento apartamento, Estancia estancia,
+                                      Titular titular, List<Ocupante> ocupantes, CanalOrigen canalOrigen,
+                                      String identificadorCanalExterno, LocalTime horaEstimadaLlegada,
+                                      Cotizacion cotizacion, Mascotas mascotas,
+                                      PoliticaCancelacion politicaCancelacion, EstadoReserva estado,
+                                      LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
+                                      LocalDate fechaRegistro, LocalDate fechaSalidaEfectiva,
+                                      LocalDate fechaCancelacion, String motivoCancelacion) {
         return new Reserva(codigo, apartamento, estancia, titular, ocupantes == null ? List.of() : ocupantes,
-                canalOrigen, identificadorCanalExterno, horaEstimadaLlegada, cotizacion, politicaCancelacion, estado,
+                canalOrigen, identificadorCanalExterno, horaEstimadaLlegada, cotizacion, mascotas, politicaCancelacion,
+                estado,
                 fechaCreacion, fechaConfirmacion, fechaRegistro, fechaSalidaEfectiva, fechaCancelacion,
                 motivoCancelacion);
     }
@@ -258,16 +290,19 @@ public class Reserva {
     // ---------------------------------------------------------------- Modificación (RN-14, RN-22)
 
     /**
-     * RN-14: cambia fechas, ocupantes o apartamento de una reserva no iniciada (PENDIENTE o CONFIRMADA),
+     * RN-14: cambia fechas, ocupantes, apartamento o mascotas de una reserva no iniciada (PENDIENTE o CONFIRMADA),
      * revalidando las condiciones de creación 1 a 4 y reemplazando la cotización por una calculada con las
      * tarifas vigentes. La política congelada no se recalcula (7.5).
-     * Las condiciones 5 y 6 (solapamiento y tiempo de preparación) las revalida ModificacionReservaService.
+     * Las condiciones 5 y 6 (solapamiento y tiempo de preparación) y L-16 (mascotas admitidas por la política
+     * del alojamiento) las revalida ModificacionReservaService.
      *
      * @return diferencia entre el valor nuevo y el anterior; el servicio la asienta como ajuste en el Folio.
      */
     public Dinero modificar(Apartamento nuevoApartamento, Estancia nuevaEstancia, List<Ocupante> nuevosOcupantes,
-                            Cotizacion nuevaCotizacion, UmbralEdadFacturable umbral, LocalDateTime ahora) {
+                            Mascotas nuevasMascotas, Cotizacion nuevaCotizacion, UmbralEdadFacturable umbral,
+                            LocalDateTime ahora) {
         requerido(ahora, "La fecha actual es obligatoria");
+        requerido(nuevasMascotas, "L-16: las mascotas de la reserva son obligatorias (sin mascotas: cantidad 0)");
         validarNoIniciada("modificar");
         validarCondicionesDeCreacion(nuevoApartamento, nuevaEstancia, titular, nuevosOcupantes, nuevaCotizacion,
                 umbral, ahora.toLocalDate());
@@ -280,6 +315,7 @@ public class Reserva {
         this.ocupantes.clear();
         this.ocupantes.addAll(ocupantesNuevos);
         this.cotizacion = nuevaCotizacion;
+        this.mascotas = nuevasMascotas;
         return diferencia;
     }
 
@@ -414,6 +450,7 @@ public class Reserva {
     public RegistroLlegadaNocturna getRegistroLlegada() { return registroLlegada; }
     public LocalTime getHoraEstimadaLlegada() { return registroLlegada == null ? null : registroLlegada.horaEstimada(); }
     public Cotizacion getCotizacion() { return cotizacion; }
+    public Mascotas getMascotas() { return mascotas; }
     public PoliticaCancelacion getPoliticaCancelacion() { return politicaCancelacion; }
     public EstadoReserva getEstado() { return estado; }
     public LocalDateTime getFechaCreacion() { return fechaCreacion; }

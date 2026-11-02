@@ -9,12 +9,14 @@ import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.DocumentoIdentidad;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
 import co.edu.uniquindio.sga.domain.valueobject.TramoCancelacion;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.DetalleNocheEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.EstanciaEmbedable;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.MascotasEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.OcupanteEmbedable;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ReservaEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.TitularEmbedable;
@@ -48,6 +50,7 @@ public class ReservaPersistenceMapper {
 
         e.setDetallesCotizacion(new ArrayList<>(r.getCotizacion().detalles().stream().map(this::aEmbedable).toList()));
         e.setValorTotal(r.getCotizacion().valorTotal().monto());
+        e.setMascotas(new MascotasEmbedable(r.getMascotas().cantidad(), r.getMascotas().pesoMayorKg()));
 
         PoliticaCancelacion politica = r.getPoliticaCancelacion();
         e.setPoliticaVersion(politica.version());
@@ -98,7 +101,7 @@ public class ReservaPersistenceMapper {
                 aTitular(e.getTitular()),
                 e.getOcupantes().stream().map(this::aOcupante).toList(),
                 e.getCanalOrigen(), e.getIdentificadorCanalExterno(), e.getHoraEstimadaLlegada(),
-                aCotizacion(e), aPolitica(e),
+                aCotizacion(e), aMascotas(e.getMascotas()), aPolitica(e),
                 e.getEstado(), e.getFechaCreacion(), e.getFechaConfirmacion(), e.getFechaRegistro(),
                 e.getFechaSalidaEfectiva(), e.getFechaCancelacion(), e.getMotivoCancelacion());
     }
@@ -121,6 +124,12 @@ public class ReservaPersistenceMapper {
                         d.getOcupantesFacturables(), new Dinero(d.getSubtotal())))
                 .toList(),
                 new Dinero(e.getValorTotal()));
+    }
+
+    /** L-16: una fila sin columnas de mascotas (reservas anteriores) se lee como sin mascotas. */
+    private Mascotas aMascotas(MascotasEmbedable m) {
+        if (m == null) return Mascotas.ninguna();
+        return new Mascotas(m.cantidad() == null ? 0 : m.cantidad(), m.pesoMayorKg() == null ? 0 : m.pesoMayorKg());
     }
 
     private PoliticaCancelacion aPolitica(ReservaEntity e) {
