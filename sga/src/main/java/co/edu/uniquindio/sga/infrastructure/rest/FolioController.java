@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.infrastructure.rest;
 
 import co.edu.uniquindio.sga.application.dto.request.AutorizarCierreFolioRequest;
+import co.edu.uniquindio.sga.application.dto.request.RegistrarCargoServicioRequest;
 import co.edu.uniquindio.sga.application.dto.request.RegistrarPagoRequest;
 import co.edu.uniquindio.sga.application.dto.response.FolioResponse;
 import co.edu.uniquindio.sga.application.usecase.AutorizarCierreFolioUseCase;
 import co.edu.uniquindio.sga.application.usecase.CerrarFolioUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarFolioUseCase;
+import co.edu.uniquindio.sga.application.usecase.RegistrarCargoServicioUseCase;
 import co.edu.uniquindio.sga.application.usecase.RegistrarPagoUseCase;
 import co.edu.uniquindio.sga.domain.entity.Folio;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
@@ -29,7 +31,8 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 
 /**
- * Adaptador REST del folio de una reserva (Guía 08): consulta del folio, CU-06, CU-07 y CU-15.
+ * Adaptador REST del folio de una reserva (Guía 08): consulta del folio, CU-06, CU-07, CU-15 y cargos de servicios
+ * adicionales (7.1).
  * El folio cuelga de la reserva: /api/reservas/{codigo}/folio. Todas las operaciones responden con el folio
  * actualizado para mostrar el saldo. La fecha la pone el reloj del SGA, nunca el cliente.
  */
@@ -43,6 +46,7 @@ public class FolioController {
     private final AutorizarCierreFolioUseCase autorizarCierreFolioUseCase;
     private final RegistrarPagoUseCase registrarPagoUseCase;
     private final ConsultarFolioUseCase consultarFolioUseCase;
+    private final RegistrarCargoServicioUseCase registrarCargoServicioUseCase;
     private final FolioMapper mapper;
 
     /** GET /api/reservas/{codigo}/folio: el recurso al que apunta la Location de un pago registrado. */
@@ -77,6 +81,23 @@ public class FolioController {
         return ResponseEntity.created(location).body(mapper.aResponse(folio));
     }
 
+    /** 7.1. POST /api/reservas/{codigo}/folio/cargos */
+    @PostMapping("/cargos")
+    @Operation(summary = "Registrar el cargo de un servicio adicional",
+            description = "Asienta en el folio el cargo de un servicio adicional del alojamiento (L-17), con su valor y "
+                    + "la fecha de hoy. El cargo no se edita ni se borra; se corrige con un movimiento inverso (RN-16)")
+    @ApiResponse(responseCode = "201", description = "Cargo registrado; devuelve el folio con el nuevo saldo y "
+            + "Location apunta al folio")
+    @ApiResponse(responseCode = "400", description = "Falta el id del servicio")
+    @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
+    @ApiResponse(responseCode = "409", description = "El servicio no existe, no está activo o no genera cargo (L-17), "
+            + "o el folio está cerrado (RN-16)")
+    public ResponseEntity<FolioResponse> registrarCargo(@PathVariable String codigo,
+                                                        @Valid @RequestBody RegistrarCargoServicioRequest request) {
+        Folio folio = registrarCargoServicioUseCase.ejecutar(new CodigoReserva(codigo), request.idServicio());
+        return ResponseEntity.created(ubicacionDelFolio(folio)).body(mapper.aResponse(folio));
+    }
+
     /** CU-06. PUT /api/reservas/{codigo}/folio/cerrar */
     @PutMapping("/cerrar")
     @Operation(summary = "Cerrar el folio",
@@ -104,5 +125,13 @@ public class FolioController {
         Folio folio = autorizarCierreFolioUseCase.ejecutar(new CodigoReserva(codigo), request.autorizadoPor(),
                 request.motivo());
         return ResponseEntity.ok(mapper.aResponse(folio));
+    }
+
+    /** Location de un movimiento nuevo: el folio de la reserva, que se consulta con GET. */
+    private static URI ubicacionDelFolio(Folio folio) {
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/reservas/{codigo}/folio")
+                .buildAndExpand(folio.getReserva().valor())
+                .toUri();
     }
 }
