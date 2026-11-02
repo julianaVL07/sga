@@ -1634,3 +1634,160 @@ Content-Type: application/json
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}
+
+### Sección 10: CU-26 y CU-27 LLEGADAS, SALIDAS Y CALENDARIO DE OCUPACIÓN (7.1, recepcionista)
+
+# ====================================================================================================
+# 10. CU-26 y CU-27 LLEGADAS, SALIDAS Y CALENDARIO DE OCUPACIÓN (7.1, recepcionista)
+#     Solo consultan, así que corren igual con la app recién arrancada, solas o después del recorrido
+#     completo. Usan datos iniciales que ninguna sección anterior cambia:
+#       APT-102  CONFIRMADA hoy+12→hoy+15 (llegada prevista el día hoy+12)
+#       APT-301  bloqueo hoy+20→hoy+25 por mantenimiento de la piscina de inmersión
+#     El día hoy+2 siempre hay al menos una salida EN_CURSO: la de APT-201 de los datos iniciales o, si ya
+#     corrió la sección 6 (que la cierra), la de APT-301 creada en 5.15.
+# ====================================================================================================
+
+### 10.0 Fechas propias de la sección
+GET {{host}}/api/apartamentos
+
+> {%
+    client.test("10.0 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("cu26Hoy", fecha(0));
+    client.global.set("cu26HoyMas2", fecha(2));
+    client.global.set("cu26HoyMas5", fecha(5));
+    client.global.set("cu26HoyMas10", fecha(10));
+    client.global.set("cu26HoyMas12", fecha(12));
+    client.global.set("cu26HoyMas17", fecha(17));
+    client.global.set("cu26HoyMas19", fecha(19));
+    client.global.set("cu26HoyMas26", fecha(26));
+    client.global.set("cu26HoyMas63", fecha(63));
+%}
+
+### 10.1 CU-26 Llegadas de hoy (sin fecha: hoy en America/Bogota). Solo reservas CONFIRMADA que entran hoy
+GET {{host}}/api/reservas/llegadas
+
+> {%
+    client.test("10.1 200 llegadas de hoy", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "El tamaño de página debía ser 10");
+        var hoy = client.global.get("cu26Hoy");
+        response.body.contenido.forEach(function (r) {
+            client.assert(r.estado === "CONFIRMADA", r.codigo + " no está CONFIRMADA");
+            client.assert(r.fechaEntrada === hoy, r.codigo + " no entra hoy");
+        });
+    });
+%}
+
+### 10.2 CU-26 Llegadas de hoy+12: aparece la CONFIRMADA de APT-102
+GET {{host}}/api/reservas/llegadas?fecha={{cu26HoyMas12}}&pagina=0
+
+> {%
+    client.test("10.2 200 llegada de APT-102", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var apt102 = response.body.contenido.filter(function (r) { return r.apartamento === "APT-102"; })[0];
+        client.assert(apt102 != null, "Falta la llegada de APT-102");
+        client.assert(apt102.estado === "CONFIRMADA", "La llegada debía estar CONFIRMADA");
+        client.assert(apt102.fechaEntrada === client.global.get("cu26HoyMas12"), "Fecha de entrada inesperada");
+    });
+%}
+
+### 10.3 CU-26 Salidas de hoy (sin fecha). Solo reservas EN_CURSO que salen hoy
+GET {{host}}/api/reservas/salidas
+
+> {%
+    client.test("10.3 200 salidas de hoy", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var hoy = client.global.get("cu26Hoy");
+        response.body.contenido.forEach(function (r) {
+            client.assert(r.estado === "EN_CURSO", r.codigo + " no está EN_CURSO");
+            client.assert(r.fechaSalida === hoy, r.codigo + " no sale hoy");
+        });
+    });
+%}
+
+### 10.4 CU-26 Salidas de hoy+2: al menos una EN_CURSO (APT-201 o, tras la sección 6, APT-301)
+GET {{host}}/api/reservas/salidas?fecha={{cu26HoyMas2}}
+
+> {%
+    client.test("10.4 200 salidas de hoy+2", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.totalElementos >= 1, "Se esperaba al menos una salida");
+        var fecha = client.global.get("cu26HoyMas2");
+        response.body.contenido.forEach(function (r) {
+            client.assert(r.estado === "EN_CURSO", r.codigo + " no está EN_CURSO");
+            client.assert(r.fechaSalida === fecha, r.codigo + " no sale ese día");
+        });
+    });
+%}
+
+### 10.5 CU-27 Calendario de APT-102 de hoy+10 a hoy+17: la CONFIRMADA ocupa hoy+12, hoy+13 y hoy+14
+GET {{host}}/api/reservas/calendario?apartamento=APT-102&desde={{cu26HoyMas10}}&hasta={{cu26HoyMas17}}
+
+> {%
+    client.test("10.5 200 calendario con reserva", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var noches = response.body.noches;
+        client.assert(noches.length === 7, "Se esperaban 7 noches y llegaron " + noches.length);
+        client.assert(noches[0].estado === "LIBRE", "hoy+10 debía estar LIBRE");
+        [2, 3, 4].forEach(function (i) {
+            client.assert(noches[i].estado === "RESERVADA", noches[i].fecha + " debía estar RESERVADA");
+            client.assert(noches[i].estadoReserva === "CONFIRMADA", noches[i].fecha + " debía ser CONFIRMADA");
+            client.assert(noches[i].codigoReserva.indexOf("RES-") === 0, "Falta el código de la reserva");
+        });
+        client.assert(noches[5].estado === "LIBRE", "La noche de salida (hoy+15) no se ocupa (3.1)");
+    });
+%}
+
+### 10.6 CU-27 Calendario de APT-301 de hoy+19 a hoy+26: el bloqueo cubre de hoy+20 a hoy+24 (RN-07)
+GET {{host}}/api/reservas/calendario?apartamento=APT-301&desde={{cu26HoyMas19}}&hasta={{cu26HoyMas26}}
+
+> {%
+    client.test("10.6 200 calendario con bloqueo", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var noches = response.body.noches;
+        client.assert(noches.length === 7, "Se esperaban 7 noches y llegaron " + noches.length);
+        client.assert(noches[0].estado === "LIBRE", "hoy+19 debía estar LIBRE");
+        [1, 2, 3, 4, 5].forEach(function (i) {
+            client.assert(noches[i].estado === "BLOQUEADA", noches[i].fecha + " debía estar BLOQUEADA");
+            client.assert(noches[i].motivoBloqueo === "Mantenimiento de la piscina de inmersión",
+                "Motivo inesperado: " + noches[i].motivoBloqueo);
+        });
+        client.assert(noches[6].estado === "LIBRE", "hoy+25 ya no está bloqueado (fecha fin excluida)");
+    });
+%}
+
+### 10.7 409 7.1 La fecha desde debe ser anterior a la fecha hasta
+GET {{host}}/api/reservas/calendario?apartamento=APT-101&desde={{cu26HoyMas5}}&hasta={{cu26Hoy}}
+
+> {%
+    client.test("10.7 409 7.1 rango invertido", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.1") === 0, "Se esperaba 7.1: " + response.body.mensaje);
+    });
+%}
+
+### 10.8 409 7.1 El calendario abarca máximo 62 noches (decisión del equipo): de hoy a hoy+63 son 63
+GET {{host}}/api/reservas/calendario?apartamento=APT-101&desde={{cu26Hoy}}&hasta={{cu26HoyMas63}}
+
+> {%
+    client.test("10.8 409 7.1 rango demasiado largo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.1") === 0, "Se esperaba 7.1: " + response.body.mensaje);
+    });
+%}
+
+### 10.9 404 Calendario de un apartamento inexistente
+GET {{host}}/api/reservas/calendario?apartamento=APT-999&desde={{cu26Hoy}}&hasta={{cu26HoyMas5}}
+
+> {%
+    client.test("10.9 404 apartamento inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}

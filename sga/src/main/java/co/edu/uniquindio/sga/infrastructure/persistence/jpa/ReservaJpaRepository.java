@@ -124,6 +124,22 @@ public class ReservaJpaRepository implements ReservaRepository {
         return aDominio(dataRepository.findByEstadoAndEstanciaFechaSalida(EstadoReserva.EN_CURSO, fecha));
     }
 
+    /** CU-26: mismo criterio que listarLlegadasPrevistas(fecha), ordenadas por apartamento. */
+    @Override
+    @Transactional(readOnly = true)
+    public Pagina<Reserva> listarLlegadasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return mapper.aPagina(dataRepository.findByEstadoAndEstanciaFechaEntrada(EstadoReserva.CONFIRMADA, fecha,
+                porApartamento(pagina, tamano)));
+    }
+
+    /** CU-26: mismo criterio que listarSalidasPrevistas(fecha), ordenadas por apartamento. */
+    @Override
+    @Transactional(readOnly = true)
+    public Pagina<Reserva> listarSalidasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return mapper.aPagina(dataRepository.findByEstadoAndEstanciaFechaSalida(EstadoReserva.EN_CURSO, fecha,
+                porApartamento(pagina, tamano)));
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<Reserva> listarTodas() {
@@ -141,6 +157,11 @@ public class ReservaJpaRepository implements ReservaRepository {
                 criterios.apartamento() == null ? null : criterios.apartamento().codigo(),
                 criterios.canal(), criterios.documentoTitular(), criterios.desde(), criterios.hasta(), pageable);
         return mapper.aPagina(resultado);
+    }
+
+    private static Pageable porApartamento(int pagina, int tamano) {
+        return PageRequest.of(pagina, tamano,
+                Sort.by(Sort.Direction.ASC, "apartamentoId").and(Sort.by(Sort.Direction.ASC, "codigo")));
     }
 
     private List<Reserva> aDominio(List<ReservaEntity> entidades) {

@@ -39,6 +39,16 @@ public interface ReservaRepository {
     /** 7.6: salidas previstas del día (reservas EN_CURSO con esa fecha de salida). */
     List<Reserva> listarSalidasPrevistas(LocalDate fecha);
 
+    /**
+     * CU-26 (7.1, 12.4): llegadas previstas del día, una página a la vez, ordenadas por apartamento.
+     * @param pagina número de página, empieza en 0.
+     * @param tamano cantidad máxima de reservas por página.
+     */
+    Pagina<Reserva> listarLlegadasPrevistas(LocalDate fecha, int pagina, int tamano);
+
+    /** CU-26 (7.1, 12.4): salidas previstas del día, una página a la vez, ordenadas por apartamento. */
+    Pagina<Reserva> listarSalidasPrevistas(LocalDate fecha, int pagina, int tamano);
+
     /** 7.5: todas las reservas, de la más reciente a la más antigua. */
     List<Reserva> listarTodas();
 

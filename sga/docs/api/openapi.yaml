@@ -950,6 +950,88 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # ==================== CU-26 Y CU-27: VISTA DE RECEPCIÓN (7.1) ====================
+
+  /api/reservas/llegadas:
+    get:
+      tags: [Reservas]
+      summary: Llegadas previstas del día (CU-26)
+      description: |
+        Reservas CONFIRMADA cuya fecha de entrada es la fecha pedida (7.1, 7.6), ordenadas por apartamento,
+        10 por página (12.4). Sin fecha se usa hoy en la zona horaria del alojamiento
+        (`sga.alojamiento.zona-horaria`). Mapea a `ListarLlegadasYSalidasUseCase.llegadas`.
+      operationId: listarLlegadasPrevistas
+      parameters:
+        - { name: fecha, in: query, required: false, description: Por defecto hoy en America/Bogota, schema: { type: string, format: date }, example: '2026-11-14' }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de llegadas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/reservas/salidas:
+    get:
+      tags: [Reservas]
+      summary: Salidas previstas del día (CU-26)
+      description: |
+        Reservas EN_CURSO cuya fecha de salida es la fecha pedida (7.1, 7.6), ordenadas por apartamento,
+        10 por página (12.4). Sin fecha se usa hoy en la zona horaria del alojamiento
+        (`sga.alojamiento.zona-horaria`). Mapea a `ListarLlegadasYSalidasUseCase.salidas`.
+      operationId: listarSalidasPrevistas
+      parameters:
+        - { name: fecha, in: query, required: false, description: Por defecto hoy en America/Bogota, schema: { type: string, format: date }, example: '2026-11-04' }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de salidas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/reservas/calendario:
+    get:
+      tags: [Operación en recepción]
+      summary: Calendario de ocupación de un apartamento (CU-27)
+      description: |
+        Estado de cada noche entre desde (incluida) y hasta (excluida), como la estancia (3.1): LIBRE,
+        RESERVADA (reserva activa PENDIENTE, CONFIRMADA o EN_CURSO, RN-12; trae su código y estado) o
+        BLOQUEADA (bloqueo vigente, RN-07; trae el motivo). Las reservas canceladas, finalizadas o no-show
+        no retienen la noche y no aparecen.
+
+        Decisión del equipo: máximo 62 noches por consulta (dos meses completos, suficiente para la vista
+        mensual de recepción con el mes siguiente). Mapea a `ConsultarCalendarioOcupacionUseCase` y
+        `CalendarioOcupacionService`.
+      operationId: consultarCalendarioOcupacion
+      parameters:
+        - { name: apartamento, in: query, required: true, schema: { type: string }, example: APT-201 }
+        - { name: desde, in: query, required: true, description: Primera noche que se muestra, schema: { type: string, format: date }, example: '2026-11-01' }
+        - { name: hasta, in: query, required: true, description: Primera noche que ya no se muestra (excluida), schema: { type: string, format: date }, example: '2026-11-08' }
+      responses:
+        '200':
+          description: Calendario noche por noche
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarioOcupacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La fecha desde no es anterior a hasta o el rango supera 62 noches (7.1)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
 
   parameters:
@@ -1508,3 +1590,33 @@ components:
         tamano: { type: integer, example: 10 }
         totalElementos: { type: integer, format: int64 }
         totalPaginas: { type: integer }
+
+    # ---------- CU-27 Calendario de ocupación ----------
+
+    EstadoNoche:
+      type: string
+      enum: [ LIBRE, RESERVADA, BLOQUEADA ]
+
+    NocheCalendarioResponse:
+      type: object
+      properties:
+        fecha: { type: string, format: date, description: La noche va de esta fecha a la siguiente (3.1) }
+        estado: { $ref: '#/components/schemas/EstadoNoche' }
+        codigoReserva: { type: string, nullable: true, example: RES-2026-00003, description: Solo si está RESERVADA }
+        estadoReserva:
+          nullable: true
+          description: Solo si está RESERVADA (PENDIENTE, CONFIRMADA o EN_CURSO)
+          allOf: [ { $ref: '#/components/schemas/EstadoReserva' } ]
+        motivoBloqueo: { type: string, nullable: true, example: Mantenimiento de la piscina de inmersión, description: Solo si está BLOQUEADA }
+
+    CalendarioOcupacionResponse:
+      type: object
+      properties:
+        apartamento: { type: string, example: APT-201 }
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date, description: Excluida }
+        noches:
+          type: array
+          maxItems: 62
+          description: Una entrada por noche, en orden de fecha
+          items: { $ref: '#/components/schemas/NocheCalendarioResponse' }

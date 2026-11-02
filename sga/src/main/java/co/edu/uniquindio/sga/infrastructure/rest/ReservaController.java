@@ -14,6 +14,7 @@ import co.edu.uniquindio.sga.application.usecase.ConfirmarReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.CrearReservaUseCase;
 import co.edu.uniquindio.sga.application.usecase.DeclararNoShowUseCase;
+import co.edu.uniquindio.sga.application.usecase.ListarLlegadasYSalidasUseCase;
 import co.edu.uniquindio.sga.application.usecase.ListarReservasUseCase;
 import co.edu.uniquindio.sga.application.usecase.ModificarReservaUseCase;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
@@ -45,10 +46,11 @@ import java.net.URI;
 import java.time.LocalDate;
 
 /**
- * Adaptador REST del agregado Reserva (Guía 08): CU-03, CU-09, CU-10, CU-11, CU-12, CU-18 y CU-19.
+ * Adaptador REST del agregado Reserva (Guía 08): CU-03, CU-09, CU-10, CU-11, CU-12, CU-18, CU-19 y CU-26.
  * No tiene reglas ni try/catch: convierte el DTO a tipos del dominio, llama al caso de uso y mapea la respuesta.
  * Los errores los traduce GlobalExceptionHandler (400, 404, 409). La fecha y hora las pone el reloj del SGA,
- * nunca el cliente. El registro de llegada y salida (CU-04, CU-05) está en OperacionReservaController.
+ * nunca el cliente. El registro de llegada y salida (CU-04, CU-05) está en OperacionReservaController y el
+ * calendario de ocupación (CU-27) en OcupacionController.
  */
 @RestController
 @RequestMapping("/api/reservas")
@@ -63,6 +65,7 @@ public class ReservaController {
     private final CancelarReservaUseCase cancelarReservaUseCase;
     private final DeclararNoShowUseCase declararNoShowUseCase;
     private final ListarReservasUseCase listarReservasUseCase;
+    private final ListarLlegadasYSalidasUseCase listarLlegadasYSalidasUseCase;
     private final ReservaMapper mapper;
 
     /** CU-03. POST /api/reservas */
@@ -102,6 +105,34 @@ public class ReservaController {
         FiltroReservas filtro = new FiltroReservas(estado, mapper.aIdentificacion(apartamento), canal, titular,
                 desde, hasta);
         Pagina<Reserva> reservas = listarReservasUseCase.ejecutar(filtro, pagina);
+        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
+    }
+
+    /** CU-26. GET /api/reservas/llegadas?fecha=&pagina=0 */
+    @GetMapping("/llegadas")
+    @Operation(summary = "Llegadas previstas del día",
+            description = "Reservas CONFIRMADA cuya fecha de entrada es la fecha pedida (7.1, 7.6), ordenadas por "
+                    + "apartamento, 10 por página. Sin fecha se usa hoy en la zona horaria del alojamiento")
+    @ApiResponse(responseCode = "200", description = "Página de llegadas (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Página negativa o fecha mal escrita")
+    public ResponseEntity<PaginaResponse<ReservaResumenResponse>> llegadas(
+            @RequestParam(required = false) LocalDate fecha,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
+        Pagina<Reserva> reservas = listarLlegadasYSalidasUseCase.llegadas(fecha, pagina);
+        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
+    }
+
+    /** CU-26. GET /api/reservas/salidas?fecha=&pagina=0 */
+    @GetMapping("/salidas")
+    @Operation(summary = "Salidas previstas del día",
+            description = "Reservas EN_CURSO cuya fecha de salida es la fecha pedida (7.1, 7.6), ordenadas por "
+                    + "apartamento, 10 por página. Sin fecha se usa hoy en la zona horaria del alojamiento")
+    @ApiResponse(responseCode = "200", description = "Página de salidas (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Página negativa o fecha mal escrita")
+    public ResponseEntity<PaginaResponse<ReservaResumenResponse>> salidas(
+            @RequestParam(required = false) LocalDate fecha,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
+        Pagina<Reserva> reservas = listarLlegadasYSalidasUseCase.salidas(fecha, pagina);
         return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
     }
 
