@@ -177,7 +177,7 @@ public class ReservaController {
     @ApiResponse(responseCode = "404", description = "No existe una reserva con ese código")
     @ApiResponse(responseCode = "409", description = "Transición inválida, falta la hora, venció el plazo o falta anticipo")
     public ResponseEntity<ReservaDetalleResponse> confirmar(@PathVariable String codigo,
-                                                            @RequestBody(required = false) ConfirmarReservaRequest request) {
+                                                            @Valid @RequestBody(required = false) ConfirmarReservaRequest request) {
         Reserva reserva = confirmarReservaUseCase.ejecutar(new CodigoReserva(codigo),
                 request == null ? null : request.horaEstimadaLlegada());
         return ResponseEntity.ok(mapper.aDetalle(reserva));
