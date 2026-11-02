@@ -70,49 +70,100 @@ Para correr las pruebas:
 
 ## Datos iniciales
 
-La base es en memoria, así que cada vez que arranca la app se cargan solos estos datos:
+La base es en memoria, así que cada vez que arranca la app se cargan solos estos datos. Las fechas de los bloqueos y de las reservas son relativas al día en que arranca (hoy en Colombia):
 
-- El alojamiento Coral, con sus horarios, normas, parámetros y servicios adicionales (Anexo A).
-- Las temporadas Base, Media y Alta.
-- Los 5 apartamentos (APT-101, APT-102, APT-201, APT-202 y APT-301), con tarifa en todas las temporadas.
-- APT-202 fuera de servicio y con un bloqueo, y APT-301 con un bloqueo vigente.
-- Reservas en todos los estados (PENDIENTE, CONFIRMADA, EN_CURSO, FINALIZADA, CANCELADA y NO_SHOW) y por los tres canales (PORTAL, DIRECTO y EXTERNO), cada una con su folio.
+- El alojamiento Coral, con sus horarios (entrada 15:00, salida 11:00), normas, parámetros y la política de mascotas (máximo 2 de hasta 10 kg, aseo de $110.000) (Anexo A).
+- Tres servicios adicionales: recepción nocturna ($70.000, RP-03), paseo privado por la bahía ($420.000) y cena en balcón ($260.000).
+- Las temporadas Base, Media y Alta, con sus rangos de 2026 y comienzos de 2027.
+- La versión 1 de la política de cancelación, con los tramos de `application.properties` (16 días o más 0 %, de 7 a 15 días 25 %, menos de 7 días o no-show 50 %).
+- Los 5 apartamentos, con tarifa en todas las temporadas:
 
-## Endpoints principales
+| Apartamento | Nombre | Capacidad | Estado al arrancar |
+|---|---|---|---|
+| APT-101 | Coral Luminoso | 2 | PREPARADO |
+| APT-102 | Arrecife Rosado | 2 | PREPARADO |
+| APT-201 | Marea Dorada | 4 | OCUPADO (tiene la reserva EN_CURSO) |
+| APT-202 | Bahía Cristal | 4 | FUERA_DE_SERVICIO, con un bloqueo de hoy+3 a hoy+15 |
+| APT-301 | Gran Coral Imperial | 6 | PREPARADO, con un bloqueo de hoy+20 a hoy+25 |
+
+- 7 reservas en todos los estados y por los tres canales, cada una con su folio:
+
+| Estado | Apartamento | Estancia | Canal |
+|---|---|---|---|
+| FINALIZADA | APT-101 | hoy-10 a hoy-7 | DIRECTO |
+| NO_SHOW | APT-102 | hoy-5 a hoy-3 | PORTAL |
+| EN_CURSO | APT-201 | hoy-1 a hoy+2 | DIRECTO |
+| PENDIENTE | APT-101 | hoy+10 a hoy+12 | PORTAL |
+| CONFIRMADA | APT-102 | hoy+12 a hoy+15 | DIRECTO |
+| CANCELADA | APT-101 | hoy+20 a hoy+22 | PORTAL |
+| PENDIENTE | APT-201 | hoy+15 a hoy+18 | EXTERNO (sin hora de llegada) |
+
+## Endpoints
+
+Son 48 operaciones. Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
 
 **Reservas**
-- `POST /api/reservas` crear una reserva
-- `GET /api/reservas` listar con filtros (estado, apartamento, canal, titular y fechas), de 10 en 10
+- `POST /api/reservas` crear una reserva (201 con `Location`); acepta mascotas opcionales (`cantidadMascotas`, `pesoMascotaMasPesadaKg`)
+- `GET /api/reservas` listar con filtros (estado, apartamento, canal, titular y fechas), de la más reciente a la más antigua
 - `GET /api/reservas/{codigo}` consultar una reserva
-- `PUT /api/reservas/{codigo}` modificar
-- `PUT /api/reservas/{codigo}/confirmar`, `/cancelar` y `/no-show`
-- `PUT /api/reservas/{codigo}/registrar-llegada` y `/registrar-salida`
+- `PUT /api/reservas/{codigo}` modificar fechas, ocupantes, apartamento o mascotas
+- `PUT /api/reservas/{codigo}/confirmar` confirmar (el cuerpo con la hora de llegada es opcional)
+- `PUT /api/reservas/{codigo}/cancelar` cancelar con la retención de la política congelada
+- `PUT /api/reservas/{codigo}/no-show` declarar no-show
+- `GET /api/reservas/llegadas` y `GET /api/reservas/salidas` llegadas y salidas previstas de un día (hoy si no se manda `fecha`)
 
-**Apartamentos y cotización**
-- `GET /api/apartamentos/disponibles` buscar disponibles por fechas y grupo, con filtros y paginación
-- `GET /api/apartamentos` y `GET /api/apartamentos/{id}` listado y detalle
+**Operación en recepción**
+- `PUT /api/reservas/{codigo}/registrar-llegada` registrar la llegada (el apartamento pasa a OCUPADO)
+- `PUT /api/reservas/{codigo}/registrar-salida` registrar la salida (el apartamento pasa a PENDIENTE_PREPARACION)
+- `GET /api/reservas/calendario` calendario de ocupación de un apartamento noche por noche (máximo 62 noches)
+
+**Apartamentos**
+- `GET /api/apartamentos/disponibles` buscar disponibles por fechas y grupo, con filtros (capacidad, característica, precio y fechas de nacimiento)
+- `GET /api/apartamentos` listado de los no retirados
+- `GET /api/apartamentos/{id}` detalle con dotación, imágenes, tarifas y bloqueos vigentes
+- `POST /api/apartamentos` registrar un apartamento (nace inactivo)
+- `PUT /api/apartamentos/{id}` actualizar; si baja la capacidad, avisa qué reservas la superan
+- `PUT /api/apartamentos/{id}/tarifas` definir tarifas por temporada
+- `GET /api/apartamentos/{id}/tarifas/historico` histórico de tarifas
+- `PUT /api/apartamentos/{id}/activar` ponerlo a la venta (exige tarifa en todas las temporadas)
 - `PUT /api/apartamentos/{id}/retirar` retirar de la venta (eliminación lógica)
-- `PUT /api/apartamentos/{id}/estado-operativo`
-- `POST /api/apartamentos/{id}/bloqueos` y `/novedades`
+- `PUT /api/apartamentos/{id}/iniciar-preparacion`, `/terminar-preparacion`, `/poner-fuera-de-servicio` y `/restablecer-servicio` operaciones del estado operativo
+- `GET /api/apartamentos/pendientes-preparacion` los que están en PENDIENTE_PREPARACION o EN_PREPARACION
+- `POST /api/apartamentos/{id}/bloqueos` registrar un bloqueo (201 con `Location`)
+- `POST /api/apartamentos/{id}/novedades` registrar una novedad (201 con `Location`)
+- `GET /api/apartamentos/{id}/novedades` historial de novedades, de la más reciente a la más antigua
+
+**Cotizaciones**
 - `POST /api/cotizaciones` valor de la estancia noche por noche
 
 **Folio**
-- `POST /api/reservas/{codigo}/folio/pagos`
-- `PUT /api/reservas/{codigo}/folio/cerrar`
-- `POST /api/reservas/{codigo}/folio/autorizacion-cierre`
+- `GET /api/reservas/{codigo}/folio` consultar el folio con sus cargos, pagos y saldo
+- `POST /api/reservas/{codigo}/folio/pagos` registrar un pago (201 con `Location` al folio)
+- `POST /api/reservas/{codigo}/folio/cargos` cargar un servicio adicional (201 con `Location` al folio)
+- `POST /api/reservas/{codigo}/folio/correcciones` corregir un cargo con un movimiento inverso (201 con `Location` al folio)
+- `PUT /api/reservas/{codigo}/folio/cerrar` cerrar con saldo cero
+- `POST /api/reservas/{codigo}/folio/autorizacion-cierre` el administrador autoriza cerrar con saldo
 
 **Canal externo**
-- `GET /api/canales/{canal}/disponibilidad`
-- `POST /api/canales/{canal}/reservas`
-- `PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar`
+- `GET /api/canales/{canal}/disponibilidad` disponibilidad paginada para el canal
+- `POST /api/canales/{canal}/reservas` recibir una reserva del canal
+- `PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar` cancelar una reserva del canal
 
-El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`.
+**Configuración del alojamiento**
+- `GET /api/alojamiento` y `PUT /api/alojamiento` consultar y actualizar los datos del alojamiento (los parámetros son de solo lectura)
+- `GET /api/temporadas`, `GET /api/temporadas/{id}` y `POST /api/temporadas` listar, consultar y crear temporadas (201 con `Location`)
+- `POST /api/temporadas/{id}/rangos` agregar un rango a una temporada (201 con `Location`)
+- `GET /api/politica-cancelacion` política vigente
+- `GET /api/politica-cancelacion/versiones` versiones de la política
+- `PUT /api/politica-cancelacion` publicar una versión nueva
+
+El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`, que coinciden en las 48 operaciones.
 
 Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404.
+En `sga/docs/api/sga.http` dejamos una colección de 156 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -127,8 +178,12 @@ En `sga/docs/api/sga.http` dejamos una colección que recorre el flujo completo 
 ## Estado del proyecto
 
 - **Entrega 1:** dominio con sus reglas y pruebas unitarias.
-- **Entrega 2:** casos de uso, API REST, persistencia en H2 con datos iniciales, consultas paginadas y documentación.
-- **Pendiente:** la seguridad (registro, inicio de sesión con JWT y roles), el frontend en React y el despliegue, que van en los siguientes cortes.
+- **Entrega 2:** casos de uso, API REST (48 operaciones), persistencia en H2 con datos iniciales, consultas paginadas y documentación. Cerramos las fases 1 y 2 de las tres:
+  - Reservas: reglas de canal en el dominio, mascotas en la reserva (L-16) y pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16.
+  - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, `Location` en bloqueos y novedades, historial de novedades y apartamentos pendientes de preparación.
+  - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
+- **Verificación:** las 210 pruebas pasan (`./gradlew test --rerun`), las 156 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Pendiente para el corte 4:** usuarios y seguridad con JWT y roles, imágenes en un servicio externo, notificaciones, el componente de IA, reportes y la gestión de canales. El frontend en React y el despliegue van después.
 
 ## Forma de trabajo
 
