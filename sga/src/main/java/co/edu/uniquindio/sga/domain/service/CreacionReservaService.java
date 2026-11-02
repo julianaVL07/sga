@@ -75,6 +75,22 @@ public class CreacionReservaService {
     }
 
     /**
+     * CU-03: reserva creada por el huésped (PORTAL) o por recepción (DIRECTO). Sin canal se asume PORTAL.
+     * RN-19: el canal EXTERNO no entra por aquí, sino por ConciliacionCanalExternoService (CU-08), que exige
+     * el identificador del canal y descarta los duplicados.
+     */
+    public Reserva registrarReservaPropia(IdentificacionApartamento aptoId, Estancia estancia, Titular titular,
+                                          List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
+                                          PoliticaCancelacion politica, CanalOrigen canal, LocalDateTime ahora) {
+        if (canal == CanalOrigen.EXTERNO) {
+            throw new ReglaDominioException("RN-19: Las reservas del canal externo se reciben por RecibirReservaExternaUseCase");
+        }
+        CanalOrigen canalPropio = canal == null ? CanalOrigen.PORTAL : canal;
+        return registrarNuevaReserva(aptoId, estancia, titular, ocupantes, horaLlegada, cotizacion, politica,
+                canalPropio, null, ahora);
+    }
+
+    /**
      * @param cotizacion           la que se le mostró al titular; puede ser null y entonces se calcula aquí.
      * @param identificadorExterno obligatorio solo para el canal EXTERNO (RN-19).
      * @param ahora                fecha y hora de Colombia (3.1); el plazo de confirmación se mide desde aquí.

@@ -25,7 +25,8 @@ import java.util.Objects;
  * CU-03. POST /api/reservas
  * Crea la reserva en PENDIENTE, abre su folio con el depósito (RP-02) y, si la llegada es nocturna, el recargo
  * (RP-03), y congela cotización y política (RN-22). Incluye CU-01 y CU-02 (disponibilidad y cotización).
- * Actores: huésped (canal PORTAL) y recepcionista (canal DIRECTO). El canal EXTERNO entra por CU-08.
+ * Actores: huésped (canal PORTAL) y recepcionista (canal DIRECTO). El canal EXTERNO entra por CU-08; esa regla
+ * (RN-19) y el canal PORTAL por defecto los decide CreacionReservaService.
  */
 
 @Service
@@ -56,14 +57,9 @@ public class CrearReservaUseCase {
     @Transactional
     public Reserva ejecutar(SolicitudReserva solicitud) {
         if (solicitud == null) throw new ReglaDominioException("La solicitud de reserva es obligatoria");
-        if (solicitud.canal() == CanalOrigen.EXTERNO) {
-            throw new ReglaDominioException("RN-19: Las reservas del canal externo se reciben por RecibirReservaExternaUseCase");
-        }
-        CanalOrigen canal = solicitud.canal() == null ? CanalOrigen.PORTAL : solicitud.canal();
-        return creacionReservaService.registrarNuevaReserva(solicitud.apartamento(),
+        return creacionReservaService.registrarReservaPropia(solicitud.apartamento(),
                 new Estancia(solicitud.fechaEntrada(), solicitud.fechaSalida()), solicitud.titular(),
                 solicitud.ocupantes(), solicitud.horaEstimadaLlegada(), solicitud.cotizacion(),
-                politicaCancelacionService.vigente(),
-                canal, null, LocalDateTime.now(reloj));
+                politicaCancelacionService.vigente(), solicitud.canal(), LocalDateTime.now(reloj));
     }
 }
