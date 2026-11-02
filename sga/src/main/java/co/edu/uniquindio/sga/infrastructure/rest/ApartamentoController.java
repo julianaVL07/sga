@@ -17,6 +17,7 @@ import co.edu.uniquindio.sga.application.usecase.ActivarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.ActualizarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.BuscarApartamentoDisponibleUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarApartamentosUseCase;
+import co.edu.uniquindio.sga.application.usecase.ConsultarNovedadesUseCase;
 import co.edu.uniquindio.sga.application.usecase.EstadoOperativoApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.RegistrarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.RegistrarBloqueoUseCase;
@@ -73,6 +74,7 @@ public class ApartamentoController {
     private final RegistrarBloqueoUseCase registrarBloqueoUseCase;
     private final EstadoOperativoApartamentoUseCase estadoOperativoUseCase;
     private final RegistrarNovedadUseCase registrarNovedadUseCase;
+    private final ConsultarNovedadesUseCase consultarNovedadesUseCase;
     private final ConsultarApartamentosUseCase consultarApartamentosUseCase;
     private final RetirarApartamentoUseCase retirarApartamentoUseCase;
     private final RegistrarApartamentoUseCase registrarApartamentoUseCase;
@@ -235,6 +237,19 @@ public class ApartamentoController {
                 .buildAndExpand(novedad.getId())
                 .toUri();
         return ResponseEntity.created(location).body(mapper.aNovedadResponse(novedad));
+    }
+
+    /** 7.6. GET /api/apartamentos/{id}/novedades?pagina= */
+    @GetMapping("/{id}/novedades")
+    @Operation(summary = "Consultar el historial de novedades",
+            description = "Novedades del apartamento de la más reciente a la más antigua, 10 por página (7.6, 12.4)")
+    @ApiResponse(responseCode = "200", description = "Página del historial (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
+    public ResponseEntity<PaginaResponse<NovedadResponse>> historialNovedades(
+            @PathVariable String id, @RequestParam(defaultValue = "0") @Min(0) int pagina) {
+        Pagina<Novedad> novedades = consultarNovedadesUseCase.historial(new IdentificacionApartamento(id), pagina);
+        return ResponseEntity.ok(PaginaMapper.aResponse(novedades, mapper::aNovedadResponse));
     }
 
     // ==================== CU-22 a CU-25: administración y tarifas (7.3, 7.4) ====================
