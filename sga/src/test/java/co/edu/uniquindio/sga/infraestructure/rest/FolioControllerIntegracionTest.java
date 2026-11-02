@@ -14,13 +14,16 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * integración del agregado Folio: pagos, cierre con saldo en cero y cierre autorizado con saldo
- * (RN-15, RN-16, RN-17), por HTTP contra la aplicación completa sobre H2.
+ * (RN-15, RN-16, RN-17), por HTTP contra la aplicación completa sobre H2. El depósito de garantía de RP-02 se asienta
+ * como cargo de tipo AJUSTE_MODIFICACION (Anexo A, glosario y 7.7).
  * Cada prueba crea su propia reserva en APT-102 lejos en el calendario para no chocar con las demás.
  */
 @SpringBootTest
@@ -28,13 +31,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FolioControllerIntegracionTest {
 
     private static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
-    private static final long DEPOSITO_GARANTIA = 250_000;
+    private static final long VALOR_DEPOSITO_GARANTIA = 250_000;
 
     @Autowired
     private MockMvc mvc;
 
     @Test
-    @DisplayName("El folio nace con alojamiento + depósito y se cierra solo cuando el saldo es cero (RN-17)")
+    @DisplayName("El folio nace con alojamiento + depósito (RP-02, AJUSTE_MODIFICACION), el pago responde 201 con "
+            + "Location y se cierra solo cuando el saldo es cero (RN-17)")
     void pagarTodoYCerrar() throws Exception {
         LocalDate entrada = LocalDate.now(BOGOTA).plusDays(130);
         ResultActions creada = crearReserva(entrada);
@@ -43,16 +47,28 @@ class FolioControllerIntegracionTest {
 
         ResultActions abono = post(folio + "/pagos", pago(100_000))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.totalCargos").value(valorTotal + DEPOSITO_GARANTIA))
+                .andExpect(header().string("Location", endsWith(folio)))
+                .andExpect(jsonPath("$.cargos[0].tipo").value("ALOJAMIENTO"))
+                .andExpect(jsonPath("$.cargos[1].tipo").value("AJUSTE_MODIFICACION"))
+                .andExpect(jsonPath("$.cargos[1].valor").value(VALOR_DEPOSITO_GARANTIA))
+                .andExpect(jsonPath("$.totalCargos").value(valorTotal + VALOR_DEPOSITO_GARANTIA))
                 .andExpect(jsonPath("$.totalPagado").value(100_000))
                 .andExpect(jsonPath("$.pagos.length()").value(1))
                 .andExpect(jsonPath("$.cerrado").value(false));
         long saldo = numero(abono, "$.saldo");
 
+        // La Location del pago lleva al folio, que se consulta con GET
+        get(abono.andReturn().getResponse().getHeader("Location"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.saldo").value(saldo))
+                .andExpect(jsonPath("$.pagos.length()").value(1));
+
         // RN-17: con saldo pendiente el folio no se cierra
         put(folio + "/cerrar").andExpect(status().isConflict()).andExpect(jsonPath("$.mensaje", startsWith("RN-17")));
 
-        post(folio + "/pagos", pago(saldo)).andExpect(status().isCreated()).andExpect(jsonPath("$.saldo").value(0));
+        post(folio + "/pagos", pago(saldo)).andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith(folio)))
+                .andExpect(jsonPath("$.saldo").value(0));
         put(folio + "/cerrar")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cerrado").value(true))
@@ -103,6 +119,7 @@ class FolioControllerIntegracionTest {
     @DisplayName("404: no hay folio para una reserva que no existe")
     void folioDeReservaInexistenteResponde404() throws Exception {
         String folio = "/api/reservas/RES-2026-99999/folio";
+        get(folio).andExpect(status().isNotFound());
         post(folio + "/pagos", pago(5_000)).andExpect(status().isNotFound());
         put(folio + "/cerrar").andExpect(status().isNotFound());
     }
@@ -121,6 +138,10 @@ class FolioControllerIntegracionTest {
 
     private static String pago(long valor) {
         return "{\"valor\":" + valor + ",\"medio\":\"TARJETA_DEBITO_CREDITO\"}";
+    }
+
+    private ResultActions get(String url) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders.get(url));
     }
 
     private ResultActions post(String url, String json) throws Exception {

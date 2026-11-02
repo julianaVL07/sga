@@ -16,7 +16,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +24,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
 
 /**
  * Adaptador REST del folio de una reserva (Guía 08): consulta del folio, CU-06, CU-07 y CU-15.
@@ -59,7 +61,8 @@ public class FolioController {
     @Operation(summary = "Registrar un pago",
             description = "Abono contra el folio con su medio y su fecha (RN-15). Admite pagos parciales; un pago "
                     + "no se edita ni se borra (RN-16)")
-    @ApiResponse(responseCode = "201", description = "Pago registrado; devuelve el folio con el nuevo saldo")
+    @ApiResponse(responseCode = "201", description = "Pago registrado; devuelve el folio con el nuevo saldo y "
+            + "Location apunta al folio")
     @ApiResponse(responseCode = "400", description = "Falta el valor o el medio, o el valor no es positivo")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "El folio ya está cerrado")
@@ -67,7 +70,11 @@ public class FolioController {
                                                        @Valid @RequestBody RegistrarPagoRequest request) {
         Folio folio = registrarPagoUseCase.ejecutar(new CodigoReserva(codigo), Dinero.de(request.valor()),
                 request.medio());
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapper.aResponse(folio));
+        URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/reservas/{codigo}/folio")
+                .buildAndExpand(folio.getReserva().valor())
+                .toUri();
+        return ResponseEntity.created(location).body(mapper.aResponse(folio));
     }
 
     /** CU-06. PUT /api/reservas/{codigo}/folio/cerrar */
