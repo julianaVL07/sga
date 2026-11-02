@@ -503,6 +503,46 @@ PUT {{host}}/api/canales/booking/reservas/BK-NO-EXISTE/cancelar
     });
 %}
 
+### 4.9 7.6 Historial de novedades de APT-301: la de 4.3 es la más reciente (10 por página)
+GET {{host}}/api/apartamentos/APT-301/novedades
+
+> {%
+    client.test("4.9 200 historial de novedades", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "El tamaño de página debía ser 10");
+        client.assert(response.body.totalElementos >= 1, "Debía estar la novedad registrada en 4.3");
+        client.assert(response.body.contenido[0].descripcion === "Copa de cristal rota en la cocina",
+            "La más reciente debía ser la de 4.3: " + response.body.contenido[0].descripcion);
+    });
+%}
+
+### 4.10 7.1 Pendientes de preparación: APT-301 quedó PENDIENTE_PREPARACION tras la salida de 3.11
+GET {{host}}/api/apartamentos/pendientes-preparacion
+
+> {%
+    client.test("4.10 200 pendientes de preparación", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "El tamaño de página debía ser 10");
+        var ids = response.body.contenido.map(function (a) { return a.identificacion; });
+        client.assert(ids.indexOf("APT-301") >= 0, "APT-301 debía estar por preparar: " + ids);
+        client.assert(ids.indexOf("APT-202") < 0, "APT-202 fue retirado en 2.3 y no debía aparecer");
+        client.assert(response.body.contenido.every(function (a) {
+            return a.estadoOperativo === "PENDIENTE_PREPARACION" || a.estadoOperativo === "EN_PREPARACION";
+        }), "Solo debían salir apartamentos en PENDIENTE_PREPARACION o EN_PREPARACION");
+    });
+%}
+
+### 4.11 7.1 Pendientes de preparación, página 1: vacía (hay menos de 10)
+GET {{host}}/api/apartamentos/pendientes-preparacion?pagina=1
+
+> {%
+    client.test("4.11 200 página vacía", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.length === 0, "La página 1 debía venir vacía");
+        client.assert(response.body.totalElementos >= 1, "El total debía contar los de la página 0");
+    });
+%}
+
 ### Sección 5: UN 409 POR CADA REGLA DE NEGOCIO QUE EXPONE LA API
 
 # ====================================================================================================
@@ -1289,6 +1329,15 @@ Content-Type: application/json
 
 > {%
     client.test("8.5 404 bloqueo", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.6 404 Historial de novedades de un apartamento inexistente
+GET {{host}}/api/apartamentos/APT-999/novedades
+
+> {%
+    client.test("8.6 404 historial de novedades", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}

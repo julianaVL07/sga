@@ -419,6 +419,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/apartamentos/pendientes-preparacion:
+    get:
+      tags: [Apartamentos]
+      summary: Listar apartamentos pendientes de preparación (7.1)
+      description: |
+        Apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, que el personal de servicio debe
+        atender, ordenados por identificación, 10 por página (7.1, 12.4). Ruta fija: el controlador la declara
+        antes de /api/apartamentos/{id}. Solo consulta.
+        Mapea a `ConsultarApartamentosUseCase.pendientesDePreparacion`.
+      operationId: listarPendientesDePreparacion
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos por preparar (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
   /api/apartamentos/{id}:
     parameters:
       - $ref: '#/components/parameters/IdApartamento'
@@ -682,6 +704,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NovedadResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el historial de novedades (7.6)
+      description: |
+        Novedades del apartamento de la más reciente a la más antigua, 10 por página (7.6, 12.4). Incluye las
+        de un apartamento retirado de la venta, porque el historial se conserva. Solo consulta.
+        Mapea a `ConsultarNovedadesUseCase.historial`.
+      operationId: historialNovedades
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página del historial (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaNovedadResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '404':
@@ -1442,6 +1485,18 @@ components:
         pagina: { type: integer, example: 0 }
         tamano: { type: integer, example: 10 }
         totalElementos: { type: integer, format: int64, example: 5 }
+        totalPaginas: { type: integer, example: 1 }
+
+    PaginaNovedadResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/NovedadResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64, example: 1 }
         totalPaginas: { type: integer, example: 1 }
 
     ApartamentoDisponibleResponse:

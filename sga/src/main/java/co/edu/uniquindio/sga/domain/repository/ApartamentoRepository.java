@@ -30,4 +30,11 @@ public interface ApartamentoRepository {
      * La numeración de páginas empieza en 0.
      */
     Pagina<Apartamento> listarNoEliminados(int pagina, int tamano);
+
+    /**
+     * 7.1: una página de los apartamentos no eliminados que el personal de servicio debe atender
+     * (PENDIENTE_PREPARACION o EN_PREPARACION, ver EstadoOperativo.requiereLimpieza), ordenados por identificación.
+     * La numeración de páginas empieza en 0.
+     */
+    Pagina<Apartamento> listarPendientesDePreparacion(int pagina, int tamano);
 }

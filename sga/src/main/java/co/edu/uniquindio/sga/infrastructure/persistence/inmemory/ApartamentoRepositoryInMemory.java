@@ -58,4 +58,12 @@ public class ApartamentoRepositoryInMemory implements ApartamentoRepository {
     public Pagina<Apartamento> listarNoEliminados(int pagina, int tamano) {
         return Pagina.de(listarNoEliminados(), pagina, tamano);
     }
+
+    @Override
+    public Pagina<Apartamento> listarPendientesDePreparacion(int pagina, int tamano) {
+        List<Apartamento> pendientes = listarNoEliminados().stream()
+                .filter(a -> a.getEstadoOperativo().requiereLimpieza())
+                .toList();
+        return Pagina.de(pendientes, pagina, tamano);
+    }
 }

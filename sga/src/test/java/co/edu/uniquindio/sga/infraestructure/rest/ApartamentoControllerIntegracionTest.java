@@ -144,6 +144,84 @@ class ApartamentoControllerIntegracionTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ==================== 7.6: historial de novedades ====================
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    @DisplayName("7.6: el historial de novedades es paginado de 10 en 10, de la más reciente a la más antigua")
+    void historialDeNovedadesPaginado() throws Exception {
+        get("/api/apartamentos/APT-101/novedades")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(0)))
+                .andExpect(jsonPath("$.totalElementos").value(0));
+
+        for (int i = 1; i <= 11; i++) {
+            post("/api/apartamentos/APT-101/novedades",
+                    "{\"autor\":\"Camarera Luz\",\"descripcion\":\"Novedad " + i + "\",\"gravedad\":\"BAJA\"}")
+                    .andExpect(status().isCreated());
+        }
+
+        get("/api/apartamentos/APT-101/novedades")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.totalElementos").value(11))
+                .andExpect(jsonPath("$.totalPaginas").value(2))
+                .andExpect(jsonPath("$.contenido", hasSize(10)))
+                .andExpect(jsonPath("$.contenido[0].descripcion").value("Novedad 11"))
+                .andExpect(jsonPath("$.contenido[9].descripcion").value("Novedad 2"))
+                .andExpect(jsonPath("$.contenido[*].identificacionApartamento", not(hasItem(not("APT-101")))));
+        get("/api/apartamentos/APT-101/novedades?pagina=1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(1)))
+                .andExpect(jsonPath("$.contenido[0].descripcion").value("Novedad 1"));
+        get("/api/apartamentos/APT-101/novedades?pagina=-1").andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("404: no hay historial de novedades de un apartamento que no existe")
+    void historialDeNovedadesDeApartamentoInexistenteResponde404() throws Exception {
+        get("/api/apartamentos/APT-999/novedades").andExpect(status().isNotFound());
+    }
+
+    // ==================== 7.1: apartamentos pendientes de preparación ====================
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    @DisplayName("7.1: pendientes de preparación lista PENDIENTE_PREPARACION y EN_PREPARACION, paginado de 10 en 10")
+    void pendientesDePreparacionPaginado() throws Exception {
+        // Recién arrancada ninguno está por preparar: APT-201 OCUPADO, APT-202 FUERA_DE_SERVICIO y el resto PREPARADO
+        get("/api/apartamentos/pendientes-preparacion")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(0)))
+                .andExpect(jsonPath("$.totalElementos").value(0));
+
+        operacionEstado("APT-202", "restablecer-servicio").andExpect(status().isOk());
+        operacionEstado("APT-301", "poner-fuera-de-servicio").andExpect(status().isOk());
+        operacionEstado("APT-301", "restablecer-servicio").andExpect(status().isOk());
+        operacionEstado("APT-301", "iniciar-preparacion").andExpect(status().isOk());
+
+        get("/api/apartamentos/pendientes-preparacion")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.totalElementos").value(2))
+                .andExpect(jsonPath("$.totalPaginas").value(1))
+                .andExpect(jsonPath("$.contenido[*].identificacion", contains("APT-202", "APT-301")))
+                .andExpect(jsonPath("$.contenido[*].estadoOperativo",
+                        contains("PENDIENTE_PREPARACION", "EN_PREPARACION")));
+        get("/api/apartamentos/pendientes-preparacion?pagina=1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido", hasSize(0)))
+                .andExpect(jsonPath("$.totalElementos").value(2));
+        get("/api/apartamentos/pendientes-preparacion?pagina=-1").andExpect(status().isBadRequest());
+
+        // Al terminar la preparación sale de la lista
+        operacionEstado("APT-301", "terminar-preparacion").andExpect(status().isOk());
+        get("/api/apartamentos/pendientes-preparacion")
+                .andExpect(jsonPath("$.contenido[*].identificacion", contains("APT-202")));
+    }
+
     // ==================== CU-01: búsqueda con filtros y paginación (7.5) ====================
 
     @Test
