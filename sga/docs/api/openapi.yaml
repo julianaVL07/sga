@@ -643,6 +643,29 @@ paths:
 
   # ==================== FOLIO ====================
 
+  /api/reservas/{codigo}/folio:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    get:
+      tags: [ Folio ]
+      summary: Consultar el folio
+      description: |
+        Cargos, pagos, saldo y estado de cierre del folio de la reserva (7.7). El folio nace con el cargo de
+        alojamiento y el depósito de garantía de RP-02 (tipo AJUSTE_MODIFICACION). Es el recurso al que apunta la
+        cabecera Location de un pago registrado. Solo consulta. Mapea a `ConsultarFolioUseCase`.
+      operationId: consultarFolio
+      responses:
+        '200':
+          description: El folio de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
   /api/reservas/{codigo}/folio/pagos:
     parameters:
       - $ref: '#/components/parameters/CodigoReserva'
@@ -665,6 +688,10 @@ paths:
       responses:
         '201':
           description: Pago registrado; devuelve el folio con el nuevo saldo
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -738,21 +765,21 @@ paths:
       tags: [ Canal externo ]
       summary: Consultar disponibilidad desde el canal (CU-08)
       description: |
-        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01.
-        Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
+        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por página
+        (12.4). La consulta queda en la bitácora (7.8). Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
       operationId: consultarDisponibilidadCanal
       parameters:
         - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
         - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
         - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+        - $ref: '#/components/parameters/PaginaApartamentos'
       responses:
         '200':
-          description: Apartamentos disponibles (puede ser una lista vacía)
+          description: Página de apartamentos disponibles (el contenido puede venir vacío)
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApartamentoResponse' }
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '409':
@@ -1121,6 +1148,10 @@ paths:
       responses:
         '201':
           description: Temporada creada
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -1136,6 +1167,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas/{id}:
+    parameters:
+      - { name: id, in: path, required: true, description: Id de la temporada, schema: { type: string }, example: T-ALTA }
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar una temporada (CU-29)
+      description: |
+        La temporada con sus rangos de fechas (fecha final excluida). Es el recurso al que apunta la cabecera
+        Location al crearla o al agregarle un rango. Mapea a `TemporadasUseCase.consultar`.
+      operationId: consultarTemporada
+      responses:
+        '200':
+          description: La temporada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
 
   /api/temporadas/{id}/rangos:
     parameters:
@@ -1157,6 +1208,10 @@ paths:
       responses:
         '201':
           description: Rango agregado; devuelve la temporada con todos sus rangos
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -1625,7 +1680,10 @@ components:
 
     TipoCargo:
       type: string
-      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW, DEPOSITO_GARANTIA ]
+      description: |
+        Tipos de cargo del folio (7.7). AJUSTE_MODIFICACION es la diferencia de una modificación (RN-14) y también
+        el depósito de garantía de RP-02 y su devolución (valor negativo), como lo definen el Anexo A y el glosario.
+      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW ]
 
     TipoEventoCanal:
       type: string
