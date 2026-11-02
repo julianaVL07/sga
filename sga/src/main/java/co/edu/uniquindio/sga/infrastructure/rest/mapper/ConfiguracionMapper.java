@@ -3,7 +3,9 @@ package co.edu.uniquindio.sga.infrastructure.rest.mapper;
 import co.edu.uniquindio.sga.application.dto.request.ActualizarAlojamientoRequest;
 import co.edu.uniquindio.sga.application.dto.request.CrearTemporadaRequest;
 import co.edu.uniquindio.sga.application.dto.request.RangoFechasRequest;
+import co.edu.uniquindio.sga.application.dto.request.TramoCancelacionRequest;
 import co.edu.uniquindio.sga.application.dto.response.AlojamientoResponse;
+import co.edu.uniquindio.sga.application.dto.response.PoliticaCancelacionResponse;
 import co.edu.uniquindio.sga.application.dto.response.TemporadaResponse;
 import co.edu.uniquindio.sga.application.usecase.ConfiguracionAlojamientoUseCase;
 import co.edu.uniquindio.sga.application.usecase.TemporadasUseCase;
@@ -15,17 +17,19 @@ import co.edu.uniquindio.sga.domain.valueobject.CargoAseoMascota;
 import co.edu.uniquindio.sga.domain.valueobject.Coordenada;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
+import co.edu.uniquindio.sga.domain.valueobject.TramoCancelacion;
 import org.mapstruct.Mapper;
 
 import java.math.RoundingMode;
 import java.util.List;
 
 /**
- * Mapper REST de la configuración del alojamiento (CU-28 y CU-29): Alojamiento y Temporada a
+ * Mapper REST de la configuración del alojamiento (CU-28 a CU-30): Alojamiento, Temporada y PoliticaCancelacion a
  * sus Response, y los Request a objetos del dominio. MapStruct genera ConfiguracionMapperImpl al compilar y lo
  * registra como bean (componentModel = "spring"). Las reglas no viven aquí: si un dato viola una regla, la rechaza
- * el constructor del objeto de valor (Coordenada, RangoFechas) o el agregado.
+ * el constructor del objeto de valor (Coordenada, RangoFechas, TramoCancelacion) o el agregado.
  */
 @Mapper(componentModel = "spring")
 public interface ConfiguracionMapper {
@@ -92,6 +96,25 @@ public interface ConfiguracionMapper {
         return new TemporadaResponse(t.getId(), t.getNombre(), t.getTipo(), t.getRangos().stream()
                 .map(r -> new TemporadaResponse.RangoResponse(r.fechaInicio(), r.fechaFin()))
                 .toList());
+    }
+
+    // ==================== POLÍTICA DE CANCELACIÓN (CU-30) ====================
+
+    default List<TramoCancelacion> aTramos(List<TramoCancelacionRequest> tramos) {
+        return tramos == null ? List.of() : tramos.stream()
+                .map(t -> new TramoCancelacion(t.antelacionMinimaDias(), t.porcentajeRetencion()))
+                .toList();
+    }
+
+    default PoliticaCancelacionResponse aPoliticaResponse(PoliticaCancelacion p) {
+        if (p == null) {
+            return null;
+        }
+        return new PoliticaCancelacionResponse(p.version(), p.fechaVigencia(), p.consecuenciaNoShow(),
+                p.tramos().stream()
+                        .map(t -> new PoliticaCancelacionResponse.TramoResponse(t.antelacionMinimaDias(),
+                                t.porcentajeRetencion()))
+                        .toList());
     }
 
     // ==================== OBJETOS DE VALOR ====================

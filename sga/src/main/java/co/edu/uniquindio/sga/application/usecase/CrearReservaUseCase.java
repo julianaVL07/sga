@@ -3,12 +3,12 @@ package co.edu.uniquindio.sga.application.usecase;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.service.CreacionReservaService;
+import co.edu.uniquindio.sga.domain.service.PoliticaCancelacionService;
 import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
-import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
 
 import org.springframework.stereotype.Service;
@@ -38,17 +38,18 @@ public class CrearReservaUseCase {
     }
 
     private final CreacionReservaService creacionReservaService;
-    private final PoliticaCancelacion politicaVigente;
+    private final PoliticaCancelacionService politicaCancelacionService;
     private final Clock reloj;
 
     /**
-     * @param politicaVigente política de cancelación vigente que se congela en cada reserva nueva (RN-22).
+     * @param politicaCancelacionService entrega la política de cancelación vigente en el repositorio, que se congela
+     *                                   en cada reserva nueva (RN-22). Cambia cuando se publica una versión (CU-30).
      * @param reloj           reloj con zona horaria de Colombia (3.1).
      */
-    public CrearReservaUseCase(CreacionReservaService creacionReservaService, PoliticaCancelacion politicaVigente,
-                               Clock reloj) {
+    public CrearReservaUseCase(CreacionReservaService creacionReservaService,
+                               PoliticaCancelacionService politicaCancelacionService, Clock reloj) {
         this.creacionReservaService = Objects.requireNonNull(creacionReservaService);
-        this.politicaVigente = Objects.requireNonNull(politicaVigente);
+        this.politicaCancelacionService = Objects.requireNonNull(politicaCancelacionService);
         this.reloj = Objects.requireNonNull(reloj);
     }
 
@@ -61,7 +62,8 @@ public class CrearReservaUseCase {
         CanalOrigen canal = solicitud.canal() == null ? CanalOrigen.PORTAL : solicitud.canal();
         return creacionReservaService.registrarNuevaReserva(solicitud.apartamento(),
                 new Estancia(solicitud.fechaEntrada(), solicitud.fechaSalida()), solicitud.titular(),
-                solicitud.ocupantes(), solicitud.horaEstimadaLlegada(), solicitud.cotizacion(), politicaVigente,
+                solicitud.ocupantes(), solicitud.horaEstimadaLlegada(), solicitud.cotizacion(),
+                politicaCancelacionService.vigente(),
                 canal, null, LocalDateTime.now(reloj));
     }
 }

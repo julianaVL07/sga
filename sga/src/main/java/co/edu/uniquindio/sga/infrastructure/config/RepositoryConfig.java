@@ -7,6 +7,7 @@ import co.edu.uniquindio.sga.domain.repository.ConflictoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.EventoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.NovedadRepository;
+import co.edu.uniquindio.sga.domain.repository.PoliticaCancelacionRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.repository.ServicioAdicionalRepository;
 import co.edu.uniquindio.sga.domain.repository.TemporadaRepository;
@@ -24,6 +25,8 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.FolioJpaDataReposito
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.FolioJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.PoliticaCancelacionJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.PoliticaCancelacionJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ServicioAdicionalJpaDataRepository;
@@ -35,6 +38,7 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ApartamentoPe
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.CanalPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.FolioPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.NovedadPersistenceMapper;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.PoliticaCancelacionPersistenceMapper;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.mapper.ReservaPersistenceMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -90,6 +94,13 @@ public class RepositoryConfig {
     public NovedadRepository novedadRepository(NovedadJpaDataRepository dataRepository,
                                                NovedadPersistenceMapper mapper) {
         return new NovedadJpaRepository(dataRepository, mapper);
+    }
+
+    /** CU-30: versiones de la política de cancelación (F-07, 7.4). */
+    @Bean
+    public PoliticaCancelacionRepository politicaCancelacionRepository(
+            PoliticaCancelacionJpaDataRepository dataRepository, PoliticaCancelacionPersistenceMapper mapper) {
+        return new PoliticaCancelacionJpaRepository(dataRepository, mapper);
     }
 
     @Bean
