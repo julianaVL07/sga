@@ -24,6 +24,7 @@ import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
+import co.edu.uniquindio.sga.infrastructure.rest.mapper.PaginaMapper;
 import co.edu.uniquindio.sga.infrastructure.rest.mapper.ReservaMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -105,7 +106,7 @@ public class ReservaController {
         FiltroReservas filtro = new FiltroReservas(estado, mapper.aIdentificacion(apartamento), canal, titular,
                 desde, hasta);
         Pagina<Reserva> reservas = listarReservasUseCase.ejecutar(filtro, pagina);
-        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
+        return ResponseEntity.ok(PaginaMapper.aResponse(reservas, mapper::aResumen));
     }
 
     /** CU-26. GET /api/reservas/llegadas?fecha=&pagina=0 */
@@ -119,7 +120,7 @@ public class ReservaController {
             @RequestParam(required = false) LocalDate fecha,
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
         Pagina<Reserva> reservas = listarLlegadasYSalidasUseCase.llegadas(fecha, pagina);
-        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
+        return ResponseEntity.ok(PaginaMapper.aResponse(reservas, mapper::aResumen));
     }
 
     /** CU-26. GET /api/reservas/salidas?fecha=&pagina=0 */
@@ -133,7 +134,7 @@ public class ReservaController {
             @RequestParam(required = false) LocalDate fecha,
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
         Pagina<Reserva> reservas = listarLlegadasYSalidasUseCase.salidas(fecha, pagina);
-        return ResponseEntity.ok(PaginaResponse.de(reservas, mapper::aResumen));
+        return ResponseEntity.ok(PaginaMapper.aResponse(reservas, mapper::aResumen));
     }
 
     /** CU-18. GET /api/reservas/{codigo} */

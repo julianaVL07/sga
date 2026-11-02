@@ -37,6 +37,7 @@ import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.RegistroTarifa;
 import co.edu.uniquindio.sga.domain.valueobject.ResultadoActualizacionApartamento;
 import co.edu.uniquindio.sga.infrastructure.rest.mapper.ApartamentoMapper;
+import co.edu.uniquindio.sga.infrastructure.rest.mapper.PaginaMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -107,7 +108,7 @@ public class ApartamentoController {
                 caracteristica);
         Pagina<ApartamentoDisponible> disponibles = buscarApartamentoDisponibleUseCase.buscar(entrada, salida,
                 ocupantes, fechasNacimiento, criterio, pagina);
-        return ResponseEntity.ok(PaginaResponse.de(disponibles, mapper::aDisponibleResponse));
+        return ResponseEntity.ok(PaginaMapper.aResponse(disponibles, mapper::aDisponibleResponse));
     }
 
     /** CU-20. GET /api/apartamentos?pagina= */
@@ -120,7 +121,7 @@ public class ApartamentoController {
     public ResponseEntity<PaginaResponse<ApartamentoResponse>> listar(
             @RequestParam(defaultValue = "0") @Min(0) int pagina) {
         Pagina<Apartamento> apartamentos = consultarApartamentosUseCase.listar(pagina);
-        return ResponseEntity.ok(PaginaResponse.de(apartamentos, mapper::aResponse));
+        return ResponseEntity.ok(PaginaMapper.aResponse(apartamentos, mapper::aResponse));
     }
 
     /** CU-20. GET /api/apartamentos/{id} */
@@ -262,7 +263,7 @@ public class ApartamentoController {
             @PathVariable String id, @RequestParam(defaultValue = "0") @Min(0) int pagina) {
         Pagina<RegistroTarifa> historico = tarifasApartamentoUseCase.historico(new IdentificacionApartamento(id),
                 pagina);
-        return ResponseEntity.ok(PaginaResponse.de(historico, mapper::aRegistroTarifaResponse));
+        return ResponseEntity.ok(PaginaMapper.aResponse(historico, mapper::aRegistroTarifaResponse));
     }
 
     /** CU-25. PUT /api/apartamentos/{id}/activar */
