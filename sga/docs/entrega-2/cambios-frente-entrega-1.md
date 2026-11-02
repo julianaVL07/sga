@@ -25,6 +25,20 @@ en [`docs/api/sga.http`](../api/sga.http).
 
 Además, **CU-01 Buscar apartamentos disponibles** se amplió con los filtros y la paginación de 7.5 (ver sección 2).
 
+Al cerrar las fases 1 y 2 se agregaron estas operaciones, que completan casos de uso existentes:
+
+| Operación | Qué hace | Actor | Clases |
+|---|---|---|---|
+| **Consultar el folio** (CU-06, CU-15) | Devuelve el folio de la reserva con sus cargos, pagos y saldo. Es el recurso al que apunta el `Location` de pagos, cargos y correcciones. | Recepcionista, administrador | `ConsultarFolioUseCase` |
+| **Cargar un servicio adicional al folio** (7.1) | Asienta en el folio el cargo de un servicio que ofrece el alojamiento (por ejemplo, la cena en el balcón). El valor y el concepto los pone el servicio; un servicio que el alojamiento no ofrece responde 409 (L-17). | Recepcionista | `RegistrarCargoServicioUseCase`, `Alojamiento.obtenerServicioAdicional`, `ServicioAdicional.generarCargoPara` |
+| **Corregir un cargo del folio** (RN-16) | Registra el movimiento inverso del cargo que está en una posición del folio, con su motivo. El cargo original no se edita ni se borra. | Recepcionista, administrador | `RegistrarCorreccionFolioUseCase`, `Folio.cargoEn`, `Folio.registrarMovimientoInverso` |
+| **Historial de novedades** (7.6) | Novedades de un apartamento, de la más reciente a la más antigua, 10 por página. | Recepcionista, administrador | `ConsultarNovedadesUseCase`, `NovedadRepository` |
+| **Pendientes de preparación** (7.1) | Apartamentos no retirados en PENDIENTE_PREPARACION o EN_PREPARACION, 10 por página: la lista de trabajo del personal de servicio. | Personal de servicio | `ConsultarApartamentosUseCase`, `ApartamentoRepository` |
+| **Consultar una temporada** (CU-29) | Una temporada con sus rangos, por su id. Es el recurso al que apunta el `Location` al crearla o al agregarle un rango. | Administrador | `TemporadasUseCase` |
+
+**CU-16 Cambiar el estado operativo** cambió de forma (ver sección 9), y **CU-03 Crear reserva** y **CU-11 Modificar
+reserva** reciben las mascotas del grupo (L-16, ver sección 10).
+
 ## 2. Endpoints
 
 ### Nuevos
@@ -45,25 +59,47 @@ Además, **CU-01 Buscar apartamentos disponibles** se amplió con los filtros y 
 | `GET /api/alojamiento` | CU-28 | 200 `AlojamientoResponse` (con `serviciosAdicionales` y `parametros`) | — |
 | `PUT /api/alojamiento` | CU-28 | 200 `AlojamientoResponse` | 400, 409 (coordenada fuera de rango 7.3, horario incompleto L-12) |
 | `GET /api/temporadas?pagina=` | CU-29 | 200 `PaginaResponse<TemporadaResponse>` | 400 |
-| `POST /api/temporadas` | CU-29 | 201 `TemporadaResponse` | 400, 409 (falta la tarifa de un apartamento activo 7.4, solape 7.4, segunda base F-05) |
-| `POST /api/temporadas/{id}/rangos` | CU-29 | 201 `TemporadaResponse` con todos sus rangos | 400, 404, 409 (solape 7.4, rango en la base F-05) |
+| `GET /api/temporadas/{id}` | CU-29 | 200 `TemporadaResponse` | 404 |
+| `POST /api/temporadas` | CU-29 | 201 `TemporadaResponse` + `Location` (`/api/temporadas/{id}`) | 400, 409 (falta la tarifa de un apartamento activo 7.4, solape 7.4, segunda base F-05) |
+| `POST /api/temporadas/{id}/rangos` | CU-29 | 201 `TemporadaResponse` con todos sus rangos + `Location` (`/api/temporadas/{id}`) | 400, 404, 409 (solape 7.4, rango en la base F-05) |
 | `GET /api/politica-cancelacion` | CU-30 | 200 `PoliticaCancelacionResponse` (versión vigente) | — |
 | `GET /api/politica-cancelacion/versiones?pagina=` | CU-30 | 200 `PaginaResponse<PoliticaCancelacionResponse>`, de la más reciente a la más antigua | 400 |
 | `PUT /api/politica-cancelacion` | CU-30 | 200 `PoliticaCancelacionResponse` (versión N+1) | 400, 409 (L-10) |
+| `GET /api/reservas/{codigo}/folio` | CU-06, CU-15 | 200 `FolioResponse` | 404, 409 (código de reserva mal formado) |
+| `POST /api/reservas/{codigo}/folio/cargos` | 7.1 | 201 `FolioResponse` + `Location` (el folio) | 400 (falta `idServicio`), 404, 409 (servicio que el alojamiento no ofrece L-17, folio cerrado RN-16) |
+| `POST /api/reservas/{codigo}/folio/correcciones` | RN-16 | 201 `FolioResponse` + `Location` (el folio) | 400 (faltan `indiceCargo` o `motivo`), 404, 409 (no hay cargo en esa posición o folio cerrado, RN-16) |
+| `PUT /api/apartamentos/{id}/iniciar-preparacion` | CU-16 | 200 `ApartamentoResponse` | 404, 409 (transición no permitida 7.6) |
+| `PUT /api/apartamentos/{id}/terminar-preparacion` | CU-16 | 200 `ApartamentoResponse` | 404, 409 (7.6) |
+| `PUT /api/apartamentos/{id}/poner-fuera-de-servicio` | CU-16 | 200 `ApartamentoResponse` | 404, 409 (7.6) |
+| `PUT /api/apartamentos/{id}/restablecer-servicio` | CU-16 | 200 `ApartamentoResponse` | 404, 409 (7.6) |
+| `GET /api/apartamentos/pendientes-preparacion?pagina=` | 7.1 | 200 `PaginaResponse<ApartamentoResponse>` | 400 |
+| `GET /api/apartamentos/{id}/novedades?pagina=` | 7.6 | 200 `PaginaResponse<NovedadResponse>`, de la más reciente a la más antigua | 400, 404 |
 
-### Modificado
+### Modificados
 
 | Método y ruta | Cambio | Compatibilidad |
 |---|---|---|
 | `GET /api/apartamentos/disponibles` | Nuevos parámetros opcionales: `fechasNacimiento` (una por ocupante, para estimar solo a los facturables, RN-06), `capacidadMinima`, `precioMinimo`, `precioMaximo`, `caracteristica` y `pagina`. Cada resultado es una tarjeta (`ApartamentoDisponibleResponse`) con nombre, imagen principal, capacidad, **valor estimado de la estancia** y ubicación del alojamiento. Filtros inconsistentes responden 409 (7.5). | **Cambia la forma de la respuesta:** antes era una lista `List<ApartamentoResponse>`; ahora es una página `PaginaResponse<ApartamentoDisponibleResponse>` con `contenido`, `pagina`, `tamano`, `totalElementos` y `totalPaginas`. |
+| `GET /api/canales/{canal}/disponibilidad` | Nuevo parámetro opcional `pagina` (ver sección 12). | **Cambia la forma de la respuesta:** antes era `List<ApartamentoResponse>`; ahora es `PaginaResponse<ApartamentoResponse>`. |
+| `POST /api/reservas` y `PUT /api/reservas/{codigo}` | Nuevos campos opcionales `cantidadMascotas` y `pesoMascotaMasPesadaKg` (`@Min(0)`); `ReservaDetalleResponse` los devuelve (ver sección 10). 409 con L-16 si la política del alojamiento no admite las mascotas. | Compatible: sin esos campos la reserva queda sin mascotas, como antes. |
+| `PUT /api/reservas/{codigo}/confirmar` | El cuerpo opcional (`ConfirmarReservaRequest`) ahora se valida con `@Valid`. | Compatible. |
+| `POST /api/reservas/{codigo}/folio/pagos` | Responde 201 con `Location` al folio (`GET /api/reservas/{codigo}/folio`). | Compatible: antes era 201 sin `Location`. |
+| `POST /api/apartamentos/{id}/bloqueos` y `/novedades` | Responden 201 con `Location` al bloqueo o a la novedad creada. | Compatible: antes era 201 sin `Location`. |
+
+### Eliminado
+
+| Método y ruta | Reemplazo |
+|---|---|
+| `PUT /api/apartamentos/{id}/estado-operativo` (con `CambiarEstadoOperativoRequest`) | Las cuatro operaciones de negocio de CU-16 (ver sección 9). |
 
 Todos los listados (`/api/reservas`, `/api/reservas/llegadas`, `/api/reservas/salidas`, `/api/apartamentos`,
-`/api/apartamentos/disponibles`, `/api/apartamentos/{id}/tarifas/historico`, `/api/temporadas` y
+`/api/apartamentos/disponibles`, `/api/apartamentos/pendientes-preparacion`, `/api/apartamentos/{id}/novedades`,
+`/api/apartamentos/{id}/tarifas/historico`, `/api/canales/{canal}/disponibilidad`, `/api/temporadas` y
 `/api/politica-cancelacion/versiones`) devuelven 10 resultados por página (`sga.paginacion.tamano=10`) y numeran
-las páginas desde 0. El contrato `docs/api/openapi.yaml` incluye todos los endpoints nuevos y el modificado, y se
+las páginas desde 0. El contrato `docs/api/openapi.yaml` incluye todos los endpoints nuevos y modificados, y se
 verificó contra lo que publica Swagger (`/v3/api-docs`, `/swagger-ui.html`) con la aplicación recién arrancada: las
-39 operaciones coinciden en ruta, método, parámetros, cuerpo, códigos de respuesta y campos de la petición y de la
-respuesta exitosa.
+48 operaciones coinciden en ruta, método, parámetros, cuerpo, códigos de respuesta y campos de la petición y de la
+respuesta exitosa, y ningún endpoint de los controllers queda sin documentar.
 
 ## 3. Clases nuevas
 
@@ -84,6 +120,7 @@ respuesta exitosa.
 | `domain/service/CreacionTemporadaService` | servicio de dominio | CU-29: valida la temporada, exige la tarifa de cada apartamento activo (7.4) y solo entonces agrega la temporada al alojamiento y asigna las tarifas, todo en una operación. |
 | `domain/repository/PoliticaCancelacionRepository` | puerto | CU-30: `guardar` (solo versiones nuevas), `obtenerVigente` (la de mayor número) y `listarVersiones` (paginado). |
 | `domain/service/PoliticaCancelacionService` | servicio de dominio | CU-30: entrega la política vigente que se congela en cada reserva (RN-22), guarda la versión inicial si no hay ninguna y crea la versión N+1. |
+| `domain/valueobject/Mascotas` | record | L-16: cantidad de mascotas y peso de la más pesada. `Mascotas.ninguna()` es la reserva sin mascotas; `validarContra(CargoAseoMascota)` rechaza las que la política del alojamiento no admite (ver sección 10). |
 
 ### Métodos nuevos en clases existentes del dominio
 
@@ -103,6 +140,16 @@ respuesta exitosa.
   validaba `Alojamiento.agregarTemporada`; se reutilizan, no se duplican.
 - `PoliticaCancelacion.nuevaVersion` (CU-30): crea la versión siguiente, que no puede regir antes que la vigente (F-07)
   y vuelve a validar L-10 en el constructor del record.
+- `CreacionReservaService.registrarReservaPropia` (CU-03): las reglas del canal que antes estaban en
+  `CrearReservaUseCase` pasaron al dominio. Rechaza el canal `EXTERNO` con RN-19 (entra por CU-08) y pone `PORTAL` si
+  no llega canal. El caso de uso solo orquesta.
+- `Reserva.getMascotas` y las variantes de `Reserva.crear`, `Reserva.reconstruir` y `Reserva.modificar` que reciben
+  las mascotas (L-16). Las firmas anteriores siguen y equivalen a "sin mascotas".
+- `Apartamento.cambiarEstadoOperativo` pasó a ser **privado** (CU-16, ver sección 9).
+- `Folio.cargoEn(posicion)` (RN-16): el cargo que se va a corregir. `Alojamiento.obtenerServicioAdicional` (L-17): el
+  servicio que se carga al folio, o 409 si el alojamiento no lo ofrece.
+- Puertos: `NovedadRepository` con el historial paginado de un apartamento y `ApartamentoRepository` con los
+  pendientes de preparación paginados.
 
 ### Aplicación e infraestructura
 
@@ -128,6 +175,12 @@ respuesta exitosa.
   relativas a hoy. `DatosInicialesCoralConfig` agrega un apartamento fuera de servicio con bloqueo (APT-202) y un
   bloqueo vigente (APT-301).
 - `PoliticaCancelacionProperties`, `DatosInicialesPoliticaCancelacionConfig` y `OpenApiConfig` (ver secciones 4 y 8).
+- Casos de uso de las fases 1 y 2: `EstadoOperativoApartamentoUseCase` (reemplaza a `CambiarEstadoOperativoUseCase`,
+  que se eliminó junto con `CambiarEstadoOperativoRequest`), `ConsultarNovedadesUseCase`, `ConsultarFolioUseCase`,
+  `RegistrarCargoServicioUseCase` y `RegistrarCorreccionFolioUseCase`, con los DTO `RegistrarCargoServicioRequest` y
+  `RegistrarCorreccionRequest`.
+- Persistencia de las mascotas: `MascotasEmbedable` (`@Embeddable`) en la tabla `reserva`, columnas
+  `mascotas_cantidad` y `mascotas_peso_mayor_kg`.
 
 ## 4. Política de cancelación versionada y demás parámetros movidos a configuración
 
@@ -245,25 +298,112 @@ apartamento, se agregaría un campo a `CriterioBusqueda` sin cambiar el resto de
 
   Antes springdoc pintaba los 400/404/409 con el esquema de la respuesta exitosa. Las respuestas 409/422 del canal
   externo conservan `EventoCanalResponse`, que es lo que de verdad devuelven.
-- Los endpoints de CU-22 a CU-30 se agregaron al contrato con sus esquemas. La comparación con Swagger da 39
+- Los endpoints de CU-22 a CU-30 y los de las fases 1 y 2 (operaciones de CU-16, folio, novedades, pendientes de
+  preparación y temporada por id) se agregaron al contrato con sus esquemas. La comparación con Swagger da 48
   operaciones iguales (ver sección 2).
 - `docs/api/sga.http`: recorrido completo y ejecutable de la API contra la aplicación recién arrancada:
   - el flujo de una reserva de punta a punta,
-  - un 409 por cada regla expuesta,
+  - un 409 por cada regla expuesta, incluido L-16 (5.39),
   - ejemplos de 400 y 404,
-  - la sección 9 (CU-22 a CU-25), la 10 (CU-26 y CU-27) y la 11 (CU-28 a CU-30, incluida la política versionada).
+  - en la sección 4, el historial de novedades, los pendientes de preparación y una reserva con mascotas (4.9 a 4.13),
+  - la sección 9 (CU-22 a CU-25), la 10 (CU-26 y CU-27), la 11 (CU-28 a CU-30, incluida la política versionada) y la
+    12 (cargos de servicios adicionales y correcciones del folio).
 
-  Ejecutado completo y en orden contra la aplicación recién arrancada, pasan las 138 peticiones.
+  Ejecutado completo y en orden contra la aplicación recién arrancada, pasan las 156 peticiones con sus 156
+  `client.test`.
 - `docs/trazabilidad/matriz-trazabilidad.md`: matriz regla → clase y método → caso de uso → endpoint → código →
-  prueba.
+  pruebas unitarias y de integración, con los nombres reales de las pruebas.
+- Pruebas: `./gradlew test --rerun` ejecuta 210 pruebas (120 unitarias y 90 de integración) y todas pasan. Se
+  agregaron pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16 (`ReservaTest`,
+  `ModificacionReservaServiceTest`, `VencimientoReservasServiceTest` y `CreacionReservaServiceTest`), de RN-01,
+  RN-20, RP-01 y las transiciones de 7.6 (`DisponibilidadApartamentoServiceTest`, `ApartamentoTest`) y de RN-12,
+  RN-13, RN-16, RN-18, RN-19 y RP-02 (`CancelarReservaServiceTest`, `ConciliacionCanalExternoServiceTest`,
+  `FolioTest`).
 
-## 9. Pendiente: seguridad con JWT (7.2)
+## 9. CU-16: operaciones de estado operativo en lugar del endpoint genérico
 
-La autenticación y autorización con JWT **no se implementa en esta entrega**. Todos los endpoints están abiertos.
-Las restricciones por actor se documentan en los casos de uso, pero hoy no se aplican. Por ejemplo:
+En la entrega 1, CU-16 era `PUT /api/apartamentos/{id}/estado-operativo` con el estado destino en el cuerpo
+(`CambiarEstadoOperativoRequest`), y el dominio exponía `Apartamento.cambiarEstadoOperativo(nuevoEstado)`. Así el
+cliente decidía el estado y el dominio solo podía decir si la transición era válida.
 
-- CU-07 (autorizar el cierre del folio con saldo) y CU-21 (retirar un apartamento) corresponden solo al administrador.
-- CU-16 (cambiar el estado operativo) corresponde al personal de servicio o al administrador.
+Ahora cada transición es una operación del negocio con su nombre:
 
-Cuando se implemente, entrará como adaptador de infraestructura (filtro de Spring Security y configuración de
-roles). No toca el dominio ni los casos de uso.
+| Operación | Transición (7.6) | Quién la hace |
+|---|---|---|
+| `PUT /api/apartamentos/{id}/iniciar-preparacion` → `Apartamento.iniciarPreparacion` | PENDIENTE_PREPARACION → EN_PREPARACION | Personal de servicio |
+| `PUT /api/apartamentos/{id}/terminar-preparacion` → `Apartamento.terminarPreparacion` | EN_PREPARACION → PREPARADO | Personal de servicio |
+| `PUT /api/apartamentos/{id}/poner-fuera-de-servicio` → `Apartamento.ponerFueraDeServicio` | PREPARADO, PENDIENTE_PREPARACION o EN_PREPARACION → FUERA_DE_SERVICIO (no si está OCUPADO) | Administrador |
+| `PUT /api/apartamentos/{id}/restablecer-servicio` → `Apartamento.restablecerServicio` | FUERA_DE_SERVICIO → PENDIENTE_PREPARACION | Administrador |
+
+- OCUPADO y la salida no tienen endpoint propio: los mueven la llegada y la salida de la reserva
+  (`Apartamento.recibirGrupo` y `Apartamento.liberarTrasSalida`, CU-04 y CU-05).
+- `Apartamento.cambiarEstadoOperativo` pasó a ser privado. Todas las operaciones pasan por él, así que las
+  transiciones no permitidas siguen respondiendo 409 con 7.6.
+- Las operaciones no reciben cuerpo y responden 200 con el apartamento. Un cambio de estado no crea ni levanta
+  bloqueos (3.3).
+- Se agregaron `GET /api/apartamentos/pendientes-preparacion`, la lista de trabajo del personal de servicio, y
+  `GET /api/apartamentos/{id}/novedades`, el historial de novedades.
+- En `sga.http` las peticiones 5.19, 5.20 y 5.22 usan las operaciones nuevas. Lo prueban
+  `ApartamentoTest` (siete pruebas de 7.6) y `ApartamentoControllerIntegracionTest#cicloDeEstadoOperativo`.
+
+## 10. Mascotas en la reserva (L-16)
+
+En la entrega 1 la política de mascotas (`CargoAseoMascota`) existía en el dominio y en la configuración
+(`sga.alojamiento.mascotas.*`), pero la reserva no sabía si el grupo traía mascotas y la API no las recibía. Ahora:
+
+- La reserva guarda sus mascotas en el objeto de valor `Mascotas` (cantidad y peso de la más pesada, en kg). Sin
+  mascotas, los dos valores son 0.
+- Al crear (CU-03) y al modificar (CU-11), `CreacionReservaService` y `ModificacionReservaService` validan las
+  mascotas con la política del alojamiento (`CargoAseoMascota.admite`). En el Coral se aceptan máximo 2 de hasta
+  10 kg; si no, responde 409 con L-16. Una cantidad con peso 0, o un peso con cantidad 0, también es 409 con L-16.
+- Si el grupo trae mascotas, el folio recibe el cargo único de aseo de $110.000 como `SERVICIO_ADICIONAL`
+  (`CargoAseoMascota.generarCargoServicio`). En la modificación solo se asienta si antes la reserva no traía
+  mascotas, porque el cargo es único por estancia.
+- API: `cantidadMascotas` y `pesoMascotaMasPesadaKg` son opcionales en `CrearReservaRequest` y
+  `ModificarReservaRequest` (`@Min(0)`: un negativo es 400) y salen en `ReservaDetalleResponse`. En la modificación,
+  un dato que no llega se conserva.
+- Persistencia: `MascotasEmbedable` con columnas que admiten null, así que las reservas guardadas antes se leen
+  como "sin mascotas". Los datos iniciales y el canal externo crean reservas sin mascotas.
+- `sga.http`: 4.12 y 4.13 (reserva con 2 mascotas) y 5.39 (409 por una mascota de 15 kg). Pruebas:
+  `CreacionReservaServiceTest` (cuatro pruebas de L-16).
+
+Queda abierto: si una reserva modificada deja de traer mascotas, el cargo de aseo ya asentado no se revierte.
+
+## 11. Depósito de garantía como `AJUSTE_MODIFICACION` (RP-02)
+
+En la entrega 1 el depósito de garantía se asentaba en el folio como un cargo `AJUSTE_MODIFICACION`. Durante esta
+entrega se le dio un tipo propio, y en el cierre de la fase 1 se **volvió a `AJUSTE_MODIFICACION`**, como lo
+definen el Anexo A, el glosario y 7.7. Así quedó:
+
+- `TipoCargo` tiene los cuatro tipos de la entrega 1: `ALOJAMIENTO`, `SERVICIO_ADICIONAL`, `AJUSTE_MODIFICACION` y
+  `PENALIDAD_CANCELACION_NOSHOW`. `AJUSTE_MODIFICACION` cubre la diferencia de una modificación (RN-14) y el depósito.
+- `DepositoGarantia.generarCargo` asienta el depósito ($250.000) al abrir el folio y
+  `DepositoGarantia.generarDevolucion` asienta su devolución con valor negativo, los dos como `AJUSTE_MODIFICACION`.
+- El depósito y el ajuste de una modificación se distinguen por su concepto. Por eso
+  `ModificacionReservaServiceTest` cuenta como ajuste de RN-14 solo el cargo cuyo concepto empieza por "Ajuste por
+  modificación".
+- Lo prueban `FolioTest#abrirFolioAsientaElDeposito` y `FolioControllerIntegracionTest#pagarTodoYCerrar`.
+
+## 12. Disponibilidad paginada del canal externo (12.4)
+
+`GET /api/canales/{canal}/disponibilidad` devolvía una lista sin límite. Ahora recibe `pagina` (desde 0, 400 si es
+negativa) y responde `PaginaResponse<ApartamentoResponse>` de 10 en 10, como los demás listados. Las reglas de
+disponibilidad no cambian: se decide la disponibilidad primero y después se pagina. Lo prueba
+`CanalExternoControllerIntegracionTest#disponibilidadPaginada`, y en `sga.http` la petición 4.4.
+
+## 13. Pendiente para el corte 4
+
+Lo siguiente **no se implementa en esta entrega**:
+
+- **Usuarios y seguridad con JWT (7.2).** Registro, inicio de sesión y roles. Hoy todos los endpoints están abiertos:
+  las restricciones por actor se documentan en los casos de uso pero no se aplican. Por ejemplo, CU-07 (autorizar el
+  cierre del folio con saldo), CU-21 (retirar un apartamento) y poner fuera de servicio un apartamento corresponden
+  solo al administrador. Entrará como adaptador de infraestructura (filtro de Spring Security y configuración de
+  roles), sin tocar el dominio ni los casos de uso.
+- **Imágenes en un servicio externo.** Hoy un apartamento guarda las URL de sus imágenes (de 1 a 10, una principal,
+  7.3) pero el SGA no las sube ni las almacena.
+- **Notificaciones** al titular (confirmación, cancelación, vencimiento del plazo, recordatorios).
+- **El componente de IA.**
+- **Reportes** de ocupación e ingresos.
+- **Gestión de canales.** Hoy el canal externo es un adaptador de entrada (disponibilidad, recibir y cancelar
+  reservas); falta administrar los canales y su configuración.
