@@ -790,12 +790,7 @@ PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
 %}
 
 ### 5.19 CU-16 El personal de servicio inicia la preparación: PENDIENTE_PREPARACION → EN_PREPARACION
-PUT {{host}}/api/apartamentos/APT-301/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "EN_PREPARACION"
-}
+PUT {{host}}/api/apartamentos/APT-301/iniciar-preparacion
 
 > {%
     client.test("5.19 200 EN_PREPARACION", function () {
@@ -804,12 +799,7 @@ Content-Type: application/json
 %}
 
 ### 5.20 CU-16 Termina la preparación: EN_PREPARACION → PREPARADO
-PUT {{host}}/api/apartamentos/APT-301/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "PREPARADO"
-}
+PUT {{host}}/api/apartamentos/APT-301/terminar-preparacion
 
 > {%
     client.test("5.20 200 PREPARADO", function () {
@@ -827,12 +817,7 @@ PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
 %}
 
 ### 5.22 7.6 Transición de estado operativo no permitida: PREPARADO → EN_PREPARACION (APT-102)
-PUT {{host}}/api/apartamentos/APT-102/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "EN_PREPARACION"
-}
+PUT {{host}}/api/apartamentos/APT-102/iniciar-preparacion
 
 > {%
     client.test("5.22 409 7.6", function () {
@@ -1193,16 +1178,18 @@ Content-Type: application/json
     });
 %}
 
-### 7.6 400 Enum inexistente en el cuerpo: estado operativo LIMPIO
-PUT {{host}}/api/apartamentos/APT-101/estado-operativo
+### 7.6 400 Enum inexistente en el cuerpo: gravedad de novedad CRITICA
+POST {{host}}/api/apartamentos/APT-101/novedades
 Content-Type: application/json
 
 {
-  "nuevoEstado": "LIMPIO"
+  "autor": "Personal de servicio",
+  "descripcion": "Gotera en el baño",
+  "gravedad": "CRITICA"
 }
 
 > {%
-    client.test("7.6 400 enum estado operativo", function () {
+    client.test("7.6 400 enum gravedad de novedad", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
 %}

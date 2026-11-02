@@ -529,6 +529,10 @@ paths:
       responses:
         '201':
           description: Bloqueo registrado
+          headers:
+            Location:
+              description: URL del bloqueo creado, por ejemplo /api/apartamentos/APT-301/bloqueos/{idBloqueo}
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -540,37 +544,114 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
-  /api/apartamentos/{id}/estado-operativo:
+  /api/apartamentos/{id}/iniciar-preparacion:
     parameters:
       - $ref: '#/components/parameters/IdApartamento'
     put:
       tags: [Apartamentos]
-      summary: Cambiar el estado operativo (CU-16)
+      summary: Iniciar la preparación (CU-16)
       description: |
-        Solo por las transiciones permitidas (7.6). FUERA_DE_SERVICIO lo decide el administrador.
-        Mapea a `CambiarEstadoOperativoUseCase`.
-      operationId: cambiarEstadoOperativo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CambiarEstadoOperativoRequest'
-            example:
-              nuevoEstado: EN_PREPARACION
+        El personal de servicio empieza a preparar el apartamento: PENDIENTE_PREPARACION → EN_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.iniciarPreparacion`.
+      operationId: iniciarPreparacion
       responses:
         '200':
-          description: Estado cambiado
+          description: Apartamento EN_PREPARACION
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApartamentoResponse'
-        '400':
-          $ref: '#/components/responses/DatosInvalidos'
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          $ref: '#/components/responses/ReglaDeNegocio'
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/terminar-preparacion:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Terminar la preparación (CU-16)
+      description: |
+        El apartamento queda listo para recibir un grupo: EN_PREPARACION → PREPARADO.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.terminarPreparacion`.
+      operationId: terminarPreparacion
+      responses:
+        '200':
+          description: Apartamento PREPARADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/poner-fuera-de-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Poner fuera de servicio (CU-16)
+      description: |
+        Decisión del administrador desde cualquier estado no ocupado → FUERA_DE_SERVICIO. No bloquea la venta
+        futura; para eso se registra un bloqueo (3.3).
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.ponerFueraDeServicio`.
+      operationId: ponerFueraDeServicio
+      responses:
+        '200':
+          description: Apartamento FUERA_DE_SERVICIO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/restablecer-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Restablecer el servicio (CU-16)
+      description: |
+        El apartamento vuelve al servicio y debe prepararse: FUERA_DE_SERVICIO → PENDIENTE_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.restablecerServicio`.
+      operationId: restablecerServicio
+      responses:
+        '200':
+          description: Apartamento PENDIENTE_PREPARACION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/apartamentos/{id}/novedades:
     parameters:
@@ -593,6 +674,10 @@ paths:
       responses:
         '201':
           description: Novedad registrada
+          headers:
+            Location:
+              description: URL de la novedad creada, por ejemplo /api/apartamentos/APT-201/novedades/{idNovedad}
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -1326,12 +1411,6 @@ components:
         fechaInicio: { type: string, format: date }
         fechaFin: { type: string, format: date, description: Primera noche que ya no queda bloqueada }
         motivo: { type: string }
-
-    CambiarEstadoOperativoRequest:
-      type: object
-      required: [ nuevoEstado ]
-      properties:
-        nuevoEstado: { $ref: '#/components/schemas/EstadoOperativo' }
 
     RegistrarNovedadRequest:
       type: object

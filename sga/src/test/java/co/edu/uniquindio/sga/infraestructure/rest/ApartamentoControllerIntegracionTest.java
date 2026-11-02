@@ -65,10 +65,13 @@ class ApartamentoControllerIntegracionTest {
 
         String bloqueo = "{\"fechaInicio\":\"" + inicio + "\",\"fechaFin\":\"" + inicio.plusDays(2)
                 + "\",\"motivo\":\"Mantenimiento de la piscina\"}";
-        post("/api/apartamentos/APT-301/bloqueos", bloqueo)
+        ResultActions creado = post("/api/apartamentos/APT-301/bloqueos", bloqueo)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.identificacionApartamento").value("APT-301"))
                 .andExpect(jsonPath("$.vigente").value(true));
+        // 201 con Location: apunta al bloqueo creado
+        String idBloqueo = JsonPath.read(creado.andReturn().getResponse().getContentAsString(), "$.id");
+        creado.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-301/bloqueos/" + idBloqueo)));
 
         get(disponibles)
                 .andExpect(status().isOk())
@@ -92,34 +95,35 @@ class ApartamentoControllerIntegracionTest {
     @Test
     @DisplayName("Ciclo de preparación: fuera de servicio, pendiente, en preparación y preparado (7.6)")
     void cicloDeEstadoOperativo() throws Exception {
-        cambiarEstado("APT-301", "FUERA_DE_SERVICIO").andExpect(status().isOk())
+        operacionEstado("APT-301", "poner-fuera-de-servicio").andExpect(status().isOk())
                 .andExpect(jsonPath("$.estadoOperativo").value("FUERA_DE_SERVICIO"));
         // 7.6: de FUERA_DE_SERVICIO no se salta directo a PREPARADO
-        cambiarEstado("APT-301", "PREPARADO")
+        operacionEstado("APT-301", "terminar-preparacion")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("7.6")));
-        cambiarEstado("APT-301", "PENDIENTE_PREPARACION").andExpect(status().isOk());
-        cambiarEstado("APT-301", "EN_PREPARACION").andExpect(status().isOk());
-        cambiarEstado("APT-301", "PREPARADO").andExpect(status().isOk())
+        operacionEstado("APT-301", "restablecer-servicio").andExpect(status().isOk());
+        operacionEstado("APT-301", "iniciar-preparacion").andExpect(status().isOk());
+        operacionEstado("APT-301", "terminar-preparacion").andExpect(status().isOk())
                 .andExpect(jsonPath("$.estadoOperativo").value("PREPARADO"));
     }
 
     @Test
-    @DisplayName("Novedad registrada con autor, descripción y gravedad (7.6)")
+    @DisplayName("Novedad registrada con autor, descripción y gravedad; 201 con Location (7.6)")
     void registrarNovedad() throws Exception {
-        post("/api/apartamentos/APT-201/novedades",
+        ResultActions creada = post("/api/apartamentos/APT-201/novedades",
                 "{\"autor\":\"Camarera Luz\",\"descripcion\":\"Falta una toalla de piscina\",\"gravedad\":\"BAJA\"}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.identificacionApartamento").value("APT-201"))
                 .andExpect(jsonPath("$.gravedad").value("BAJA"))
                 .andExpect(jsonPath("$.fechaAtencion").isEmpty());
+        String idNovedad = JsonPath.read(creada.andReturn().getResponse().getContentAsString(), "$.id");
+        creada.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-201/novedades/" + idNovedad)));
     }
 
     @Test
-    @DisplayName("400: falta un parámetro de la búsqueda o un estado que no existe")
+    @DisplayName("400: falta un parámetro de la búsqueda o un dato de la novedad")
     void datosMalEscritosResponden400() throws Exception {
         get("/api/apartamentos/disponibles?entrada=2026-12-01&salida=2026-12-03").andExpect(status().isBadRequest());
-        cambiarEstado("APT-201", "LIMPIO").andExpect(status().isBadRequest());
         post("/api/apartamentos/APT-201/novedades", "{\"autor\":\"Luz\",\"gravedad\":\"ALTA\"}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errores.descripcion").exists());
@@ -128,7 +132,10 @@ class ApartamentoControllerIntegracionTest {
     @Test
     @DisplayName("404: el apartamento no existe")
     void apartamentoInexistenteResponde404() throws Exception {
-        cambiarEstado("APT-999", "FUERA_DE_SERVICIO").andExpect(status().isNotFound());
+        for (String operacion : List.of("iniciar-preparacion", "terminar-preparacion", "poner-fuera-de-servicio",
+                "restablecer-servicio")) {
+            operacionEstado("APT-999", operacion).andExpect(status().isNotFound());
+        }
         post("/api/apartamentos/APT-999/bloqueos",
                 "{\"fechaInicio\":\"2027-03-01\",\"fechaFin\":\"2027-03-03\",\"motivo\":\"Pintura\"}")
                 .andExpect(status().isNotFound());
@@ -519,8 +526,9 @@ class ApartamentoControllerIntegracionTest {
                 + "&ocupantes=" + ocupantes + filtros;
     }
 
-    private ResultActions cambiarEstado(String apartamento, String estado) throws Exception {
-        return put("/api/apartamentos/" + apartamento + "/estado-operativo", "{\"nuevoEstado\":\"" + estado + "\"}");
+    /** CU-16: operación de estado operativo sin cuerpo, por ejemplo iniciar-preparacion (7.6). */
+    private ResultActions operacionEstado(String apartamento, String operacion) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders.put("/api/apartamentos/" + apartamento + "/" + operacion));
     }
 
     private static String reserva(String apartamento, LocalDate entrada, LocalDate salida) {

@@ -43,20 +43,20 @@ class OperacionReservaControllerIntegracionTest {
         // RN-11: si el apartamento no está PREPARADO no recibe al grupo. Los datos iniciales (12.3) lo dejan
         // FUERA_DE_SERVICIO, así que el personal debe prepararlo antes de la llegada.
         llegada(codigo).andExpect(status().isConflict()).andExpect(jsonPath("$.mensaje", startsWith("RN-11")));
-        cambiarEstado("APT-202", "PENDIENTE_PREPARACION").andExpect(status().isOk());
-        cambiarEstado("APT-202", "EN_PREPARACION").andExpect(status().isOk());
-        cambiarEstado("APT-202", "PREPARADO").andExpect(status().isOk());
+        operacionEstado("APT-202", "restablecer-servicio").andExpect(status().isOk());
+        operacionEstado("APT-202", "iniciar-preparacion").andExpect(status().isOk());
+        operacionEstado("APT-202", "terminar-preparacion").andExpect(status().isOk());
 
         llegada(codigo).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("EN_CURSO"));
         // El apartamento quedó OCUPADO: no se puede sacar de servicio con huéspedes adentro (7.6)
-        cambiarEstado("APT-202", "FUERA_DE_SERVICIO").andExpect(status().isConflict());
+        operacionEstado("APT-202", "poner-fuera-de-servicio").andExpect(status().isConflict());
 
         post("/api/reservas/" + codigo + "/folio/pagos", pago(reserva.saldo())).andExpect(status().isCreated());
         salida(codigo).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("FINALIZADA"));
 
         // Tras la salida el apartamento pasa a PENDIENTE_PREPARACION, y el personal lo deja listo otra vez
-        cambiarEstado("APT-202", "EN_PREPARACION").andExpect(status().isOk());
-        cambiarEstado("APT-202", "PREPARADO").andExpect(status().isOk())
+        operacionEstado("APT-202", "iniciar-preparacion").andExpect(status().isOk());
+        operacionEstado("APT-202", "terminar-preparacion").andExpect(status().isOk())
                 .andExpect(jsonPath("$.estadoOperativo").value("PREPARADO"));
     }
 
@@ -104,8 +104,9 @@ class OperacionReservaControllerIntegracionTest {
         return put("/api/reservas/" + codigo + "/registrar-salida", null);
     }
 
-    private ResultActions cambiarEstado(String apartamento, String estado) throws Exception {
-        return put("/api/apartamentos/" + apartamento + "/estado-operativo", "{\"nuevoEstado\":\"" + estado + "\"}");
+    /** CU-16: operación de estado operativo sin cuerpo, por ejemplo iniciar-preparacion (7.6). */
+    private ResultActions operacionEstado(String apartamento, String operacion) throws Exception {
+        return put("/api/apartamentos/" + apartamento + "/" + operacion, null);
     }
 
     private static String reserva(String apartamento, LocalDate entrada, LocalDate salida) {
