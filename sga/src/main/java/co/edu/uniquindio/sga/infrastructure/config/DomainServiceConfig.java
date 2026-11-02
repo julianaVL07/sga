@@ -15,6 +15,7 @@ import co.edu.uniquindio.sga.domain.service.ConciliacionCanalExternoService;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
 import co.edu.uniquindio.sga.domain.service.CotizadorEstanciaService;
 import co.edu.uniquindio.sga.domain.service.CreacionReservaService;
+import co.edu.uniquindio.sga.domain.service.CreacionTemporadaService;
 import co.edu.uniquindio.sga.domain.service.DeclararNoShowService;
 import co.edu.uniquindio.sga.domain.service.DisponibilidadApartamentoService;
 import co.edu.uniquindio.sga.domain.service.EntregaApartamentoService;
@@ -35,7 +36,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 /**
- * Construye los 15 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 16 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -65,6 +66,13 @@ public class DomainServiceConfig {
     @Bean
     public PoliticaCancelacion politicaVigente(PoliticaCancelacionProperties propiedades) {
         return propiedades.aPolitica();
+    }
+
+    /** CU-29 (7.4): crea la temporada y asigna la tarifa de cada apartamento activo en una sola operación. */
+    @Bean
+    public CreacionTemporadaService creacionTemporadaService(AlojamientoRepository alojamientos,
+                                                             ApartamentoRepository apartamentos) {
+        return new CreacionTemporadaService(alojamientos, apartamentos);
     }
 
     /** 7.5: recibe el cotizador para estimar el valor de la estancia y filtrar por precio. */
