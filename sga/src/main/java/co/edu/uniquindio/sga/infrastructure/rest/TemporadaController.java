@@ -51,6 +51,17 @@ public class TemporadaController {
         return ResponseEntity.ok(PaginaMapper.aResponse(temporadas, mapper::aTemporadaResponse));
     }
 
+    /** CU-29. GET /api/temporadas/{id} */
+    @GetMapping("/{id}")
+    @Operation(summary = "Consultar una temporada",
+            description = "La temporada con sus rangos de fechas (fecha final excluida). Es el recurso al que apunta "
+                    + "la cabecera Location al crearla o al agregarle un rango")
+    @ApiResponse(responseCode = "200", description = "La temporada")
+    @ApiResponse(responseCode = "404", description = "No existe la temporada")
+    public ResponseEntity<TemporadaResponse> consultar(@PathVariable String id) {
+        return ResponseEntity.ok(mapper.aTemporadaResponse(temporadasUseCase.consultar(id)));
+    }
+
     /** CU-29. POST /api/temporadas */
     @PostMapping
     @Operation(summary = "Crear una temporada",
