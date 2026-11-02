@@ -15,7 +15,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +23,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
 
 /**
  * Adaptador REST de las temporadas (Guía 08): CU-29. {id} es el id de la temporada, por ejemplo T-ALTA.
@@ -67,13 +69,13 @@ public class TemporadaController {
     @Operation(summary = "Crear una temporada",
             description = "Crea la temporada con sus rangos y asigna en la misma operación la tarifa de cada "
                     + "apartamento activo, que queda en su histórico desde hoy (7.4, CU-24)")
-    @ApiResponse(responseCode = "201", description = "Temporada creada")
+    @ApiResponse(responseCode = "201", description = "Temporada creada; Location apunta a la temporada")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o tipo de temporada inexistente")
     @ApiResponse(responseCode = "409", description = "Falta la tarifa de un apartamento activo, la temporada se "
             + "solapa con otra o ya hay una temporada base (7.4, F-05)")
     public ResponseEntity<TemporadaResponse> crear(@Valid @RequestBody CrearTemporadaRequest request) {
         Temporada temporada = temporadasUseCase.crear(mapper.aSolicitud(request));
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapper.aTemporadaResponse(temporada));
+        return ResponseEntity.created(ubicacion(temporada)).body(mapper.aTemporadaResponse(temporada));
     }
 
     /** CU-29. POST /api/temporadas/{id}/rangos */
@@ -81,7 +83,8 @@ public class TemporadaController {
     @Operation(summary = "Agregar un rango a una temporada",
             description = "El rango (fecha final excluida) no puede solaparse con otra temporada ni con los rangos "
                     + "de la misma; la temporada base no tiene rangos (7.4, F-05)")
-    @ApiResponse(responseCode = "201", description = "Rango agregado; devuelve la temporada con todos sus rangos")
+    @ApiResponse(responseCode = "201", description = "Rango agregado; devuelve la temporada con todos sus rangos y "
+            + "Location apunta a la temporada")
     @ApiResponse(responseCode = "400", description = "Falta una fecha o está mal escrita")
     @ApiResponse(responseCode = "404", description = "No existe la temporada")
     @ApiResponse(responseCode = "409", description = "El rango se solapa, está invertido o la temporada es la base "
@@ -89,6 +92,14 @@ public class TemporadaController {
     public ResponseEntity<TemporadaResponse> agregarRango(@PathVariable String id,
                                                           @Valid @RequestBody RangoFechasRequest request) {
         Temporada temporada = temporadasUseCase.agregarRango(id, mapper.aRango(request));
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapper.aTemporadaResponse(temporada));
+        return ResponseEntity.created(ubicacion(temporada)).body(mapper.aTemporadaResponse(temporada));
+    }
+
+    /** Location de una temporada: /api/temporadas/{id}, que atiende consultar. */
+    private static URI ubicacion(Temporada temporada) {
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/temporadas/{id}")
+                .buildAndExpand(temporada.getId())
+                .toUri();
     }
 }
