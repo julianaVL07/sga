@@ -65,10 +65,13 @@ class ApartamentoControllerIntegracionTest {
 
         String bloqueo = "{\"fechaInicio\":\"" + inicio + "\",\"fechaFin\":\"" + inicio.plusDays(2)
                 + "\",\"motivo\":\"Mantenimiento de la piscina\"}";
-        post("/api/apartamentos/APT-301/bloqueos", bloqueo)
+        ResultActions creado = post("/api/apartamentos/APT-301/bloqueos", bloqueo)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.identificacionApartamento").value("APT-301"))
                 .andExpect(jsonPath("$.vigente").value(true));
+        // 201 con Location: apunta al bloqueo creado
+        String idBloqueo = JsonPath.read(creado.andReturn().getResponse().getContentAsString(), "$.id");
+        creado.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-301/bloqueos/" + idBloqueo)));
 
         get(disponibles)
                 .andExpect(status().isOk())
@@ -105,14 +108,16 @@ class ApartamentoControllerIntegracionTest {
     }
 
     @Test
-    @DisplayName("Novedad registrada con autor, descripción y gravedad (7.6)")
+    @DisplayName("Novedad registrada con autor, descripción y gravedad; 201 con Location (7.6)")
     void registrarNovedad() throws Exception {
-        post("/api/apartamentos/APT-201/novedades",
+        ResultActions creada = post("/api/apartamentos/APT-201/novedades",
                 "{\"autor\":\"Camarera Luz\",\"descripcion\":\"Falta una toalla de piscina\",\"gravedad\":\"BAJA\"}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.identificacionApartamento").value("APT-201"))
                 .andExpect(jsonPath("$.gravedad").value("BAJA"))
                 .andExpect(jsonPath("$.fechaAtencion").isEmpty());
+        String idNovedad = JsonPath.read(creada.andReturn().getResponse().getContentAsString(), "$.id");
+        creada.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-201/novedades/" + idNovedad)));
     }
 
     @Test

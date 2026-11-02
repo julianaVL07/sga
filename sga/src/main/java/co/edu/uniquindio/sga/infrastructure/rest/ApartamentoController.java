@@ -43,7 +43,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -152,7 +151,7 @@ public class ApartamentoController {
     @Operation(summary = "Registrar un bloqueo",
             description = "Retira el apartamento de la venta en un rango de fechas; se rechaza si hay reservas "
                     + "activas en esas noches (7.3, RN-01)")
-    @ApiResponse(responseCode = "201", description = "Bloqueo registrado")
+    @ApiResponse(responseCode = "201", description = "Bloqueo registrado; Location apunta al bloqueo creado")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Rango inválido o noches con reservas activas")
@@ -160,7 +159,11 @@ public class ApartamentoController {
                                                             @Valid @RequestBody RegistrarBloqueoRequest request) {
         Bloqueo bloqueo = registrarBloqueoUseCase.ejecutar(new IdentificacionApartamento(id),
                 request.fechaInicio(), request.fechaFin(), request.motivo());
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapper.aBloqueoResponse(bloqueo));
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{idBloqueo}")
+                .buildAndExpand(bloqueo.getId())
+                .toUri();
+        return ResponseEntity.created(location).body(mapper.aBloqueoResponse(bloqueo));
     }
 
     // ==================== CU-16: estado operativo (7.6), una operación por transición ====================
@@ -220,14 +223,18 @@ public class ApartamentoController {
     @PostMapping("/{id}/novedades")
     @Operation(summary = "Registrar una novedad",
             description = "Daño, faltante o incidencia del apartamento con autor, descripción y gravedad (7.6)")
-    @ApiResponse(responseCode = "201", description = "Novedad registrada")
+    @ApiResponse(responseCode = "201", description = "Novedad registrada; Location apunta a la novedad creada")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     public ResponseEntity<NovedadResponse> registrarNovedad(@PathVariable String id,
                                                             @Valid @RequestBody RegistrarNovedadRequest request) {
         Novedad novedad = registrarNovedadUseCase.ejecutar(new IdentificacionApartamento(id),
                 request.autor(), request.descripcion(), request.gravedad());
-        return ResponseEntity.status(HttpStatus.CREATED).body(mapper.aNovedadResponse(novedad));
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{idNovedad}")
+                .buildAndExpand(novedad.getId())
+                .toUri();
+        return ResponseEntity.created(location).body(mapper.aNovedadResponse(novedad));
     }
 
     // ==================== CU-22 a CU-25: administración y tarifas (7.3, 7.4) ====================
