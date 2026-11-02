@@ -1430,6 +1430,96 @@ paths:
         '400':
           $ref: '#/components/responses/DatosInvalidos'
 
+  # ==================== FOLIO: CARGOS Y CORRECCIONES (7.1, RN-16) ====================
+
+  /api/reservas/{codigo}/folio/cargos:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar el cargo de un servicio adicional (7.1)
+      description: |
+        Asienta en el folio el cargo de un servicio adicional del alojamiento (L-17), con el nombre y el valor del
+        servicio y la fecha de hoy. El cargo lo genera `ServicioAdicional.generarCargoPara`: el servicio debe existir
+        en el alojamiento, estar activo y generar cargo, y el folio debe estar abierto. El cargo no se edita ni se
+        borra; se corrige con un movimiento inverso (RN-16). Mapea a `RegistrarCargoServicioUseCase`.
+      operationId: registrarCargoServicio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarCargoServicioRequest'
+            example:
+              idServicio: SRV-CENA-BALCON
+      responses:
+        '201':
+          description: Cargo registrado; devuelve el folio con el nuevo saldo
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: |
+            El alojamiento no ofrece el servicio, no está activo o no genera cargo (L-17), o el folio está cerrado
+            (RN-16)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/reservas/{codigo}/folio/correcciones:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar una corrección (RN-16)
+      description: |
+        Toda corrección es un movimiento inverso: el cargo original no se edita ni se borra, y
+        `Folio.registrarMovimientoInverso` asienta un cargo del mismo tipo con el valor opuesto, el motivo y la fecha
+        de hoy. El cargo se identifica por su posición en la lista `cargos` de `FolioResponse`, contando desde 0
+        (en un folio nuevo, 0 es el alojamiento y 1 el depósito de garantía). Mapea a
+        `RegistrarCorreccionFolioUseCase`.
+      operationId: registrarCorreccionFolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarCorreccionRequest'
+            example:
+              indiceCargo: 2
+              motivo: La cena no se consumió
+      responses:
+        '201':
+          description: Corrección registrada; devuelve el folio con el saldo corregido
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: No hay un cargo en esa posición o el folio está cerrado (RN-16)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
 
   parameters:
@@ -2208,3 +2298,18 @@ components:
         tamano: { type: integer, example: 10 }
         totalElementos: { type: integer, format: int64 }
         totalPaginas: { type: integer }
+
+    # ---------- Folio: cargos y correcciones (7.1, RN-16) ----------
+
+    RegistrarCargoServicioRequest:
+      type: object
+      required: [ idServicio ]
+      properties:
+        idServicio: { type: string, example: SRV-CENA-BALCON, description: Id de un servicio adicional del alojamiento (L-17) }
+
+    RegistrarCorreccionRequest:
+      type: object
+      required: [ indiceCargo, motivo ]
+      properties:
+        indiceCargo: { type: integer, example: 2, description: 'Posición del cargo en la lista cargos del folio, desde 0; si no existe, 409 (RN-16)' }
+        motivo: { type: string, example: La cena no se consumió }

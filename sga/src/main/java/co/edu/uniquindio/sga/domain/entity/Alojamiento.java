@@ -320,6 +320,13 @@ public class Alojamiento {
         return serviciosAdicionales.stream().filter(s -> s.getId().equals(idServicio)).findFirst();
     }
 
+    /** L-17: solo se cobran los servicios adicionales que ofrece el alojamiento. */
+    public ServicioAdicional obtenerServicioAdicional(String idServicio) {
+        return buscarServicioAdicional(idServicio)
+                .orElseThrow(() -> new ReglaDominioException("L-17: El alojamiento no ofrece el servicio adicional "
+                        + idServicio));
+    }
+
     // ---------------------------------------------------------------- Getters
 
     public String getId() { return id; }

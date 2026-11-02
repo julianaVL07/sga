@@ -106,6 +106,17 @@ public class Folio {
     }
 
     /**
+     * RN-16: el cargo registrado en esa posición del folio, contando desde 0 en el orden en que se asentaron (es la
+     * misma posición de la lista de cargos que ve el cliente). Sirve para identificar el cargo que se va a corregir.
+     */
+    public Cargo cargoEn(int posicion) {
+        if (posicion < 0 || posicion >= cargos.size()) {
+            throw new ReglaDominioException("RN-16: El folio " + id + " no tiene un cargo en la posición " + posicion);
+        }
+        return cargos.get(posicion);
+    }
+
+    /**
      * RN-16: una corrección no edita el cargo original, registra un cargo del mismo tipo con valor opuesto.
      */
     public void registrarMovimientoInverso(Cargo cargoACorregir, String motivo, LocalDate fecha) {

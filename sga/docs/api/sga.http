@@ -2293,3 +2293,184 @@ Content-Type: application/json
         client.assert(response.body.mensaje.indexOf("L-10") === 0, "Se esperaba L-10: " + response.body.mensaje);
     });
 %}
+
+### Sección 12: FOLIO: CARGOS DE SERVICIOS ADICIONALES Y CORRECCIONES (7.1, L-17, RN-16)
+
+# ====================================================================================================
+# 12. Registrar cargos y correcciones en el folio (recepcionista)
+#     Reserva propia de APT-201 de hoy+140 a hoy+142, que no choca con ninguna otra del archivo. En un folio
+#     nuevo la posición 0 es el alojamiento y la 1 el depósito de garantía (RP-02); el cargo de la cena queda
+#     en la posición 2 y su corrección en la 3. Corre con la app recién arrancada, sola o después del
+#     recorrido completo.
+# ====================================================================================================
+
+### 12.0 Fechas de la sección
+GET {{host}}/api/apartamentos
+
+> {%
+    client.test("12.0 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("cu12Entrada", fecha(140));
+    client.global.set("cu12Salida", fecha(142));
+%}
+
+### 12.1 CU-03 Reserva de APT-201 para registrar cargos en su folio
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-201",
+  "fechaEntrada": "{{cu12Entrada}}",
+  "fechaSalida": "{{cu12Salida}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "DIRECTO",
+  "titular": {
+    "nombre": "Daniela Torres",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1094300600",
+    "email": "daniela.torres@correo.co",
+    "telefono": "3005551010"
+  },
+  "ocupantes": [
+    { "nombre": "Daniela Torres", "tipoDocumento": "CC", "numeroDocumento": "1094300600", "fechaNacimiento": "1991-07-09" }
+  ]
+}
+
+> {%
+    client.test("12.1 201 reserva creada", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+    });
+    client.global.set("cu12Codigo", response.body.codigo);
+%}
+
+### 12.2 7.1 Registrar el cargo de la cena en el balcón (L-17): 201 con Location al folio
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/cargos
+Content-Type: application/json
+
+{ "idServicio": "SRV-CENA-BALCON" }
+
+> {%
+    client.test("12.2 201 cargo de servicio adicional", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        var location = response.headers.valueOf("Location");
+        client.assert(location != null && location.indexOf("/api/reservas/" + client.global.get("cu12Codigo") + "/folio") >= 0,
+            "Location debía apuntar al folio: " + location);
+        client.assert(response.body.cargos.length === 3, "Se esperaban 3 cargos (alojamiento, depósito y cena)");
+        client.assert(response.body.cargos[2].tipo === "SERVICIO_ADICIONAL", "El cargo debía ser SERVICIO_ADICIONAL");
+        client.assert(response.body.cargos[2].valor === 260000, "La cena vale 260.000");
+    });
+    client.global.set("cu12SaldoConCena", response.body.saldo);
+%}
+
+### 12.3 409 L-17 El alojamiento no ofrece ese servicio adicional
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/cargos
+Content-Type: application/json
+
+{ "idServicio": "SRV-SPA" }
+
+> {%
+    client.test("12.3 409 L-17 servicio inexistente", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("L-17") === 0, "Se esperaba L-17: " + response.body.mensaje);
+    });
+%}
+
+### 12.4 404 Cargo al folio de una reserva inexistente
+POST {{host}}/api/reservas/RES-2026-99999/folio/cargos
+Content-Type: application/json
+
+{ "idServicio": "SRV-CENA-BALCON" }
+
+> {%
+    client.test("12.4 404 reserva inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 12.5 RN-16 Corregir el cargo de la cena (posición 2): movimiento inverso, 201 con Location al folio
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/correcciones
+Content-Type: application/json
+
+{ "indiceCargo": 2, "motivo": "La cena no se consumió" }
+
+> {%
+    client.test("12.5 201 corrección por movimiento inverso", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.headers.valueOf("Location") != null, "Falta la cabecera Location");
+        client.assert(response.body.cargos.length === 4, "Se esperaban 4 cargos");
+        client.assert(response.body.cargos[2].valor === 260000, "El cargo original no se edita (RN-16)");
+        client.assert(response.body.cargos[3].valor === -260000, "La corrección debía ser -260.000");
+        client.assert(response.body.saldo === client.global.get("cu12SaldoConCena") - 260000,
+            "El saldo debía bajar 260.000");
+    });
+%}
+
+### 12.6 409 RN-16 No hay un cargo en la posición 99
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/correcciones
+Content-Type: application/json
+
+{ "indiceCargo": 99, "motivo": "Cargo inexistente" }
+
+> {%
+    client.test("12.6 409 RN-16 cargo inexistente", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
+    });
+%}
+
+### 12.7 404 Corrección en el folio de una reserva inexistente
+POST {{host}}/api/reservas/RES-2026-99999/folio/correcciones
+Content-Type: application/json
+
+{ "indiceCargo": 0, "motivo": "Reserva inexistente" }
+
+> {%
+    client.test("12.7 404 reserva inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 12.8 CU-07 El administrador cierra el folio con saldo (RN-17) para probar los 409 de un folio cerrado
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/autorizacion-cierre
+Content-Type: application/json
+
+{ "autorizadoPor": "Administradora Marta", "motivo": "El titular paga directamente al llegar" }
+
+> {%
+    client.test("12.8 200 folio cerrado con autorización", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.cerrado === true, "El folio debía quedar cerrado");
+    });
+%}
+
+### 12.9 409 RN-16 Un folio cerrado no admite cargos
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/cargos
+Content-Type: application/json
+
+{ "idServicio": "SRV-PASEO-BAHIA" }
+
+> {%
+    client.test("12.9 409 RN-16 cargo en folio cerrado", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
+    });
+%}
+
+### 12.10 409 RN-16 Un folio cerrado no admite correcciones
+POST {{host}}/api/reservas/{{cu12Codigo}}/folio/correcciones
+Content-Type: application/json
+
+{ "indiceCargo": 0, "motivo": "Corrección tardía" }
+
+> {%
+    client.test("12.10 409 RN-16 corrección en folio cerrado", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
+    });
+%}
