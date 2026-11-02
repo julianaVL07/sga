@@ -7,6 +7,7 @@ import co.edu.uniquindio.sga.domain.valueobject.EstanciaMinima;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.PlazoConfirmacion;
+import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
 import co.edu.uniquindio.sga.domain.valueobject.RegistroLlegadaNocturna;
 import co.edu.uniquindio.sga.domain.valueobject.TiempoPreparacion;
 import co.edu.uniquindio.sga.domain.valueobject.UmbralEdadFacturable;
@@ -230,6 +231,28 @@ public class Alojamiento {
                             + " se solapa con " + existente.getNombre());
                 });
         temporadas.add(nuevaTemporada);
+    }
+
+    /**
+     * CU-29 (7.4): agrega un rango a una temporada existente. El rango no puede solaparse con otra temporada; que no
+     * se solape con los rangos de la misma temporada y que la base no tenga rangos lo valida Temporada.agregarRango.
+     */
+    public void agregarRangoATemporada(String idTemporada, RangoFechas rango) {
+        requerido(rango, "El rango es obligatorio");
+        Temporada temporada = buscarTemporada(idTemporada)
+                .orElseThrow(() -> new ReglaDominioException("7.4: No existe la temporada " + idTemporada));
+        temporadas.stream()
+                .filter(otra -> !otra.equals(temporada) && otra.seSolapaCon(rango))
+                .findFirst()
+                .ifPresent(otra -> {
+                    throw new ReglaDominioException("7.4: El rango " + rango.fechaInicio() + " a " + rango.fechaFin()
+                            + " se solapa con la temporada " + otra.getNombre());
+                });
+        temporada.agregarRango(rango);
+    }
+
+    public Optional<Temporada> buscarTemporada(String idTemporada) {
+        return temporadas.stream().filter(t -> t.getId().equals(idTemporada)).findFirst();
     }
 
     /**

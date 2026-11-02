@@ -6,6 +6,7 @@ import co.edu.uniquindio.sga.domain.repository.BloqueoRepository;
 import co.edu.uniquindio.sga.domain.repository.ConflictoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.EventoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
+import co.edu.uniquindio.sga.domain.repository.PoliticaCancelacionRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.repository.ServicioAdicionalRepository;
 import co.edu.uniquindio.sga.domain.service.AdministracionApartamentoService;
@@ -15,17 +16,18 @@ import co.edu.uniquindio.sga.domain.service.ConciliacionCanalExternoService;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
 import co.edu.uniquindio.sga.domain.service.CotizadorEstanciaService;
 import co.edu.uniquindio.sga.domain.service.CreacionReservaService;
+import co.edu.uniquindio.sga.domain.service.CreacionTemporadaService;
 import co.edu.uniquindio.sga.domain.service.DeclararNoShowService;
 import co.edu.uniquindio.sga.domain.service.DisponibilidadApartamentoService;
 import co.edu.uniquindio.sga.domain.service.EntregaApartamentoService;
 import co.edu.uniquindio.sga.domain.service.LiquidacionSalidaService;
 import co.edu.uniquindio.sga.domain.service.ModificacionReservaService;
+import co.edu.uniquindio.sga.domain.service.PoliticaCancelacionService;
 import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
 import co.edu.uniquindio.sga.domain.service.RetiroApartamentoService;
 import co.edu.uniquindio.sga.domain.service.VencimientoReservasService;
 import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
-import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +37,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 /**
- * Construye los 15 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 17 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -58,13 +60,20 @@ public class DomainServiceConfig {
     }
 
     /**
-     * RN-22: política de cancelación vigente que se congela en cada reserva nueva. Versión, vigencia, consecuencia
-     * del no-show y tramos (A.4) salen de sga.politica-cancelacion.* (L-13: configuración, nunca constante).
-     * L-10 (al menos dos tramos y uno desde 0 días) lo valida PoliticaCancelacion al construirse.
+     * CU-30 y RN-22: política de cancelación versionada. La vigente se lee del repositorio en cada reserva nueva;
+     * la versión 1 sale de sga.politica-cancelacion.* y la guarda DatosInicialesPoliticaCancelacionConfig al
+     * arrancar si aún no hay ninguna.
      */
     @Bean
-    public PoliticaCancelacion politicaVigente(PoliticaCancelacionProperties propiedades) {
-        return propiedades.aPolitica();
+    public PoliticaCancelacionService politicaCancelacionService(PoliticaCancelacionRepository politicas) {
+        return new PoliticaCancelacionService(politicas);
+    }
+
+    /** CU-29 (7.4): crea la temporada y asigna la tarifa de cada apartamento activo en una sola operación. */
+    @Bean
+    public CreacionTemporadaService creacionTemporadaService(AlojamientoRepository alojamientos,
+                                                             ApartamentoRepository apartamentos) {
+        return new CreacionTemporadaService(alojamientos, apartamentos);
     }
 
     /** 7.5: recibe el cotizador para estimar el valor de la estancia y filtrar por precio. */
@@ -172,8 +181,8 @@ public class DomainServiceConfig {
             ReservaRepository reservas, ApartamentoRepository apartamentos,
             EventoCanalRepository eventos, ConflictoCanalRepository conflictos,
             DisponibilidadApartamentoService disponibilidad, CreacionReservaService creacion,
-            CancelarReservaService cancelacion, PoliticaCancelacion politicaVigente) {
+            CancelarReservaService cancelacion, PoliticaCancelacionService politicas) {
         return new ConciliacionCanalExternoService(reservas, apartamentos, eventos, conflictos,
-                disponibilidad, creacion, cancelacion, politicaVigente);
+                disponibilidad, creacion, cancelacion, politicas);
     }
 }

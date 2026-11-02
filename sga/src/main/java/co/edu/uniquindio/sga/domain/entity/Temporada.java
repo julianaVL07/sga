@@ -77,7 +77,13 @@ public class Temporada {
         if (this.esBase() || otra.esBase()) {
             return false;
         }
-        return rangos.stream().anyMatch(propio -> otra.rangos.stream().anyMatch(propio::seSolapaCon));
+        return otra.rangos.stream().anyMatch(this::seSolapaCon);
+    }
+
+    /** 7.4: indica si el rango comparte al menos una noche con alguno de los rangos de esta temporada. */
+    public boolean seSolapaCon(RangoFechas rango) {
+        requerido(rango, "El rango a comparar es obligatorio");
+        return !esBase() && rangos.stream().anyMatch(propio -> propio.seSolapaCon(rango));
     }
 
     /** RP-01: solo las temporadas media y alta exigen estancia mínima de fin de semana. */

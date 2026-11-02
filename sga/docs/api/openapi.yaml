@@ -1032,6 +1032,215 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # ==================== CU-28 A CU-30: CONFIGURACIÓN DEL ALOJAMIENTO (administrador) ====================
+
+  /api/alojamiento:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar el alojamiento (CU-28)
+      description: |
+        Datos, ubicación, horario, normas de convivencia, servicios adicionales (L-17) y parámetros vigentes
+        de la sección 6. Los parámetros son de solo lectura: se configuran en application.properties
+        (`sga.alojamiento.*`) y no se cambian por API. Mapea a `ConfiguracionAlojamientoUseCase.consultar`.
+      operationId: consultarAlojamiento
+      responses:
+        '200':
+          description: El alojamiento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoResponse'
+    put:
+      tags: [Configuración del alojamiento]
+      summary: Actualizar los datos del alojamiento (CU-28)
+      description: |
+        Reemplaza nombre, descripción, ciudad, dirección, ubicación y normas de convivencia con
+        `Alojamiento.actualizarDatos`. El horario es opcional: si llegan las horas se aplica con
+        `Alojamiento.definirHorario` (L-12); si no llega ninguna se conserva el vigente. Los parámetros de
+        la sección 6 no cambian. Mapea a `ConfiguracionAlojamientoUseCase.actualizar`.
+      operationId: actualizarAlojamiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarAlojamientoRequest'
+      responses:
+        '200':
+          description: Alojamiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: Coordenada fuera de rango (7.3) o llega solo una de las dos horas del horario (L-12)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Listar temporadas (CU-29)
+      description: |
+        Temporadas del alojamiento con sus rangos de fechas (fecha final excluida, nota de A.3), en el orden
+        en que se registraron, 10 por página (12.4). La base no tiene rangos: cubre las fechas que no son de
+        otra temporada (F-05). Mapea a `TemporadasUseCase.listar`.
+      operationId: listarTemporadas
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de temporadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaTemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+    post:
+      tags: [Configuración del alojamiento]
+      summary: Crear una temporada con las tarifas de los apartamentos activos (CU-29)
+      description: |
+        Regla 7.4: todo apartamento activo debe tener tarifa en todas las temporadas, por eso la temporada
+        nueva trae la tarifa de cada apartamento activo. `CreacionTemporadaService` crea la temporada y asigna
+        las tarifas en una sola operación: si falta alguna, no se crea la temporada ni se asigna ninguna
+        tarifa. Cada tarifa queda en el histórico del apartamento desde hoy (`Apartamento.definirTarifa`,
+        CU-24). Que no se solape con otra temporada ni sea una segunda base lo valida
+        `Alojamiento.agregarTemporada` (7.4, F-05). Mapea a `TemporadasUseCase.crear`.
+      operationId: crearTemporada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearTemporadaRequest'
+      responses:
+        '201':
+          description: Temporada creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Falta la tarifa de un apartamento activo, un apartamento no existe o está repetido, un valor no es
+            mayor que cero, una temporada no base no tiene rangos, se solapa con otra (7.4) o ya hay una
+            temporada base (F-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas/{id}/rangos:
+    parameters:
+      - { name: id, in: path, required: true, description: Id de la temporada, schema: { type: string }, example: T-MEDIA }
+    post:
+      tags: [Configuración del alojamiento]
+      summary: Agregar un rango a una temporada (CU-29)
+      description: |
+        El rango (fecha final excluida) no puede solaparse con otra temporada (`Alojamiento.agregarRangoATemporada`)
+        ni con los rangos de la misma; la temporada base no tiene rangos (`Temporada.agregarRango`, 7.4, F-05).
+        Mapea a `TemporadasUseCase.agregarRango`.
+      operationId: agregarRangoTemporada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RangoFechasRequest'
+      responses:
+        '201':
+          description: Rango agregado; devuelve la temporada con todos sus rangos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El rango se solapa, la fecha fin no es posterior a la de inicio o la temporada es la base (7.4, F-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/politica-cancelacion:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar la política de cancelación vigente (CU-30)
+      description: |
+        La única versión vigente (7.4, F-07), la de mayor número: es la que se congela en cada reserva nueva
+        (RN-22). Al arrancar, si no hay ninguna, se guarda la versión 1 con `sga.politica-cancelacion.*`.
+        Mapea a `PoliticaCancelacionUseCase.vigente`.
+      operationId: consultarPoliticaCancelacionVigente
+      responses:
+        '200':
+          description: La versión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaCancelacionResponse'
+    put:
+      tags: [Configuración del alojamiento]
+      summary: Actualizar la política de cancelación (CU-30)
+      description: |
+        Crea la versión N+1 con los tramos y la consecuencia del no-show dados, vigente desde hoy. La versión
+        anterior se conserva sin cambios y las reservas existentes siguen con la versión que congelaron al
+        crearse (RN-22). L-10 lo valida el dominio. Mapea a `PoliticaCancelacionUseCase.actualizar` y
+        `PoliticaCancelacionService.actualizar`.
+      operationId: actualizarPoliticaCancelacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarPoliticaCancelacionRequest'
+      responses:
+        '200':
+          description: Nueva versión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaCancelacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Menos de dos tramos, dos tramos con la misma antelación, ningún tramo desde 0 días, antelación
+            negativa o porcentaje fuera de 0 a 100 (L-10)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/politica-cancelacion/versiones:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Listar las versiones de la política de cancelación (CU-30)
+      description: |
+        Todas las versiones, de la más reciente a la más antigua, 10 por página (F-07, 12.4).
+        Mapea a `PoliticaCancelacionUseCase.versiones`.
+      operationId: listarVersionesPoliticaCancelacion
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de versiones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaPoliticaCancelacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
 components:
 
   parameters:
@@ -1620,3 +1829,178 @@ components:
           maxItems: 62
           description: Una entrada por noche, en orden de fecha
           items: { $ref: '#/components/schemas/NocheCalendarioResponse' }
+
+    # ---------- CU-28 Alojamiento ----------
+
+    ActualizarAlojamientoRequest:
+      type: object
+      required: [nombre, ciudad, latitud, longitud]
+      properties:
+        nombre: { type: string, example: Coral }
+        descripcion: { type: string, nullable: true }
+        ciudad: { type: string, example: Cartagena de Indias }
+        direccion: { type: string, nullable: true, example: 'Sector Bocagrande, Avenida del Malecón' }
+        latitud: { type: number, format: double, minimum: -90, maximum: 90, example: 10.3975, description: Fuera de rango es 409 (7.3) }
+        longitud: { type: number, format: double, minimum: -180, maximum: 180, example: -75.559, description: Fuera de rango es 409 (7.3) }
+        normaConvivencia: { type: string, nullable: true }
+        horaEntrada: { type: string, format: time, nullable: true, example: '15:00', description: Opcional; si llega una hora debe llegar también la otra (L-12) }
+        horaSalida: { type: string, format: time, nullable: true, example: '11:00' }
+
+    ServicioAdicionalResponse:
+      type: object
+      properties:
+        id: { type: string, example: SRV-RECEPCION-NOCTURNA }
+        nombre: { type: string, example: Recepción nocturna }
+        descripcion: { type: string, nullable: true }
+        generaCargo: { type: boolean }
+        valor: { type: integer, format: int64, example: 70000, description: Pesos enteros; 0 si no genera cargo }
+        activo: { type: boolean }
+
+    ParametrosAlojamientoResponse:
+      type: object
+      description: Parámetros de la sección 6 vigentes (solo lectura, se configuran en application.properties)
+      properties:
+        umbralEdadFacturable: { type: integer, nullable: true, example: 6, description: L-09 }
+        tiempoPreparacionHoras: { type: integer, nullable: true, example: 3, description: L-13 }
+        plazoConfirmacionHoras: { type: integer, nullable: true, example: 12, description: L-14 }
+        horaLimiteNoShow: { type: string, format: time, nullable: true, example: '22:00:00', description: L-15 }
+        horaInicioLlegadaNocturna: { type: string, format: time, nullable: true, example: '20:00:00', description: RP-03 }
+        estanciaMinimaNoches: { type: integer, nullable: true, example: 2, description: RP-01 }
+        estanciaMinimaActiva: { type: boolean }
+        exigeAnticipo: { type: boolean, description: L-11 }
+        porcentajeAnticipo: { type: integer, example: 50 }
+        aceptaMascotas: { type: boolean, description: L-16 }
+        cargoAseoMascota: { type: integer, format: int64, example: 110000 }
+        maximoMascotas: { type: integer, example: 2 }
+        pesoMaximoMascotaKg: { type: integer, example: 10 }
+
+    AlojamientoResponse:
+      type: object
+      properties:
+        id: { type: string, example: ALO-CORAL }
+        nombre: { type: string, example: Coral }
+        descripcion: { type: string, nullable: true }
+        ciudad: { type: string, example: Cartagena de Indias }
+        direccion: { type: string, nullable: true }
+        latitud: { type: number, format: double, example: 10.3975 }
+        longitud: { type: number, format: double, example: -75.559 }
+        horaEntrada: { type: string, format: time, example: '15:00:00' }
+        horaSalida: { type: string, format: time, example: '11:00:00' }
+        normaConvivencia: { type: string, nullable: true }
+        serviciosAdicionales:
+          type: array
+          items: { $ref: '#/components/schemas/ServicioAdicionalResponse' }
+        parametros: { $ref: '#/components/schemas/ParametrosAlojamientoResponse' }
+
+    # ---------- CU-29 Temporadas ----------
+
+    TipoTemporada:
+      type: string
+      enum: [ BASE, MEDIA, ALTA ]
+
+    RangoFechasRequest:
+      type: object
+      required: [fechaInicio, fechaFin]
+      description: Fecha final excluida (nota de A.3)
+      properties:
+        fechaInicio: { type: string, format: date, example: '2027-03-01' }
+        fechaFin: { type: string, format: date, example: '2027-03-11' }
+
+    TarifaTemporadaRequest:
+      type: object
+      required: [identificacionApartamento, valorPorOcupante]
+      properties:
+        identificacionApartamento: { type: string, example: APT-101 }
+        valorPorOcupante: { type: integer, format: int64, example: 450000, description: Pesos enteros por ocupante facturable y por noche; debe ser mayor que cero (409) }
+
+    CrearTemporadaRequest:
+      type: object
+      required: [id, nombre, tipo]
+      properties:
+        id: { type: string, example: T-FESTIVAL }
+        nombre: { type: string, example: Festival }
+        tipo: { $ref: '#/components/schemas/TipoTemporada' }
+        rangos:
+          type: array
+          description: Al menos uno si no es BASE; la base no lleva rangos (409, F-05)
+          items: { $ref: '#/components/schemas/RangoFechasRequest' }
+        tarifas:
+          type: array
+          description: Una por cada apartamento activo (7.4); puede incluir apartamentos inactivos no retirados
+          items: { $ref: '#/components/schemas/TarifaTemporadaRequest' }
+
+    RangoFechasResponse:
+      type: object
+      properties:
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date, description: Excluida }
+
+    TemporadaResponse:
+      type: object
+      properties:
+        id: { type: string, example: T-MEDIA }
+        nombre: { type: string, example: Media }
+        tipo: { $ref: '#/components/schemas/TipoTemporada' }
+        rangos:
+          type: array
+          items: { $ref: '#/components/schemas/RangoFechasResponse' }
+
+    PaginaTemporadaResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/TemporadaResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    # ---------- CU-30 Política de cancelación ----------
+
+    TramoCancelacionRequest:
+      type: object
+      required: [antelacionMinimaDias, porcentajeRetencion]
+      properties:
+        antelacionMinimaDias: { type: integer, example: 16, description: No negativa (409, L-10) }
+        porcentajeRetencion: { type: integer, example: 0, description: Entre 0 y 100 (409, L-10) }
+
+    ActualizarPoliticaCancelacionRequest:
+      type: object
+      required: [consecuenciaNoShow, tramos]
+      properties:
+        consecuenciaNoShow: { type: string, example: Se retiene el 60 % del valor total de la estancia }
+        tramos:
+          type: array
+          description: Al menos dos, con antelaciones distintas y uno desde 0 días; si no, 409 (L-10)
+          items: { $ref: '#/components/schemas/TramoCancelacionRequest' }
+
+    TramoCancelacionResponse:
+      type: object
+      properties:
+        antelacionMinimaDias: { type: integer, example: 16 }
+        porcentajeRetencion: { type: integer, example: 0 }
+
+    PoliticaCancelacionResponse:
+      type: object
+      properties:
+        version: { type: integer, example: 1 }
+        vigenteDesde: { type: string, format: date, example: '2026-01-01' }
+        consecuenciaNoShow: { type: string }
+        tramos:
+          type: array
+          description: De la mayor a la menor antelación
+          items: { $ref: '#/components/schemas/TramoCancelacionResponse' }
+
+    PaginaPoliticaCancelacionResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/PoliticaCancelacionResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }

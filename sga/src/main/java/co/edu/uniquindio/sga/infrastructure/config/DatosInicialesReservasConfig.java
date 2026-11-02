@@ -13,6 +13,7 @@ import co.edu.uniquindio.sga.domain.service.CancelarReservaService;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
 import co.edu.uniquindio.sga.domain.service.CotizadorEstanciaService;
 import co.edu.uniquindio.sga.domain.service.CreacionReservaService;
+import co.edu.uniquindio.sga.domain.service.PoliticaCancelacionService;
 import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.Cargo;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
@@ -72,6 +73,9 @@ public class DatosInicialesReservasConfig {
     private static final LocalTime HORA_LLEGADA = LocalTime.of(16, 0);
 
     /**
+     * @param cargarPoliticaCancelacion el runner de la política de cancelación. Se invoca primero porque cada
+     *                                  reserva congela la versión vigente (RN-22); es idempotente, así que cuando ya
+     *                                  corrió (@Order(0)) la llamada no hace nada.
      * @param cargarDatosCoral el runner del alojamiento. Se invoca primero porque sin alojamiento, temporadas y
      *                         tarifas no hay reservas posibles (F-13); es idempotente, así que cuando ya corrió
      *                         (@Order(1)) la llamada no hace nada.
@@ -79,6 +83,7 @@ public class DatosInicialesReservasConfig {
     @Bean
     @Order(2)
     public CommandLineRunner cargarReservasDePrueba(
+            @Qualifier("cargarPoliticaCancelacion") CommandLineRunner cargarPoliticaCancelacion,
             @Qualifier("cargarDatosCoral") CommandLineRunner cargarDatosCoral,
             ReservaRepository reservaRepository,
             FolioRepository folioRepository,
@@ -88,20 +93,22 @@ public class DatosInicialesReservasConfig {
             ConfirmacionReservaService confirmacionReservaService,
             CancelarReservaService cancelarReservaService,
             CotizadorEstanciaService cotizadorEstanciaService,
-            PoliticaCancelacion politicaVigente,
+            PoliticaCancelacionService politicaCancelacionService,
             DepositoGarantia depositoGarantia,
             Clock reloj) {
         return args -> {
             if (!reservaRepository.listarTodas().isEmpty()) {
                 return;                                          // no duplicar si ya hay reservas
             }
+            cargarPoliticaCancelacion.run(args);
             cargarDatosCoral.run(args);
             Alojamiento coral = alojamientoRepository.obtener()
                     .orElseThrow(() -> new ReglaDominioException("F-13: No hay un alojamiento configurado"));
 
             Cargador cargador = new Cargador(coral, reservaRepository, folioRepository, apartamentoRepository,
                     creacionReservaService, confirmacionReservaService, cancelarReservaService,
-                    cotizadorEstanciaService, politicaVigente, depositoGarantia, LocalDateTime.now(reloj));
+                    cotizadorEstanciaService, politicaCancelacionService.vigente(), depositoGarantia,
+                    LocalDateTime.now(reloj));
             cargador.cargar();
             log.info("Datos de prueba de reservas cargados: {} reservas", reservaRepository.listarTodas().size());
         };

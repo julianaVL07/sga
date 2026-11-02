@@ -13,7 +13,6 @@ import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
-import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.ResultadoEventoCanal;
 import co.edu.uniquindio.sga.domain.valueobject.TipoEventoCanal;
 import co.edu.uniquindio.sga.domain.valueobject.Titular;
@@ -52,9 +51,12 @@ public class ConciliacionCanalExternoService {
     private final DisponibilidadApartamentoService disponibilidadService;
     private final CreacionReservaService creacionReservaService;
     private final CancelarReservaService cancelarReservaService;
-    private final PoliticaCancelacion politicaVigente;
+    private final PoliticaCancelacionService politicaCancelacionService;
 
-    /** @param politicaVigente política que se congela en las reservas que llegan por el canal (RN-22). */
+    /**
+     * @param politicaCancelacionService entrega la política vigente al recibir cada mensaje, que se congela en las
+     *                                   reservas que llegan por el canal (RN-22).
+     */
     public ConciliacionCanalExternoService(ReservaRepository reservaRepository,
                                            ApartamentoRepository apartamentoRepository,
                                            EventoCanalRepository eventoCanalRepository,
@@ -62,7 +64,7 @@ public class ConciliacionCanalExternoService {
                                            DisponibilidadApartamentoService disponibilidadService,
                                            CreacionReservaService creacionReservaService,
                                            CancelarReservaService cancelarReservaService,
-                                           PoliticaCancelacion politicaVigente) {
+                                           PoliticaCancelacionService politicaCancelacionService) {
         this.reservaRepository = Objects.requireNonNull(reservaRepository);
         this.apartamentoRepository = Objects.requireNonNull(apartamentoRepository);
         this.eventoCanalRepository = Objects.requireNonNull(eventoCanalRepository);
@@ -70,7 +72,7 @@ public class ConciliacionCanalExternoService {
         this.disponibilidadService = Objects.requireNonNull(disponibilidadService);
         this.creacionReservaService = Objects.requireNonNull(creacionReservaService);
         this.cancelarReservaService = Objects.requireNonNull(cancelarReservaService);
-        this.politicaVigente = Objects.requireNonNull(politicaVigente);
+        this.politicaCancelacionService = Objects.requireNonNull(politicaCancelacionService);
     }
 
     /**
@@ -146,7 +148,8 @@ public class ConciliacionCanalExternoService {
 
         try {
             creacionReservaService.registrarNuevaReserva(datos.apartamento(), datos.estancia(), datos.titular(),
-                    datos.ocupantes(), datos.horaEstimadaLlegada(), null, politicaVigente, canal, referencia, ahora);
+                    datos.ocupantes(), datos.horaEstimadaLlegada(), null, politicaCancelacionService.vigente(), canal,
+                    referencia, ahora);
             return ResultadoEventoCanal.ACEPTADO;
         } catch (ReglaDominioException e) {
             // Capacidad, estancia mínima, fechas pasadas, titular no facturable, etc.
