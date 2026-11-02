@@ -3,17 +3,20 @@ package co.edu.uniquindio.sga.infrastructure.rest;
 import co.edu.uniquindio.sga.application.dto.request.ReservaExternaRequest;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoResponse;
 import co.edu.uniquindio.sga.application.dto.response.EventoCanalResponse;
+import co.edu.uniquindio.sga.application.dto.response.PaginaResponse;
 import co.edu.uniquindio.sga.application.usecase.RecibirReservaExternaUseCase;
 import co.edu.uniquindio.sga.domain.service.ConciliacionCanalExternoService.DatosReservaExterna;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.ResultadoEventoCanal;
 import co.edu.uniquindio.sga.domain.valueobject.TipoEventoCanal;
 import co.edu.uniquindio.sga.infrastructure.rest.mapper.ApartamentoMapper;
+import co.edu.uniquindio.sga.infrastructure.rest.mapper.PaginaMapper;
 import co.edu.uniquindio.sga.infrastructure.rest.mapper.ReservaMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +30,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * Adaptador REST del canal externo (Guía 08): las tres operaciones de CU-08 (10.3.1).
@@ -45,19 +47,24 @@ public class CanalExternoController {
     private final ReservaMapper reservaMapper;
     private final ApartamentoMapper apartamentoMapper;
 
-    /** CU-08, operación 1. GET /api/canales/{canal}/disponibilidad?entrada=&salida=&ocupantes= */
+    /** CU-08, operación 1. GET /api/canales/{canal}/disponibilidad?entrada=&salida=&ocupantes=&pagina= */
     @GetMapping("/disponibilidad")
     @Operation(summary = "Consultar disponibilidad desde el canal",
-            description = "Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01")
-    @ApiResponse(responseCode = "200", description = "Apartamentos disponibles (puede ser una lista vacía)")
-    @ApiResponse(responseCode = "400", description = "Falta un parámetro o una fecha está mal escrita")
+            description = "Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por "
+                    + "página (12.4). La consulta queda en la bitácora (7.8)")
+    @ApiResponse(responseCode = "200", description = "Página de apartamentos disponibles (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Falta un parámetro, una fecha está mal escrita o la página es "
+            + "negativa")
     @ApiResponse(responseCode = "409", description = "Las fechas no forman una estancia válida")
-    public ResponseEntity<List<ApartamentoResponse>> consultarDisponibilidad(@PathVariable String canal,
-                                                                             @RequestParam LocalDate entrada,
-                                                                             @RequestParam LocalDate salida,
-                                                                             @RequestParam int ocupantes) {
-        return ResponseEntity.ok(apartamentoMapper.aResponses(
-                recibirReservaExternaUseCase.consultarDisponibilidad(entrada, salida, ocupantes)));
+    public ResponseEntity<PaginaResponse<ApartamentoResponse>> consultarDisponibilidad(
+            @PathVariable String canal,
+            @RequestParam LocalDate entrada,
+            @RequestParam LocalDate salida,
+            @RequestParam int ocupantes,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
+        return ResponseEntity.ok(PaginaMapper.aResponse(
+                recibirReservaExternaUseCase.consultarDisponibilidad(entrada, salida, ocupantes, pagina),
+                apartamentoMapper::aResponse));
     }
 
     /** CU-08, operación 2. POST /api/canales/{canal}/reservas */

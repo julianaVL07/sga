@@ -16,11 +16,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -109,7 +111,7 @@ class ConfiguracionAlojamientoIntegracionTest {
     // ==================== CU-29: temporadas ====================
 
     @Test
-    @DisplayName("CU-29: GET lista las temporadas iniciales con sus rangos, 10 por página")
+    @DisplayName("CU-29: GET lista las temporadas iniciales con sus rangos, 10 por página, y consulta una por su id")
     void listarTemporadas() throws Exception {
         get("/api/temporadas")
                 .andExpect(status().isOk())
@@ -119,20 +121,30 @@ class ConfiguracionAlojamientoIntegracionTest {
                 .andExpect(jsonPath("$.contenido[?(@.id == 'T-BASE')].rangos[*]", hasSize(0)))
                 .andExpect(jsonPath("$.contenido[?(@.id == 'T-ALTA')].rangos[*]", hasSize(5)));
         get("/api/temporadas?pagina=-1").andExpect(status().isBadRequest());
+        get("/api/temporadas/T-ALTA").andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("ALTA"))
+                .andExpect(jsonPath("$.rangos", hasSize(5)));
+        get("/api/temporadas/T-NO-EXISTE").andExpect(status().isNotFound());
     }
 
     @Test
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
-    @DisplayName("CU-29: con la tarifa de todos los apartamentos activos responde 201 y cada uno la recibe (7.4)")
+    @DisplayName("CU-29: con la tarifa de todos los apartamentos activos responde 201 con Location y cada uno la "
+            + "recibe (7.4)")
     void crearTemporadaConTarifasCompletas() throws Exception {
-        post("/api/temporadas", temporada("T-FESTIVAL", "MEDIA", "[" + RANGO_FESTIVAL + "]",
+        ResultActions creada = post("/api/temporadas", temporada("T-FESTIVAL", "MEDIA", "[" + RANGO_FESTIVAL + "]",
                 tarifas("APT-101", "APT-102", "APT-201", "APT-202", "APT-301")))
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith("/api/temporadas/T-FESTIVAL")))
                 .andExpect(jsonPath("$.id").value("T-FESTIVAL"))
                 .andExpect(jsonPath("$.tipo").value("MEDIA"))
                 .andExpect(jsonPath("$.rangos[0].fechaInicio").value("2027-03-01"))
                 .andExpect(jsonPath("$.rangos[0].fechaFin").value("2027-03-11"));
 
+        get(creada.andReturn().getResponse().getHeader("Location"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("T-FESTIVAL"))
+                .andExpect(jsonPath("$.rangos", hasSize(1)));
         get("/api/temporadas").andExpect(jsonPath("$.totalElementos").value(4));
         get("/api/apartamentos/APT-101")
                 .andExpect(jsonPath("$.tarifas[*].idTemporada", hasItem("T-FESTIVAL")));
@@ -185,10 +197,12 @@ class ConfiguracionAlojamientoIntegracionTest {
 
     @Test
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
-    @DisplayName("CU-29: POST rangos agrega un rango libre (201); 409 si se solapa con otra temporada; 404 si no existe")
+    @DisplayName("CU-29: POST rangos agrega un rango libre (201 con Location); 409 si se solapa con otra temporada; "
+            + "404 si no existe")
     void agregarRango() throws Exception {
         post("/api/temporadas/T-MEDIA/rangos", "{\"fechaInicio\":\"2027-02-01\",\"fechaFin\":\"2027-02-05\"}")
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith("/api/temporadas/T-MEDIA")))
                 .andExpect(jsonPath("$.id").value("T-MEDIA"))
                 .andExpect(jsonPath("$.rangos", hasSize(8)))
                 .andExpect(jsonPath("$.rangos[7].fechaInicio").value("2027-02-01"));
@@ -202,6 +216,7 @@ class ConfiguracionAlojamientoIntegracionTest {
         post("/api/temporadas/T-NO-EXISTE/rangos", RANGO_FESTIVAL).andExpect(status().isNotFound());
 
         get("/api/temporadas").andExpect(jsonPath("$.contenido[?(@.id == 'T-MEDIA')].rangos[*]", hasSize(8)));
+        get("/api/temporadas/T-MEDIA").andExpect(status().isOk()).andExpect(jsonPath("$.rangos", hasSize(8)));
     }
 
     // ==================== CU-30: política de cancelación versionada ====================

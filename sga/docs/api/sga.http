@@ -416,12 +416,16 @@ Content-Type: application/json
     });
 %}
 
-### 4.4 CU-08 Consultar disponibilidad desde el canal externo
-GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2
+### 4.4 CU-08 Consultar disponibilidad desde el canal externo (página 0, 10 por página, 12.4)
+GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2&pagina=0
 
 > {%
-    client.test("4.4 200 disponibilidad canal", function () {
+    client.test("4.4 200 disponibilidad canal paginada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0, "Se esperaba la página 0");
+        client.assert(response.body.tamano === 10, "Se esperaban 10 resultados por página (12.4)");
+        client.assert(response.body.contenido.length <= 10, "Una página trae máximo 10 apartamentos");
+        client.assert(response.body.totalElementos >= response.body.contenido.length, "Total inconsistente");
     });
 %}
 
