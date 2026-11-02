@@ -73,10 +73,11 @@ public class ReservaController {
     @PostMapping
     @Operation(summary = "Crear una reserva",
             description = "Crea la reserva en PENDIENTE, congela cotización y política (RN-22) y abre su folio con el "
-                    + "depósito de garantía (RP-02) y, si la llegada es desde las 20:00, la recepción nocturna (RP-03)")
+                    + "depósito de garantía (RP-02), si la llegada es desde las 20:00, la recepción nocturna (RP-03) "
+                    + "y, si trae mascotas, el cargo único de aseo (L-16)")
     @ApiResponse(responseCode = "201", description = "Reserva creada")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
-    @ApiResponse(responseCode = "409", description = "Una regla del negocio lo impide (RN-01 a RN-07, RP-01, RN-19)")
+    @ApiResponse(responseCode = "409", description = "Una regla del negocio lo impide (RN-01 a RN-07, RP-01, RN-19, L-16)")
     public ResponseEntity<ReservaDetalleResponse> crear(@Valid @RequestBody CrearReservaRequest request) {
         Reserva reserva = crearReservaUseCase.ejecutar(mapper.aSolicitud(request));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -151,19 +152,21 @@ public class ReservaController {
     /** CU-11. PUT /api/reservas/{codigo} */
     @PutMapping("/{codigo}")
     @Operation(summary = "Modificar una reserva",
-            description = "Cambia fechas, ocupantes o apartamento de una reserva no iniciada; revalida con las tarifas "
-                    + "vigentes y asienta la diferencia en el folio (RN-14). Un campo en null se conserva")
+            description = "Cambia fechas, ocupantes, apartamento o mascotas de una reserva no iniciada; revalida con "
+                    + "las tarifas vigentes y asienta la diferencia en el folio (RN-14) y, si ahora trae mascotas, el "
+                    + "cargo de aseo (L-16). Un campo en null se conserva")
     @ApiResponse(responseCode = "200", description = "Reserva modificada")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
     @ApiResponse(responseCode = "404", description = "No existe una reserva con ese código")
-    @ApiResponse(responseCode = "409", description = "Una regla del negocio lo impide (RN-01 a RN-08, RN-14)")
+    @ApiResponse(responseCode = "409", description = "Una regla del negocio lo impide (RN-01 a RN-08, RN-14, L-16)")
     public ResponseEntity<ModificacionReservaResponse> modificar(@PathVariable String codigo,
                                                                  @Valid @RequestBody ModificarReservaRequest request) {
         CodigoReserva codigoReserva = new CodigoReserva(codigo);
         Dinero diferencia = modificarReservaUseCase.ejecutar(codigoReserva,
                 mapper.aIdentificacion(request.identificacionApartamento()),
                 request.fechaEntrada(), request.fechaSalida(),
-                request.ocupantes() == null ? null : mapper.aOcupantes(request.ocupantes()));
+                request.ocupantes() == null ? null : mapper.aOcupantes(request.ocupantes()),
+                request.cantidadMascotas(), request.pesoMascotaMasPesadaKg());
         Reserva reserva = consultarReservaUseCase.ejecutar(codigoReserva);
         return ResponseEntity.ok(new ModificacionReservaResponse(mapper.aDetalle(reserva), mapper.aPesos(diferencia)));
     }
@@ -177,7 +180,7 @@ public class ReservaController {
     @ApiResponse(responseCode = "404", description = "No existe una reserva con ese código")
     @ApiResponse(responseCode = "409", description = "Transición inválida, falta la hora, venció el plazo o falta anticipo")
     public ResponseEntity<ReservaDetalleResponse> confirmar(@PathVariable String codigo,
-                                                            @RequestBody(required = false) ConfirmarReservaRequest request) {
+                                                            @Valid @RequestBody(required = false) ConfirmarReservaRequest request) {
         Reserva reserva = confirmarReservaUseCase.ejecutar(new CodigoReserva(codigo),
                 request == null ? null : request.horaEstimadaLlegada());
         return ResponseEntity.ok(mapper.aDetalle(reserva));

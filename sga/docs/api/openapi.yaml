@@ -67,7 +67,9 @@ paths:
       summary: Crear una reserva (CU-03)
       description: |
         Crea la reserva en PENDIENTE, congela cotización y política (RN-22) y abre su folio con el
-        depósito de garantía (RP-02) y, si la llegada es desde las 20:00, la recepción nocturna (RP-03).
+        depósito de garantía (RP-02), si la llegada es desde las 20:00, la recepción nocturna (RP-03) y, si el
+        grupo trae mascotas, el cargo único de aseo de $110.000 (L-16). Se aceptan máximo 2 mascotas de hasta
+        10 kg; si no, responde 409 con el código L-16. Las mascotas son opcionales (sin dato = 0).
         Mapea a `CrearReservaUseCase`.
       operationId: crearReserva
       requestBody:
@@ -95,6 +97,8 @@ paths:
                   fechaNacimiento: '1990-05-20'
                 - nombre: Sofía Gómez
                   fechaNacimiento: '2021-03-02'
+              cantidadMascotas: 1
+              pesoMascotaMasPesadaKg: 8
       responses:
         '201':
           description: Reserva creada. El header Location trae la URL de la reserva.
@@ -130,8 +134,10 @@ paths:
       tags: [Reservas]
       summary: Modificar una reserva (CU-11)
       description: |
-        Cambia fechas, ocupantes o apartamento de una reserva no iniciada. Revalida con las tarifas vigentes
-        y asienta la diferencia en el folio (RN-14). Un campo en null se conserva.
+        Cambia fechas, ocupantes, apartamento o mascotas de una reserva no iniciada. Revalida con las tarifas
+        vigentes y asienta la diferencia en el folio (RN-14). Las mascotas se revalidan con la política del
+        alojamiento (L-16) y, si la reserva no traía mascotas, se asienta el cargo de aseo. Un campo en null
+        se conserva.
         Mapea a `ModificarReservaUseCase`.
       operationId: modificarReserva
       requestBody:
@@ -1706,6 +1712,8 @@ components:
           type: array
           minItems: 1
           items: { $ref: '#/components/schemas/OcupanteRequest' }
+        cantidadMascotas: { type: integer, minimum: 0, example: 1, description: Opcional; sin dato = 0. Máximo 2 lo valida el dominio (L-16) }
+        pesoMascotaMasPesadaKg: { type: integer, minimum: 0, example: 8, description: Opcional; sin dato = 0. Hasta 10 kg lo valida el dominio (L-16) }
 
     ModificarReservaRequest:
       type: object
@@ -1717,6 +1725,8 @@ components:
         ocupantes:
           type: array
           items: { $ref: '#/components/schemas/OcupanteRequest' }
+        cantidadMascotas: { type: integer, minimum: 0, description: L-16; con 0 se quitan las mascotas }
+        pesoMascotaMasPesadaKg: { type: integer, minimum: 0, description: L-16 }
 
     ConfirmarReservaRequest:
       type: object
@@ -1764,6 +1774,8 @@ components:
         totalOcupantes: { type: integer }
         valorTotal: { type: integer, format: int64, description: Valor congelado en pesos (RN-22) }
         versionPoliticaCancelacion: { type: integer }
+        cantidadMascotas: { type: integer, description: 0 si no trae mascotas (L-16) }
+        pesoMascotaMasPesadaKg: { type: integer, description: 0 si no trae mascotas (L-16) }
         fechaCreacion: { type: string, format: date-time }
         fechaConfirmacion: { type: string, format: date-time, nullable: true }
         motivoCancelacion: { type: string, nullable: true }

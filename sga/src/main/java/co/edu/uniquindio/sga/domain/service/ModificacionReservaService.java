@@ -14,6 +14,7 @@ import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 
 import java.time.LocalDateTime;
@@ -21,11 +22,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Cambia fechas, ocupantes o apartamento de una reserva que no ha iniciado (7.5).
+ * Cambia fechas, ocupantes, apartamento o mascotas de una reserva que no ha iniciado (7.5).
  *
  * Reglas: RN-14 (se revalidan todas las condiciones de creación, sin contar la propia reserva, y la
  * diferencia de valor se asienta como ajuste en el folio), RN-22 (la política de cancelación congelada
- * no cambia; la cotización se reemplaza por una con las tarifas vigentes).
+ * no cambia; la cotización se reemplaza por una con las tarifas vigentes) y L-16 (las mascotas resultantes
+ * deben ser admitidas por la política del alojamiento; si la reserva no traía mascotas y ahora sí, se asienta
+ * el cargo único de aseo en el folio).
  */
 public class ModificacionReservaService {
 
@@ -34,12 +37,19 @@ public class ModificacionReservaService {
      * (El catálogo lo nombra DatosModificacion; no está entre los objetos de valor, por eso vive aquí.)
      */
     public record DatosModificacion(IdentificacionApartamento nuevoApartamento, Estancia nuevaEstancia,
-                                    List<Ocupante> nuevosOcupantes) {
+                                    List<Ocupante> nuevosOcupantes, Mascotas nuevasMascotas) {
         public DatosModificacion {
-            if (nuevoApartamento == null && nuevaEstancia == null && nuevosOcupantes == null) {
+            if (nuevoApartamento == null && nuevaEstancia == null && nuevosOcupantes == null
+                    && nuevasMascotas == null) {
                 throw new ReglaDominioException("RN-14: La modificación debe cambiar al menos un dato");
             }
             nuevosOcupantes = nuevosOcupantes == null ? null : List.copyOf(nuevosOcupantes);
+        }
+
+        /** Cambios que no tocan las mascotas. */
+        public DatosModificacion(IdentificacionApartamento nuevoApartamento, Estancia nuevaEstancia,
+                                 List<Ocupante> nuevosOcupantes) {
+            this(nuevoApartamento, nuevaEstancia, nuevosOcupantes, null);
         }
     }
 
@@ -78,6 +88,11 @@ public class ModificacionReservaService {
         Estancia estancia = cambios.nuevaEstancia() != null ? cambios.nuevaEstancia() : reserva.getEstancia();
         List<Ocupante> ocupantes = cambios.nuevosOcupantes() != null
                 ? cambios.nuevosOcupantes() : reserva.getOcupantes();
+        Mascotas mascotas = cambios.nuevasMascotas() != null ? cambios.nuevasMascotas() : reserva.getMascotas();
+        boolean traiaMascotas = reserva.getMascotas().traeMascotas();
+
+        // L-16: se revalidan las mascotas resultantes contra la política del alojamiento.
+        mascotas.validarContra(alojamiento.getPoliticaMascotas());
 
         Apartamento apartamento = apartamentoRepository.buscarPorIdentificacion(aptoId)
                 .orElseThrow(() -> new ReglaDominioException("No existe el apartamento " + aptoId.codigo()));
@@ -87,10 +102,14 @@ public class ModificacionReservaService {
         Cotizacion nuevaCotizacion = cotizadorService.cotizar(apartamento, estancia, ocupantes,
                 alojamiento.getUmbralEdadFacturable());
 
-        Dinero diferencia = reserva.modificar(apartamento, estancia, ocupantes, nuevaCotizacion,
+        Dinero diferencia = reserva.modificar(apartamento, estancia, ocupantes, mascotas, nuevaCotizacion,
                 alojamiento.getUmbralEdadFacturable(), ahora);
         folio.registrarAjustePorModificacion(diferencia,
                 "Ajuste por modificación de la reserva " + codigo.valor(), ahora.toLocalDate());
+        // L-16: el cargo de aseo es único por estancia; solo se asienta si antes no traía mascotas.
+        if (mascotas.traeMascotas() && !traiaMascotas) {
+            folio.agregarCargo(alojamiento.getPoliticaMascotas().generarCargoServicio(ahora.toLocalDate()));
+        }
 
         reservaRepository.guardar(reserva);
         folioRepository.guardar(folio);

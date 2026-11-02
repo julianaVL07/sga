@@ -27,6 +27,8 @@ public record ReservaDetalleResponse(
         int totalOcupantes,
         long valorTotal,                      // valor congelado (RN-22), en pesos
         int versionPoliticaCancelacion,       // la versión congelada en la reserva (RN-22)
+        int cantidadMascotas,                 // 0 si no trae mascotas (L-16)
+        int pesoMascotaMasPesadaKg,           // 0 si no trae mascotas (L-16)
         LocalDateTime fechaCreacion,
         LocalDateTime fechaConfirmacion,      // null mientras esté PENDIENTE
         String motivoCancelacion              // null si no se ha cancelado

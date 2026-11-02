@@ -51,6 +51,8 @@ GET {{host}}/api/apartamentos
     client.global.set("hoyMas40", fecha(40));
     client.global.set("hoyMas42", fecha(42));
     client.global.set("hoyMas43", fecha(43));
+    client.global.set("hoyMas50", fecha(50));
+    client.global.set("hoyMas52", fecha(52));
     client.global.set("hoyMas60", fecha(60));
     // RP-01: primer viernes en temporada Alta (10-dic-2026 al 20-ene-2027) a más de 25 días de hoy (fuera de
     // los datos iniciales). Una sola noche, de viernes a sábado.
@@ -544,6 +546,43 @@ GET {{host}}/api/apartamentos/pendientes-preparacion?pagina=1
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
         client.assert(response.body.contenido.length === 0, "La página 1 debía venir vacía");
         client.assert(response.body.totalElementos >= 1, "El total debía contar los de la página 0");
+    });
+%}
+
+### 4.12 CU-03 Reserva con mascotas (L-16): 2 mascotas, la más pesada de 9 kg (APT-101, de hoy+50 a hoy+52)
+# Se aceptan máximo 2 mascotas de hasta 10 kg; el folio recibe el cargo único de aseo de $110.000.
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas50}}",
+  "fechaSalida": "{{hoyMas52}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Camila Ríos", "tipoDocumento": "CC", "numeroDocumento": "1094300400", "email": "camila.rios@correo.co", "telefono": "3005550909" },
+  "ocupantes": [ { "nombre": "Camila Ríos", "tipoDocumento": "CC", "numeroDocumento": "1094300400", "fechaNacimiento": "1992-07-14" } ],
+  "cantidadMascotas": 2,
+  "pesoMascotaMasPesadaKg": 9
+}
+
+> {%
+    client.test("4.12 201 reserva con mascotas", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.cantidadMascotas === 2, "Se esperaban 2 mascotas");
+        client.assert(response.body.pesoMascotaMasPesadaKg === 9, "Se esperaba 9 kg para la mascota más pesada");
+    });
+    client.global.set("reservaConMascotas", response.body.codigo);
+%}
+
+### 4.13 CU-18 La reserva con mascotas conserva sus datos de mascotas
+GET {{host}}/api/reservas/{{reservaConMascotas}}
+
+> {%
+    client.test("4.13 200 mascotas guardadas", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.cantidadMascotas === 2, "Se esperaban 2 mascotas");
+        client.assert(response.body.pesoMascotaMasPesadaKg === 9, "Se esperaba 9 kg para la mascota más pesada");
     });
 %}
 
@@ -1090,6 +1129,29 @@ Content-Type: application/json
     client.test("5.38 409 3.2", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("3.2"), "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 5.39 L-16 Mascotas: se aceptan máximo 2 de hasta 10 kg y llega una de 15 kg (APT-101, de hoy+40 a hoy+42)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas40}}",
+  "fechaSalida": "{{hoyMas42}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "fechaNacimiento": "1990-05-20" } ],
+  "cantidadMascotas": 1,
+  "pesoMascotaMasPesadaKg": 15
+}
+
+> {%
+    client.test("5.39 409 L-16", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.startsWith("L-16"), "Mensaje inesperado: " + response.body.mensaje);
     });
 %}
 
