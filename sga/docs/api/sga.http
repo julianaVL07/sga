@@ -418,12 +418,16 @@ Content-Type: application/json
     });
 %}
 
-### 4.4 CU-08 Consultar disponibilidad desde el canal externo
-GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2
+### 4.4 CU-08 Consultar disponibilidad desde el canal externo (página 0, 10 por página, 12.4)
+GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2&pagina=0
 
 > {%
-    client.test("4.4 200 disponibilidad canal", function () {
+    client.test("4.4 200 disponibilidad canal paginada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0, "Se esperaba la página 0");
+        client.assert(response.body.tamano === 10, "Se esperaban 10 resultados por página (12.4)");
+        client.assert(response.body.contenido.length <= 10, "Una página trae máximo 10 apartamentos");
+        client.assert(response.body.totalElementos >= response.body.contenido.length, "Total inconsistente");
     });
 %}
 
@@ -505,7 +509,47 @@ PUT {{host}}/api/canales/booking/reservas/BK-NO-EXISTE/cancelar
     });
 %}
 
-### 4.9 CU-03 Reserva con mascotas (L-16): 2 mascotas, la más pesada de 9 kg (APT-101, de hoy+50 a hoy+52)
+### 4.9 7.6 Historial de novedades de APT-301: la de 4.3 es la más reciente (10 por página)
+GET {{host}}/api/apartamentos/APT-301/novedades
+
+> {%
+    client.test("4.9 200 historial de novedades", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "El tamaño de página debía ser 10");
+        client.assert(response.body.totalElementos >= 1, "Debía estar la novedad registrada en 4.3");
+        client.assert(response.body.contenido[0].descripcion === "Copa de cristal rota en la cocina",
+            "La más reciente debía ser la de 4.3: " + response.body.contenido[0].descripcion);
+    });
+%}
+
+### 4.10 7.1 Pendientes de preparación: APT-301 quedó PENDIENTE_PREPARACION tras la salida de 3.11
+GET {{host}}/api/apartamentos/pendientes-preparacion
+
+> {%
+    client.test("4.10 200 pendientes de preparación", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "El tamaño de página debía ser 10");
+        var ids = response.body.contenido.map(function (a) { return a.identificacion; });
+        client.assert(ids.indexOf("APT-301") >= 0, "APT-301 debía estar por preparar: " + ids);
+        client.assert(ids.indexOf("APT-202") < 0, "APT-202 fue retirado en 2.3 y no debía aparecer");
+        client.assert(response.body.contenido.every(function (a) {
+            return a.estadoOperativo === "PENDIENTE_PREPARACION" || a.estadoOperativo === "EN_PREPARACION";
+        }), "Solo debían salir apartamentos en PENDIENTE_PREPARACION o EN_PREPARACION");
+    });
+%}
+
+### 4.11 7.1 Pendientes de preparación, página 1: vacía (hay menos de 10)
+GET {{host}}/api/apartamentos/pendientes-preparacion?pagina=1
+
+> {%
+    client.test("4.11 200 página vacía", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.length === 0, "La página 1 debía venir vacía");
+        client.assert(response.body.totalElementos >= 1, "El total debía contar los de la página 0");
+    });
+%}
+
+### 4.12 CU-03 Reserva con mascotas (L-16): 2 mascotas, la más pesada de 9 kg (APT-101, de hoy+50 a hoy+52)
 # Se aceptan máximo 2 mascotas de hasta 10 kg; el folio recibe el cargo único de aseo de $110.000.
 POST {{host}}/api/reservas
 Content-Type: application/json
@@ -523,7 +567,7 @@ Content-Type: application/json
 }
 
 > {%
-    client.test("4.9 201 reserva con mascotas", function () {
+    client.test("4.12 201 reserva con mascotas", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
         client.assert(response.body.cantidadMascotas === 2, "Se esperaban 2 mascotas");
         client.assert(response.body.pesoMascotaMasPesadaKg === 9, "Se esperaba 9 kg para la mascota más pesada");
@@ -531,11 +575,11 @@ Content-Type: application/json
     client.global.set("reservaConMascotas", response.body.codigo);
 %}
 
-### 4.10 CU-18 La reserva con mascotas conserva sus datos de mascotas
+### 4.13 CU-18 La reserva con mascotas conserva sus datos de mascotas
 GET {{host}}/api/reservas/{{reservaConMascotas}}
 
 > {%
-    client.test("4.10 200 mascotas guardadas", function () {
+    client.test("4.13 200 mascotas guardadas", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
         client.assert(response.body.cantidadMascotas === 2, "Se esperaban 2 mascotas");
         client.assert(response.body.pesoMascotaMasPesadaKg === 9, "Se esperaba 9 kg para la mascota más pesada");
@@ -829,12 +873,7 @@ PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
 %}
 
 ### 5.19 CU-16 El personal de servicio inicia la preparación: PENDIENTE_PREPARACION → EN_PREPARACION
-PUT {{host}}/api/apartamentos/APT-301/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "EN_PREPARACION"
-}
+PUT {{host}}/api/apartamentos/APT-301/iniciar-preparacion
 
 > {%
     client.test("5.19 200 EN_PREPARACION", function () {
@@ -843,12 +882,7 @@ Content-Type: application/json
 %}
 
 ### 5.20 CU-16 Termina la preparación: EN_PREPARACION → PREPARADO
-PUT {{host}}/api/apartamentos/APT-301/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "PREPARADO"
-}
+PUT {{host}}/api/apartamentos/APT-301/terminar-preparacion
 
 > {%
     client.test("5.20 200 PREPARADO", function () {
@@ -866,12 +900,7 @@ PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
 %}
 
 ### 5.22 7.6 Transición de estado operativo no permitida: PREPARADO → EN_PREPARACION (APT-102)
-PUT {{host}}/api/apartamentos/APT-102/estado-operativo
-Content-Type: application/json
-
-{
-  "nuevoEstado": "EN_PREPARACION"
-}
+PUT {{host}}/api/apartamentos/APT-102/iniciar-preparacion
 
 > {%
     client.test("5.22 409 7.6", function () {
@@ -1255,16 +1284,18 @@ Content-Type: application/json
     });
 %}
 
-### 7.6 400 Enum inexistente en el cuerpo: estado operativo LIMPIO
-PUT {{host}}/api/apartamentos/APT-101/estado-operativo
+### 7.6 400 Enum inexistente en el cuerpo: gravedad de novedad CRITICA
+POST {{host}}/api/apartamentos/APT-101/novedades
 Content-Type: application/json
 
 {
-  "nuevoEstado": "LIMPIO"
+  "autor": "Personal de servicio",
+  "descripcion": "Gotera en el baño",
+  "gravedad": "CRITICA"
 }
 
 > {%
-    client.test("7.6 400 enum estado operativo", function () {
+    client.test("7.6 400 enum gravedad de novedad", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
 %}
@@ -1364,6 +1395,15 @@ Content-Type: application/json
 
 > {%
     client.test("8.5 404 bloqueo", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.6 404 Historial de novedades de un apartamento inexistente
+GET {{host}}/api/apartamentos/APT-999/novedades
+
+> {%
+    client.test("8.6 404 historial de novedades", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}

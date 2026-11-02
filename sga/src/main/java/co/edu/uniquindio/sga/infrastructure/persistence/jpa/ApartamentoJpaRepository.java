@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.domain.entity.Bloqueo;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.repository.Pagina;
+import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.ApartamentoEntity;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.entity.BloqueoEntity;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -86,6 +88,25 @@ public class ApartamentoJpaRepository implements ApartamentoRepository {
             throw new ReglaDominioException("12.4: la página no puede ser negativa y el tamaño debe ser mayor que cero");
         }
         Page<ApartamentoEntity> resultado = dataRepository.findByEliminadoFalse(
+                PageRequest.of(pagina, tamano, Sort.by("identificacion").ascending()));
+        return new Pagina<>(resultado.getContent().stream().map(this::aDominio).toList(),
+                pagina, tamano, resultado.getTotalElements());
+    }
+
+    /**
+     * 7.1: qué estados requieren atención lo decide el dominio (EstadoOperativo.requiereLimpieza); la base de datos
+     * solo filtra por esos estados y arma la página.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Pagina<Apartamento> listarPendientesDePreparacion(int pagina, int tamano) {
+        if (pagina < 0 || tamano <= 0) {
+            throw new ReglaDominioException("12.4: la página no puede ser negativa y el tamaño debe ser mayor que cero");
+        }
+        List<EstadoOperativo> pendientes = Arrays.stream(EstadoOperativo.values())
+                .filter(EstadoOperativo::requiereLimpieza)
+                .toList();
+        Page<ApartamentoEntity> resultado = dataRepository.findByEliminadoFalseAndEstadoOperativoIn(pendientes,
                 PageRequest.of(pagina, tamano, Sort.by("identificacion").ascending()));
         return new Pagina<>(resultado.getContent().stream().map(this::aDominio).toList(),
                 pagina, tamano, resultado.getTotalElements());

@@ -1,5 +1,6 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,13 +43,15 @@ class CanalExternoControllerIntegracionTest {
         String disponibilidad = "/api/canales/booking/disponibilidad?entrada=" + entrada + "&salida="
                 + entrada.plusDays(2) + "&ocupantes=1";
         get(disponibilidad).andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].identificacion", hasItem("APT-101")));
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-101")));
 
         post("/api/canales/booking/reservas", reserva("BK-F5-1", "APT-101", entrada, entrada.plusDays(2)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.resultado").value("ACEPTADO"))
                 .andExpect(jsonPath("$.tipoEvento").value("CREACION_RESERVA"));
-        get(disponibilidad).andExpect(jsonPath("$[*].identificacion", not(hasItem("APT-101"))));
+        get(disponibilidad).andExpect(jsonPath("$.contenido[*].identificacion", not(hasItem("APT-101"))));
 
         // RN-19: el canal reenvía el mismo mensaje y no se crea otra reserva
         post("/api/canales/booking/reservas", reserva("BK-F5-1", "APT-101", entrada, entrada.plusDays(2)))
@@ -61,7 +65,25 @@ class CanalExternoControllerIntegracionTest {
         put("/api/canales/booking/reservas/BK-F5-1/cancelar")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultado").value("DUPLICADO_IGNORADO"));
-        get(disponibilidad).andExpect(jsonPath("$[*].identificacion", hasItem("APT-101")));
+        get(disponibilidad).andExpect(jsonPath("$.contenido[*].identificacion", hasItem("APT-101")));
+    }
+
+    @Test
+    @DisplayName("12.4: la disponibilidad del canal se pagina de 10 en 10; una página fuera de rango viene vacía")
+    void disponibilidadPaginada() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(160);
+        String base = "/api/canales/booking/disponibilidad?entrada=" + entrada + "&salida=" + entrada.plusDays(2)
+                + "&ocupantes=1";
+        ResultActions primera = get(base).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(10))
+                .andExpect(jsonPath("$.contenido.length()", lessThanOrEqualTo(10)));
+        long total = ((Number) JsonPath.read(primera.andReturn().getResponse().getContentAsString(),
+                "$.totalElementos")).longValue();
+        get(base + "&pagina=1").andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(1))
+                .andExpect(jsonPath("$.totalElementos").value(total))
+                .andExpect(jsonPath("$.contenido.length()").value((int) Math.max(0, total - 10)));
     }
 
     @Test
@@ -88,13 +110,15 @@ class CanalExternoControllerIntegracionTest {
     }
 
     @Test
-    @DisplayName("400: falta el identificador externo o un parámetro de la disponibilidad")
+    @DisplayName("400: falta el identificador externo, un parámetro de la disponibilidad o la página es negativa")
     void datosMalEscritosResponden400() throws Exception {
         LocalDate entrada = LocalDate.now(BOGOTA).plusDays(125);
         post("/api/canales/booking/reservas", reserva("", "APT-101", entrada, entrada.plusDays(2)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errores.identificadorExterno").exists());
         get("/api/canales/booking/disponibilidad?entrada=" + entrada).andExpect(status().isBadRequest());
+        get("/api/canales/booking/disponibilidad?entrada=" + entrada + "&salida=" + entrada.plusDays(2)
+                + "&ocupantes=1&pagina=-1").andExpect(status().isBadRequest());
     }
 
     private static String reserva(String idExterno, String apartamento, LocalDate entrada, LocalDate salida) {

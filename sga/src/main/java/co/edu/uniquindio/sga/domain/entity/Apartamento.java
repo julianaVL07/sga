@@ -170,8 +170,11 @@ public class Apartamento {
         cambiarEstadoOperativo(EstadoOperativo.PENDIENTE_PREPARACION);
     }
 
-    /** Aplica una transición de estado operativo, rechazando las no permitidas por 7.6. */
-    public void cambiarEstadoOperativo(EstadoOperativo nuevoEstado) {
+    /**
+     * Aplica una transición de estado operativo, rechazando las no permitidas por 7.6. Es privado: desde fuera
+     * solo se cambia el estado con los métodos de negocio anteriores.
+     */
+    private void cambiarEstadoOperativo(EstadoOperativo nuevoEstado) {
         requerido(nuevoEstado, "El nuevo estado operativo es obligatorio");
         if (!esTransicionPermitida(estadoOperativo, nuevoEstado)) {
             throw new ReglaDominioException("7.6: Transición de estado operativo no permitida: "

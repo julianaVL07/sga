@@ -20,7 +20,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * CU-29. GET /api/temporadas?pagina=, POST /api/temporadas y POST /api/temporadas/{id}/rangos
+ * CU-29. GET /api/temporadas?pagina=, GET /api/temporadas/{id}, POST /api/temporadas y
+ * POST /api/temporadas/{id}/rangos
  * Lista las temporadas con sus rangos, crea una temporada con la tarifa de cada apartamento activo (7.4) y agrega
  * rangos a una temporada existente. Que no haya solapes ni una segunda base lo valida el agregado Alojamiento; que
  * ningún apartamento activo quede sin tarifa, CreacionTemporadaService (409). Una temporada inexistente es 404.
@@ -53,6 +54,13 @@ public class TemporadasUseCase {
     @Transactional(readOnly = true)
     public Pagina<Temporada> listar(int pagina) {
         return Pagina.de(obtenerAlojamiento().getTemporadas(), pagina, tamanoPagina);
+    }
+
+    /** Una temporada con sus rangos; es la URL de la cabecera Location al crearla o al agregarle un rango. */
+    @Transactional(readOnly = true)
+    public Temporada consultar(String idTemporada) {
+        return obtenerAlojamiento().buscarTemporada(idTemporada)
+                .orElseThrow(() -> new TemporadaNoEncontradaException(idTemporada));
     }
 
     @Transactional

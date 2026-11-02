@@ -425,6 +425,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/apartamentos/pendientes-preparacion:
+    get:
+      tags: [Apartamentos]
+      summary: Listar apartamentos pendientes de preparación (7.1)
+      description: |
+        Apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, que el personal de servicio debe
+        atender, ordenados por identificación, 10 por página (7.1, 12.4). Ruta fija: el controlador la declara
+        antes de /api/apartamentos/{id}. Solo consulta.
+        Mapea a `ConsultarApartamentosUseCase.pendientesDePreparacion`.
+      operationId: listarPendientesDePreparacion
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos por preparar (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
   /api/apartamentos/{id}:
     parameters:
       - $ref: '#/components/parameters/IdApartamento'
@@ -535,6 +557,10 @@ paths:
       responses:
         '201':
           description: Bloqueo registrado
+          headers:
+            Location:
+              description: URL del bloqueo creado, por ejemplo /api/apartamentos/APT-301/bloqueos/{idBloqueo}
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -546,37 +572,114 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
-  /api/apartamentos/{id}/estado-operativo:
+  /api/apartamentos/{id}/iniciar-preparacion:
     parameters:
       - $ref: '#/components/parameters/IdApartamento'
     put:
       tags: [Apartamentos]
-      summary: Cambiar el estado operativo (CU-16)
+      summary: Iniciar la preparación (CU-16)
       description: |
-        Solo por las transiciones permitidas (7.6). FUERA_DE_SERVICIO lo decide el administrador.
-        Mapea a `CambiarEstadoOperativoUseCase`.
-      operationId: cambiarEstadoOperativo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CambiarEstadoOperativoRequest'
-            example:
-              nuevoEstado: EN_PREPARACION
+        El personal de servicio empieza a preparar el apartamento: PENDIENTE_PREPARACION → EN_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.iniciarPreparacion`.
+      operationId: iniciarPreparacion
       responses:
         '200':
-          description: Estado cambiado
+          description: Apartamento EN_PREPARACION
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApartamentoResponse'
-        '400':
-          $ref: '#/components/responses/DatosInvalidos'
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          $ref: '#/components/responses/ReglaDeNegocio'
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/terminar-preparacion:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Terminar la preparación (CU-16)
+      description: |
+        El apartamento queda listo para recibir un grupo: EN_PREPARACION → PREPARADO.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.terminarPreparacion`.
+      operationId: terminarPreparacion
+      responses:
+        '200':
+          description: Apartamento PREPARADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/poner-fuera-de-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Poner fuera de servicio (CU-16)
+      description: |
+        Decisión del administrador desde cualquier estado no ocupado → FUERA_DE_SERVICIO. No bloquea la venta
+        futura; para eso se registra un bloqueo (3.3).
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.ponerFueraDeServicio`.
+      operationId: ponerFueraDeServicio
+      responses:
+        '200':
+          description: Apartamento FUERA_DE_SERVICIO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/restablecer-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Restablecer el servicio (CU-16)
+      description: |
+        El apartamento vuelve al servicio y debe prepararse: FUERA_DE_SERVICIO → PENDIENTE_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.restablecerServicio`.
+      operationId: restablecerServicio
+      responses:
+        '200':
+          description: Apartamento PENDIENTE_PREPARACION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/apartamentos/{id}/novedades:
     parameters:
@@ -599,10 +702,35 @@ paths:
       responses:
         '201':
           description: Novedad registrada
+          headers:
+            Location:
+              description: URL de la novedad creada, por ejemplo /api/apartamentos/APT-201/novedades/{idNovedad}
+              schema: { type: string }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/NovedadResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el historial de novedades (7.6)
+      description: |
+        Novedades del apartamento de la más reciente a la más antigua, 10 por página (7.6, 12.4). Incluye las
+        de un apartamento retirado de la venta, porque el historial se conserva. Solo consulta.
+        Mapea a `ConsultarNovedadesUseCase.historial`.
+      operationId: historialNovedades
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página del historial (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaNovedadResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '404':
@@ -649,6 +777,29 @@ paths:
 
   # ==================== FOLIO ====================
 
+  /api/reservas/{codigo}/folio:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    get:
+      tags: [ Folio ]
+      summary: Consultar el folio
+      description: |
+        Cargos, pagos, saldo y estado de cierre del folio de la reserva (7.7). El folio nace con el cargo de
+        alojamiento y el depósito de garantía de RP-02 (tipo AJUSTE_MODIFICACION). Es el recurso al que apunta la
+        cabecera Location de un pago registrado. Solo consulta. Mapea a `ConsultarFolioUseCase`.
+      operationId: consultarFolio
+      responses:
+        '200':
+          description: El folio de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
   /api/reservas/{codigo}/folio/pagos:
     parameters:
       - $ref: '#/components/parameters/CodigoReserva'
@@ -671,6 +822,10 @@ paths:
       responses:
         '201':
           description: Pago registrado; devuelve el folio con el nuevo saldo
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -744,21 +899,21 @@ paths:
       tags: [ Canal externo ]
       summary: Consultar disponibilidad desde el canal (CU-08)
       description: |
-        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01.
-        Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
+        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por página
+        (12.4). La consulta queda en la bitácora (7.8). Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
       operationId: consultarDisponibilidadCanal
       parameters:
         - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
         - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
         - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+        - $ref: '#/components/parameters/PaginaApartamentos'
       responses:
         '200':
-          description: Apartamentos disponibles (puede ser una lista vacía)
+          description: Página de apartamentos disponibles (el contenido puede venir vacío)
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApartamentoResponse' }
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '409':
@@ -1127,6 +1282,10 @@ paths:
       responses:
         '201':
           description: Temporada creada
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -1142,6 +1301,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas/{id}:
+    parameters:
+      - { name: id, in: path, required: true, description: Id de la temporada, schema: { type: string }, example: T-ALTA }
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar una temporada (CU-29)
+      description: |
+        La temporada con sus rangos de fechas (fecha final excluida). Es el recurso al que apunta la cabecera
+        Location al crearla o al agregarle un rango. Mapea a `TemporadasUseCase.consultar`.
+      operationId: consultarTemporada
+      responses:
+        '200':
+          description: La temporada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
 
   /api/temporadas/{id}/rangos:
     parameters:
@@ -1163,6 +1342,10 @@ paths:
       responses:
         '201':
           description: Rango agregado; devuelve la temporada con todos sus rangos
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -1333,12 +1516,6 @@ components:
         fechaFin: { type: string, format: date, description: Primera noche que ya no queda bloqueada }
         motivo: { type: string }
 
-    CambiarEstadoOperativoRequest:
-      type: object
-      required: [ nuevoEstado ]
-      properties:
-        nuevoEstado: { $ref: '#/components/schemas/EstadoOperativo' }
-
     RegistrarNovedadRequest:
       type: object
       required: [ autor, descripcion, gravedad ]
@@ -1369,6 +1546,18 @@ components:
         pagina: { type: integer, example: 0 }
         tamano: { type: integer, example: 10 }
         totalElementos: { type: integer, format: int64, example: 5 }
+        totalPaginas: { type: integer, example: 1 }
+
+    PaginaNovedadResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/NovedadResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64, example: 1 }
         totalPaginas: { type: integer, example: 1 }
 
     ApartamentoDisponibleResponse:
@@ -1637,7 +1826,10 @@ components:
 
     TipoCargo:
       type: string
-      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW, DEPOSITO_GARANTIA ]
+      description: |
+        Tipos de cargo del folio (7.7). AJUSTE_MODIFICACION es la diferencia de una modificación (RN-14) y también
+        el depósito de garantía de RP-02 y su devolución (valor negativo), como lo definen el Anexo A y el glosario.
+      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW ]
 
     TipoEventoCanal:
       type: string

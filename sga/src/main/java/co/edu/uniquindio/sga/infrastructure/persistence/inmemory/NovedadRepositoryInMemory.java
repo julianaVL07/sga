@@ -2,6 +2,7 @@ package co.edu.uniquindio.sga.infrastructure.persistence.inmemory;
 
 import co.edu.uniquindio.sga.domain.entity.Novedad;
 import co.edu.uniquindio.sga.domain.repository.NovedadRepository;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 
 import java.util.Comparator;
@@ -38,6 +39,11 @@ public class NovedadRepositoryInMemory implements NovedadRepository {
                 .filter(n -> n.perteneceA(apartamento))
                 .sorted(MAS_RECIENTE_PRIMERO)
                 .toList();
+    }
+
+    @Override
+    public Pagina<Novedad> listarPorApartamento(IdentificacionApartamento apartamento, int pagina, int tamano) {
+        return Pagina.de(listarPorApartamento(apartamento), pagina, tamano);
     }
 
     @Override

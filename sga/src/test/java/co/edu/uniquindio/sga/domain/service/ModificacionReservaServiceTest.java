@@ -81,9 +81,14 @@ class ModificacionReservaServiceTest {
         return reserva;
     }
 
+    /**
+     * Ajustes por modificación (RN-14). El depósito de garantía también es AJUSTE_MODIFICACION (RP-02, 7.7),
+     * así que se distinguen por el concepto que asienta ModificacionReservaService.
+     */
     private List<Cargo> ajustesDe(Reserva reserva) {
         return escenario.folios.buscarPorReserva(reserva.getCodigo()).orElseThrow().getCargos().stream()
                 .filter(cargo -> cargo.tipo() == TipoCargo.AJUSTE_MODIFICACION)
+                .filter(cargo -> cargo.concepto().startsWith("Ajuste por modificación"))
                 .toList();
     }
 }

@@ -4,6 +4,7 @@ import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.valueobject.Capacidad;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.Dotacion;
+import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Imagen;
 import co.edu.uniquindio.sga.domain.valueobject.RegistroTarifa;
@@ -27,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Matriz de trazabilidad: RN-02, implementada en Apartamento.admite() y Apartamento.validarCapacidadPara();
  * 7.3 (retiro de la venta con eliminación lógica, 12.4), implementada en Apartamento.retirarDeLaVenta();
  * 7.4 (CU-24 histórico de tarifas y CU-25 activación), implementada en Apartamento.definirTarifa(tarifa, fecha),
- * Apartamento.definirTarifas() y Apartamento.activar().
+ * Apartamento.definirTarifas() y Apartamento.activar();
+ * 7.6 (transiciones de estado operativo), implementada en los métodos de negocio recibirGrupo, liberarTrasSalida,
+ * iniciarPreparacion, terminarPreparacion, ponerFueraDeServicio y restablecerServicio.
  */
 class ApartamentoTest {
 
@@ -184,6 +187,114 @@ class ApartamentoTest {
         apartamento.definirTarifas(List.of(new Tarifa("T-ALTA", Dinero.de(560_000))), List.of(BASE, ALTA), ENERO);
         apartamento.activar(List.of(BASE, ALTA));
         assertTrue(apartamento.estaVigenteParaVenta());
+    }
+
+    // ==================== 7.6: transiciones de estado operativo ====================
+
+    @Test
+    @DisplayName("7.6: ciclo permitido PREPARADO → OCUPADO → PENDIENTE_PREPARACION → EN_PREPARACION → PREPARADO")
+    void cicloPermitidoDeEstadoOperativo() {
+        Apartamento apartamento = apartamentoNuevo();
+        assertEquals(EstadoOperativo.PREPARADO, apartamento.getEstadoOperativo());
+
+        apartamento.recibirGrupo();
+        assertEquals(EstadoOperativo.OCUPADO, apartamento.getEstadoOperativo());
+        apartamento.liberarTrasSalida();
+        assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, apartamento.getEstadoOperativo());
+        apartamento.iniciarPreparacion();
+        assertEquals(EstadoOperativo.EN_PREPARACION, apartamento.getEstadoOperativo());
+        apartamento.terminarPreparacion();
+        assertEquals(EstadoOperativo.PREPARADO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: desde PREPARADO, PENDIENTE_PREPARACION o EN_PREPARACION se pone FUERA_DE_SERVICIO y se restablece")
+    void ponerFueraDeServicioYRestablecerDesdeEstadosNoOcupados() {
+        for (EstadoOperativo origen : List.of(EstadoOperativo.PREPARADO, EstadoOperativo.PENDIENTE_PREPARACION,
+                EstadoOperativo.EN_PREPARACION)) {
+            Apartamento apartamento = apartamentoEn(origen);
+
+            apartamento.ponerFueraDeServicio();
+            assertEquals(EstadoOperativo.FUERA_DE_SERVICIO, apartamento.getEstadoOperativo(), "desde " + origen);
+            apartamento.restablecerServicio();
+            assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, apartamento.getEstadoOperativo(), "desde " + origen);
+        }
+    }
+
+    @Test
+    @DisplayName("7.6: PREPARADO → EN_PREPARACION no está permitido y el estado no cambia")
+    void rechazarIniciarPreparacionSiYaEstaPreparado() {
+        Apartamento apartamento = apartamentoNuevo();
+
+        ReglaDominioException error = assertThrows(ReglaDominioException.class, apartamento::iniciarPreparacion);
+
+        assertTrue(error.getMessage().startsWith("7.6"));
+        assertEquals(EstadoOperativo.PREPARADO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: OCUPADO → FUERA_DE_SERVICIO no está permitido con huéspedes adentro")
+    void rechazarFueraDeServicioSiEstaOcupado() {
+        Apartamento apartamento = apartamentoEn(EstadoOperativo.OCUPADO);
+
+        ReglaDominioException error = assertThrows(ReglaDominioException.class, apartamento::ponerFueraDeServicio);
+
+        assertTrue(error.getMessage().startsWith("7.6"));
+        assertEquals(EstadoOperativo.OCUPADO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: FUERA_DE_SERVICIO no salta a PREPARADO ni a EN_PREPARACION, ni se vuelve a poner fuera de servicio")
+    void rechazarTransicionesDesdeFueraDeServicio() {
+        Apartamento apartamento = apartamentoEn(EstadoOperativo.FUERA_DE_SERVICIO);
+
+        assertThrows(ReglaDominioException.class, apartamento::terminarPreparacion);
+        assertThrows(ReglaDominioException.class, apartamento::iniciarPreparacion);
+        assertThrows(ReglaDominioException.class, apartamento::ponerFueraDeServicio);
+        assertEquals(EstadoOperativo.FUERA_DE_SERVICIO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: no se libera tras salida ni se restablece el servicio de un apartamento PREPARADO")
+    void rechazarLiberarORestablecerSiEstaPreparado() {
+        Apartamento apartamento = apartamentoNuevo();
+
+        assertThrows(ReglaDominioException.class, apartamento::liberarTrasSalida);
+        assertThrows(ReglaDominioException.class, apartamento::restablecerServicio);
+        assertThrows(ReglaDominioException.class, apartamento::terminarPreparacion);
+        assertEquals(EstadoOperativo.PREPARADO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6 y RN-11: un apartamento PENDIENTE_PREPARACION no recibe grupo ni termina sin iniciar la preparación")
+    void rechazarTransicionesDesdePendientePreparacion() {
+        Apartamento apartamento = apartamentoEn(EstadoOperativo.PENDIENTE_PREPARACION);
+
+        ReglaDominioException sinPreparar = assertThrows(ReglaDominioException.class, apartamento::recibirGrupo);
+        assertTrue(sinPreparar.getMessage().startsWith("RN-11"));
+        assertThrows(ReglaDominioException.class, apartamento::terminarPreparacion);
+        assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, apartamento.getEstadoOperativo());
+    }
+
+    /** Lleva un apartamento nuevo (PREPARADO) al estado pedido usando solo los métodos de negocio. */
+    private static Apartamento apartamentoEn(EstadoOperativo estado) {
+        Apartamento apartamento = apartamentoNuevo();
+        switch (estado) {
+            case PREPARADO -> { }
+            case OCUPADO -> apartamento.recibirGrupo();
+            case PENDIENTE_PREPARACION -> {
+                apartamento.recibirGrupo();
+                apartamento.liberarTrasSalida();
+            }
+            case EN_PREPARACION -> {
+                apartamento.recibirGrupo();
+                apartamento.liberarTrasSalida();
+                apartamento.iniciarPreparacion();
+            }
+            case FUERA_DE_SERVICIO -> apartamento.ponerFueraDeServicio();
+        }
+        assertEquals(estado, apartamento.getEstadoOperativo());
+        return apartamento;
     }
 
     private static Apartamento apartamentoNuevo() {
