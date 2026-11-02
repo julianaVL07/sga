@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -23,7 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * integración del agregado Folio: pagos, cierre con saldo en cero y cierre autorizado con saldo
  * (RN-15, RN-16, RN-17), por HTTP contra la aplicación completa sobre H2. El depósito de garantía de RP-02 se asienta
- * como cargo de tipo AJUSTE_MODIFICACION (Anexo A, glosario y 7.7).
+ * como cargo de tipo AJUSTE_MODIFICACION (Anexo A, glosario y 7.7). También cubre el cargo de un servicio adicional
+ * (7.1, L-17) y la corrección por movimiento inverso (RN-16); en un folio nuevo la posición 0 es el alojamiento, la
+ * 1 el depósito y la 2 el primer cargo que se agregue.
  * Cada prueba crea su propia reserva en APT-102 lejos en el calendario para no chocar con las demás.
  */
 @SpringBootTest
@@ -32,6 +35,10 @@ class FolioControllerIntegracionTest {
 
     private static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
     private static final long VALOR_DEPOSITO_GARANTIA = 250_000;
+    /** Datos iniciales del Coral (A.5): cena para 2 personas en el balcón. */
+    private static final String CENA = "SRV-CENA-BALCON";
+    private static final long VALOR_CENA = 260_000;
+    private static final String RESERVA_INEXISTENTE = "/api/reservas/RES-2026-99999/folio";
 
     @Autowired
     private MockMvc mvc;
@@ -124,6 +131,120 @@ class FolioControllerIntegracionTest {
         put(folio + "/cerrar").andExpect(status().isNotFound());
     }
 
+
+    // ==================== 7.1: cargo de un servicio adicional ====================
+
+    @Test
+    @DisplayName("7.1 y L-17: el cargo de un servicio adicional responde 201 con Location y se suma al saldo")
+    void registrarCargoDeServicioAdicional() throws Exception {
+        ResultActions creada = crearReserva(LocalDate.now(BOGOTA).plusDays(170));
+        String folio = "/api/reservas/" + codigo(creada) + "/folio";
+        long valorTotal = numero(creada, "$.valorTotal");
+
+        post(folio + "/cargos", cargo(CENA))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith(folio)))
+                .andExpect(jsonPath("$.cargos.length()").value(3))
+                .andExpect(jsonPath("$.cargos[2].tipo").value("SERVICIO_ADICIONAL"))
+                .andExpect(jsonPath("$.cargos[2].concepto").value("Cena en balcón por cocinero privado"))
+                .andExpect(jsonPath("$.cargos[2].valor").value(VALOR_CENA))
+                .andExpect(jsonPath("$.cargos[2].fecha").value(LocalDate.now(BOGOTA).toString()))
+                .andExpect(jsonPath("$.totalCargos").value(valorTotal + VALOR_DEPOSITO_GARANTIA + VALOR_CENA))
+                .andExpect(jsonPath("$.saldo").value(valorTotal + VALOR_DEPOSITO_GARANTIA + VALOR_CENA));
+        get(folio).andExpect(jsonPath("$.cargos.length()").value(3));
+    }
+
+    @Test
+    @DisplayName("Cargo de servicio: 404 si la reserva no existe y 400 si falta el id del servicio")
+    void cargoDeServicioResponde404Y400() throws Exception {
+        post(RESERVA_INEXISTENTE + "/cargos", cargo(CENA)).andExpect(status().isNotFound());
+        post(RESERVA_INEXISTENTE + "/cargos", "{\"idServicio\":\" \"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores.idServicio").exists());
+    }
+
+    @Test
+    @DisplayName("Cargo de servicio: 409 si el alojamiento no ofrece el servicio (L-17) o si el folio está cerrado "
+            + "(RN-16)")
+    void cargoDeServicioResponde409() throws Exception {
+        String folio = "/api/reservas/" + codigo(crearReserva(LocalDate.now(BOGOTA).plusDays(175))) + "/folio";
+
+        post(folio + "/cargos", cargo("SRV-NO-EXISTE"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("L-17")));
+
+        cerrarConAutorizacion(folio);
+        post(folio + "/cargos", cargo(CENA))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("RN-16")));
+        get(folio).andExpect(jsonPath("$.cargos.length()").value(2));
+    }
+
+    // ==================== RN-16: corrección por movimiento inverso ====================
+
+    @Test
+    @DisplayName("RN-16: la corrección responde 201 con Location, asienta el cargo contrario y deja el original")
+    void registrarCorreccion() throws Exception {
+        ResultActions creada = crearReserva(LocalDate.now(BOGOTA).plusDays(180));
+        String folio = "/api/reservas/" + codigo(creada) + "/folio";
+        long valorTotal = numero(creada, "$.valorTotal");
+        post(folio + "/cargos", cargo(CENA)).andExpect(status().isCreated());
+
+        post(folio + "/correcciones", correccion(2, "La cena no se consumió"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", endsWith(folio)))
+                .andExpect(jsonPath("$.cargos.length()").value(4))
+                .andExpect(jsonPath("$.cargos[2].valor").value(VALOR_CENA))           // el original sigue igual
+                .andExpect(jsonPath("$.cargos[3].tipo").value("SERVICIO_ADICIONAL"))
+                .andExpect(jsonPath("$.cargos[3].valor").value(-VALOR_CENA))
+                .andExpect(jsonPath("$.cargos[3].concepto", containsString("La cena no se consumió")))
+                .andExpect(jsonPath("$.totalCargos").value(valorTotal + VALOR_DEPOSITO_GARANTIA))
+                .andExpect(jsonPath("$.saldo").value(valorTotal + VALOR_DEPOSITO_GARANTIA));
+    }
+
+    @Test
+    @DisplayName("Corrección: 404 si la reserva no existe y 400 si falta la posición del cargo o el motivo")
+    void correccionResponde404Y400() throws Exception {
+        post(RESERVA_INEXISTENTE + "/correcciones", correccion(0, "Error")).andExpect(status().isNotFound());
+        post(RESERVA_INEXISTENTE + "/correcciones", "{\"motivo\":\"Error\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores.indiceCargo").exists());
+        post(RESERVA_INEXISTENTE + "/correcciones", "{\"indiceCargo\":0}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores.motivo").exists());
+    }
+
+    @Test
+    @DisplayName("Corrección: 409 si no hay un cargo en esa posición o si el folio está cerrado (RN-16)")
+    void correccionResponde409() throws Exception {
+        String folio = "/api/reservas/" + codigo(crearReserva(LocalDate.now(BOGOTA).plusDays(185))) + "/folio";
+
+        post(folio + "/correcciones", correccion(99, "No existe"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("RN-16")));
+        post(folio + "/correcciones", correccion(-1, "No existe"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("RN-16")));
+
+        cerrarConAutorizacion(folio);
+        post(folio + "/correcciones", correccion(0, "Tarde"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje", startsWith("RN-16")));
+        get(folio).andExpect(jsonPath("$.cargos.length()").value(2));
+    }
+
+    private void cerrarConAutorizacion(String folio) throws Exception {
+        post(folio + "/autorizacion-cierre", "{\"autorizadoPor\":\"Administradora Marta\","
+                + "\"motivo\":\"Cierre de prueba\"}").andExpect(status().isOk());
+    }
+
+    private static String cargo(String idServicio) {
+        return "{\"idServicio\":\"" + idServicio + "\"}";
+    }
+
+    private static String correccion(int indiceCargo, String motivo) {
+        return "{\"indiceCargo\":" + indiceCargo + ",\"motivo\":\"" + motivo + "\"}";
+    }
 
     private ResultActions crearReserva(LocalDate entrada) throws Exception {
         return post("/api/reservas", """
