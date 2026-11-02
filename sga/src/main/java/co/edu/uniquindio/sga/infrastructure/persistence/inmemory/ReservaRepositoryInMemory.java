@@ -28,6 +28,10 @@ public class ReservaRepositoryInMemory implements ReservaRepository {
     private static final Comparator<Reserva> MAS_RECIENTE_PRIMERO =
             Comparator.comparing(Reserva::getFechaCreacion).reversed();
 
+    /** CU-26: la recepcionista recorre las llegadas y salidas apartamento por apartamento. */
+    private static final Comparator<Reserva> POR_APARTAMENTO =
+            Comparator.comparing((Reserva r) -> r.getApartamento().codigo()).thenComparing(r -> r.getCodigo().valor());
+
     private final Map<CodigoReserva, Reserva> almacen = new ConcurrentHashMap<>();
 
     @Override
@@ -104,6 +108,16 @@ public class ReservaRepositoryInMemory implements ReservaRepository {
                 .filter(r -> r.getEstado() == EstadoReserva.EN_CURSO)
                 .filter(r -> r.getEstancia().fechaSalida().equals(fecha))
                 .toList();
+    }
+
+    @Override
+    public Pagina<Reserva> listarLlegadasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return Pagina.de(listarLlegadasPrevistas(fecha).stream().sorted(POR_APARTAMENTO).toList(), pagina, tamano);
+    }
+
+    @Override
+    public Pagina<Reserva> listarSalidasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return Pagina.de(listarSalidasPrevistas(fecha).stream().sorted(POR_APARTAMENTO).toList(), pagina, tamano);
     }
 
     @Override

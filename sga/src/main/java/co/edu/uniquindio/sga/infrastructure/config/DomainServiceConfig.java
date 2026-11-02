@@ -9,6 +9,7 @@ import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.repository.ServicioAdicionalRepository;
 import co.edu.uniquindio.sga.domain.service.AdministracionApartamentoService;
+import co.edu.uniquindio.sga.domain.service.CalendarioOcupacionService;
 import co.edu.uniquindio.sga.domain.service.CancelarReservaService;
 import co.edu.uniquindio.sga.domain.service.ConciliacionCanalExternoService;
 import co.edu.uniquindio.sga.domain.service.ConfirmacionReservaService;
@@ -34,7 +35,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 /**
- * Construye los 14 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 15 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -150,6 +151,13 @@ public class DomainServiceConfig {
                                                                              AlojamientoRepository alojamientos,
                                                                              ReservaRepository reservas) {
         return new AdministracionApartamentoService(apartamentos, alojamientos, reservas);
+    }
+
+    /** CU-27 (7.1): calendario de ocupación noche por noche de un apartamento. */
+    @Bean
+    public CalendarioOcupacionService calendarioOcupacionService(ReservaRepository reservas,
+                                                                 BloqueoRepository bloqueos) {
+        return new CalendarioOcupacionService(reservas, bloqueos);
     }
 
     @Bean

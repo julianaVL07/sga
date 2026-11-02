@@ -49,6 +49,11 @@ public interface ReservaJpaDataRepository extends JpaRepository<ReservaEntity, L
 
     List<ReservaEntity> findByEstadoAndEstanciaFechaSalida(EstadoReserva estado, LocalDate fecha);
 
+    /** CU-26: variantes paginadas; el orden y el tamaño de la página llegan en el Pageable. */
+    Page<ReservaEntity> findByEstadoAndEstanciaFechaEntrada(EstadoReserva estado, LocalDate fecha, Pageable pageable);
+
+    Page<ReservaEntity> findByEstadoAndEstanciaFechaSalida(EstadoReserva estado, LocalDate fecha, Pageable pageable);
+
     List<ReservaEntity> findAllByOrderByFechaCreacionDesc();
 
     /**
