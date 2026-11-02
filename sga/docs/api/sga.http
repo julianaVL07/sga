@@ -1791,3 +1791,403 @@ GET {{host}}/api/reservas/calendario?apartamento=APT-999&desde={{cu26Hoy}}&hasta
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}
+
+### Sección 11: CU-28 a CU-30 CONFIGURACIÓN DEL ALOJAMIENTO: alojamiento, temporadas y política de cancelación
+
+# ====================================================================================================
+# 11. CU-28 a CU-30 (administrador)
+#     CU-28: consultar y actualizar el alojamiento (los parámetros de la sección 6 son de solo lectura).
+#     CU-29: listar temporadas, crear la temporada Festival (1 al 10 de marzo de 2027, fecha final excluida)
+#            con la tarifa de cada apartamento activo (7.4) y agregarle un rango.
+#     CU-30: reservar con la versión 1 de la política, publicar la versión 2 y reservar con ella; la primera
+#            reserva conserva la versión 1 (RN-22).
+#     Corre con la app recién arrancada, sola o después del recorrido completo: las tarifas de la temporada
+#     nueva se arman en 11.0 con los apartamentos que existan en ese momento (APT-202 no está si ya corrió la
+#     sección 2 y APT-401 sí está si ya corrió la sección 9). Las reservas usan hoy+120 a hoy+122, que no
+#     choca con ninguna otra reserva del archivo. Si se ejecuta dos veces sin reiniciar, fallan las que crean
+#     (la temporada Festival ya existe) y la versión de la política ya no es la 1.
+# ====================================================================================================
+
+### 11.0 Fechas de la sección y tarifas de la temporada nueva para todos los apartamentos (activos o no)
+GET {{host}}/api/apartamentos
+
+> {%
+    client.test("11.0 200 apartamentos", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.length > 0, "Se esperaba al menos un apartamento");
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("cu28Hoy", fecha(0));
+    client.global.set("cu28Entrada", fecha(120));
+    client.global.set("cu28Salida", fecha(122));
+    // 7.4: una tarifa de 450.000 por ocupante para cada apartamento listado (todos los activos están en la lista)
+    var tarifas = response.body.contenido.map(function (a) {
+        return { identificacionApartamento: a.identificacion, valorPorOcupante: 450000 };
+    });
+    client.global.set("cu28TarifasCompletas", JSON.stringify(tarifas));
+    // Solo la del primer apartamento: a los demás activos les falta la tarifa
+    client.global.set("cu28TarifasIncompletas", JSON.stringify(tarifas.slice(0, 1)));
+%}
+
+### 11.1 CU-28 Consultar el alojamiento: datos, ubicación, horario, normas, servicios y parámetros vigentes
+GET {{host}}/api/alojamiento
+
+> {%
+    client.test("11.1 200 alojamiento", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === "ALO-CORAL", "Se esperaba ALO-CORAL");
+        client.assert(response.body.serviciosAdicionales.length >= 3, "Faltan los servicios adicionales (L-17)");
+        client.assert(response.body.parametros.umbralEdadFacturable === 6, "Umbral de edad facturable (L-09)");
+        client.assert(response.body.parametros.porcentajeAnticipo === 50, "Porcentaje de anticipo (L-11)");
+    });
+%}
+
+### 11.2 CU-28 Actualizar datos, ubicación y normas (el horario se envía igual: 15:00 y 11:00)
+PUT {{host}}/api/alojamiento
+Content-Type: application/json
+
+{
+  "nombre": "Coral",
+  "descripcion": "Conjunto residencial de apartamentos independientes de alta gama frente al mar Caribe.",
+  "ciudad": "Cartagena de Indias",
+  "direccion": "Sector Bocagrande, Avenida del Malecón, frente a las playas de Castillo Grande",
+  "latitud": 10.3975,
+  "longitud": -75.559,
+  "normaConvivencia": "Silencio estricto en balcones entre las 23:00 y las 07:00; prohibido fumar dentro de los apartamentos; mascotas siempre con correa en las áreas comunes.",
+  "horaEntrada": "15:00",
+  "horaSalida": "11:00"
+}
+
+> {%
+    client.test("11.2 200 alojamiento actualizado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.normaConvivencia.indexOf("mascotas siempre con correa") > 0,
+            "No se actualizaron las normas");
+        client.assert(response.body.horaEntrada.indexOf("15:00") === 0, "El horario debía seguir en 15:00");
+        client.assert(response.body.parametros.porcentajeAnticipo === 50, "Los parámetros no cambian por API");
+    });
+%}
+
+### 11.3 409 7.3 La latitud debe estar entre -90 y 90
+PUT {{host}}/api/alojamiento
+Content-Type: application/json
+
+{
+  "nombre": "Coral",
+  "ciudad": "Cartagena de Indias",
+  "latitud": 95,
+  "longitud": -75.559
+}
+
+> {%
+    client.test("11.3 409 7.3 coordenada fuera de rango", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.3") === 0, "Se esperaba 7.3: " + response.body.mensaje);
+    });
+%}
+
+### 11.4 409 L-12 El horario lleva las dos horas: llega solo la de entrada
+PUT {{host}}/api/alojamiento
+Content-Type: application/json
+
+{
+  "nombre": "Coral",
+  "ciudad": "Cartagena de Indias",
+  "latitud": 10.3975,
+  "longitud": -75.559,
+  "horaEntrada": "14:00"
+}
+
+> {%
+    client.test("11.4 409 L-12 horario incompleto", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("L-12") >= 0, "Se esperaba L-12: " + response.body.mensaje);
+    });
+%}
+
+### 11.5 CU-29 Listar temporadas: Base (sin rangos), Media y Alta
+GET {{host}}/api/temporadas
+
+> {%
+    client.test("11.5 200 temporadas", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var ids = response.body.contenido.map(function (t) { return t.id; });
+        ["T-BASE", "T-MEDIA", "T-ALTA"].forEach(function (id) {
+            client.assert(ids.indexOf(id) >= 0, "Falta la temporada " + id);
+        });
+        var base = response.body.contenido.filter(function (t) { return t.id === "T-BASE"; })[0];
+        client.assert(base.rangos.length === 0, "La temporada base no tiene rangos (F-05)");
+    });
+%}
+
+### 11.6 CU-29 Crear la temporada Festival con la tarifa de todos los apartamentos activos: 201
+POST {{host}}/api/temporadas
+Content-Type: application/json
+
+{
+  "id": "T-FESTIVAL",
+  "nombre": "Festival",
+  "tipo": "MEDIA",
+  "rangos": [
+    { "fechaInicio": "2027-03-01", "fechaFin": "2027-03-11" }
+  ],
+  "tarifas": {{cu28TarifasCompletas}}
+}
+
+> {%
+    client.test("11.6 201 temporada creada", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.id === "T-FESTIVAL", "Se esperaba T-FESTIVAL");
+        client.assert(response.body.rangos.length === 1, "Se esperaba un rango");
+    });
+%}
+
+### 11.7 CU-29 APT-101 ya tiene tarifa en la temporada nueva (7.4) y quedó en su histórico desde hoy (CU-24)
+GET {{host}}/api/apartamentos/APT-101/tarifas/historico
+
+> {%
+    client.test("11.7 200 tarifa de la temporada nueva en el histórico", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var festival = response.body.contenido.filter(function (r) { return r.idTemporada === "T-FESTIVAL"; });
+        client.assert(festival.length === 1, "Falta la tarifa de T-FESTIVAL");
+        client.assert(festival[0].vigente === true, "La tarifa de T-FESTIVAL debe estar vigente");
+        client.assert(festival[0].vigenteDesde === client.global.get("cu28Hoy"), "Debe regir desde hoy");
+    });
+%}
+
+### 11.8 409 7.4 Todo apartamento activo debe tener tarifa en todas las temporadas (solo llega una)
+POST {{host}}/api/temporadas
+Content-Type: application/json
+
+{
+  "id": "T-CONGRESO",
+  "nombre": "Congreso",
+  "tipo": "ALTA",
+  "rangos": [
+    { "fechaInicio": "2027-04-01", "fechaFin": "2027-04-05" }
+  ],
+  "tarifas": {{cu28TarifasIncompletas}}
+}
+
+> {%
+    client.test("11.8 409 7.4 falta la tarifa de un apartamento activo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+        client.assert(response.body.mensaje.indexOf("falta la tarifa") > 0, "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 11.9 409 7.4 Las temporadas no se solapan (20 al 25 de diciembre de 2026 está en temporada Alta)
+POST {{host}}/api/temporadas
+Content-Type: application/json
+
+{
+  "id": "T-NAVIDAD",
+  "nombre": "Navidad",
+  "tipo": "ALTA",
+  "rangos": [
+    { "fechaInicio": "2026-12-20", "fechaFin": "2026-12-26" }
+  ],
+  "tarifas": {{cu28TarifasCompletas}}
+}
+
+> {%
+    client.test("11.9 409 7.4 temporada solapada", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+        client.assert(response.body.mensaje.indexOf("se solapa") > 0, "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}
+
+### 11.10 409 F-05 El alojamiento ya tiene una temporada base
+POST {{host}}/api/temporadas
+Content-Type: application/json
+
+{
+  "id": "T-BASE-2",
+  "nombre": "Otra base",
+  "tipo": "BASE",
+  "rangos": [],
+  "tarifas": {{cu28TarifasCompletas}}
+}
+
+> {%
+    client.test("11.10 409 F-05 segunda temporada base", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("F-05") === 0, "Se esperaba F-05: " + response.body.mensaje);
+    });
+%}
+
+### 11.11 CU-29 Agregar a Festival el rango del 15 al 17 de marzo de 2027: 201
+POST {{host}}/api/temporadas/T-FESTIVAL/rangos
+Content-Type: application/json
+
+{ "fechaInicio": "2027-03-15", "fechaFin": "2027-03-18" }
+
+> {%
+    client.test("11.11 201 rango agregado", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.rangos.length === 2, "Se esperaban 2 rangos");
+    });
+%}
+
+### 11.12 409 7.4 Un rango nuevo tampoco puede solaparse con otra temporada (diciembre es Alta)
+POST {{host}}/api/temporadas/T-FESTIVAL/rangos
+Content-Type: application/json
+
+{ "fechaInicio": "2026-12-20", "fechaFin": "2026-12-26" }
+
+> {%
+    client.test("11.12 409 7.4 rango solapado", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
+    });
+%}
+
+### 11.13 404 Agregar un rango a una temporada inexistente
+POST {{host}}/api/temporadas/T-NO-EXISTE/rangos
+Content-Type: application/json
+
+{ "fechaInicio": "2027-05-01", "fechaFin": "2027-05-03" }
+
+> {%
+    client.test("11.13 404 temporada inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 11.14 CU-30 Política vigente: la versión 1 de application.properties (tramos 16, 7 y 0 días)
+GET {{host}}/api/politica-cancelacion
+
+> {%
+    client.test("11.14 200 política vigente versión 1", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.version === 1, "Se esperaba la versión 1 y llegó " + response.body.version);
+        client.assert(response.body.tramos.length === 3, "Se esperaban 3 tramos");
+    });
+%}
+
+### 11.15 CU-03 Reserva con la versión 1 (APT-101, de hoy+120 a hoy+122)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{cu28Entrada}}",
+  "fechaSalida": "{{cu28Salida}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": {
+    "nombre": "Camila Ortiz",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1094300400",
+    "email": "camila.ortiz@correo.co",
+    "telefono": "3005550808"
+  },
+  "ocupantes": [
+    { "nombre": "Camila Ortiz", "tipoDocumento": "CC", "numeroDocumento": "1094300400", "fechaNacimiento": "1992-08-14" }
+  ]
+}
+
+> {%
+    client.test("11.15 201 reserva con la política versión 1", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.versionPoliticaCancelacion === 1, "Se esperaba la versión 1 (RN-22)");
+    });
+    client.global.set("cu30ReservaVersion1", response.body.codigo);
+%}
+
+### 11.16 CU-30 Actualizar la política: crea la versión 2 vigente desde hoy
+PUT {{host}}/api/politica-cancelacion
+Content-Type: application/json
+
+{
+  "consecuenciaNoShow": "Se retiene el 60% del valor total de la estancia como penalidad; la reserva transita a NO_SHOW y se liberan de inmediato todas las noches en el inventario (RN-12, RN-13).",
+  "tramos": [
+    { "antelacionMinimaDias": 20, "porcentajeRetencion": 0 },
+    { "antelacionMinimaDias": 10, "porcentajeRetencion": 30 },
+    { "antelacionMinimaDias": 0, "porcentajeRetencion": 60 }
+  ]
+}
+
+> {%
+    client.test("11.16 200 versión 2", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.version === 2, "Se esperaba la versión 2 y llegó " + response.body.version);
+        client.assert(response.body.vigenteDesde === client.global.get("cu28Hoy"), "La versión 2 rige desde hoy");
+    });
+%}
+
+### 11.17 CU-30 Versiones: la 2 primero y la 1 se conserva sin cambios
+GET {{host}}/api/politica-cancelacion/versiones
+
+> {%
+    client.test("11.17 200 versiones", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.totalElementos === 2, "Se esperaban 2 versiones");
+        client.assert(response.body.contenido[0].version === 2, "La más reciente va primero");
+        client.assert(response.body.contenido[1].version === 1, "La versión 1 se conserva");
+        client.assert(response.body.contenido[1].tramos[0].antelacionMinimaDias === 16, "La versión 1 no cambia");
+    });
+%}
+
+### 11.18 CU-03 Una reserva nueva congela la versión 2 (APT-102, de hoy+120 a hoy+122)
+POST {{host}}/api/reservas
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{cu28Entrada}}",
+  "fechaSalida": "{{cu28Salida}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "DIRECTO",
+  "titular": {
+    "nombre": "Mateo Salazar",
+    "tipoDocumento": "CC",
+    "numeroDocumento": "1094300500",
+    "email": "mateo.salazar@correo.co",
+    "telefono": "3005550909"
+  },
+  "ocupantes": [
+    { "nombre": "Mateo Salazar", "tipoDocumento": "CC", "numeroDocumento": "1094300500", "fechaNacimiento": "1987-02-03" }
+  ]
+}
+
+> {%
+    client.test("11.18 201 reserva con la política versión 2", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.versionPoliticaCancelacion === 2, "Se esperaba la versión 2 (RN-22)");
+    });
+%}
+
+### 11.19 RN-22 La reserva de 11.15 sigue con la versión 1
+GET {{host}}/api/reservas/{{cu30ReservaVersion1}}
+
+> {%
+    client.test("11.19 200 la reserva existente conserva la versión 1", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.versionPoliticaCancelacion === 1, "Debía seguir con la versión 1 (RN-22)");
+    });
+%}
+
+### 11.20 409 L-10 La política debe tener al menos dos tramos
+PUT {{host}}/api/politica-cancelacion
+Content-Type: application/json
+
+{
+  "consecuenciaNoShow": "Se retiene el 50% del valor total de la estancia.",
+  "tramos": [
+    { "antelacionMinimaDias": 0, "porcentajeRetencion": 50 }
+  ]
+}
+
+> {%
+    client.test("11.20 409 L-10 un solo tramo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("L-10") === 0, "Se esperaba L-10: " + response.body.mensaje);
+    });
+%}
