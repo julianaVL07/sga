@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Objects;
 
 /**
- * 7.6. GET /api/apartamentos/{id}/novedades?pagina=
+ * CU-34 (7.6). GET /api/apartamentos/{id}/novedades?pagina=
  * Historial de novedades de un apartamento, de la más reciente a la más antigua, 10 por página (12.4).
  * Incluye las de apartamentos retirados de la venta, porque el historial se conserva. Solo consulta.
  * Actores: personal de servicio, recepcionista y administrador.

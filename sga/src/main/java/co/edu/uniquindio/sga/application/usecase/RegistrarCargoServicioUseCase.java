@@ -17,7 +17,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 /**
- * POST /api/reservas/{codigo}/folio/cargos (7.1: registrar cargos en el folio)
+ * CU-32. POST /api/reservas/{codigo}/folio/cargos (7.1: registrar cargos en el folio)
  * Asienta en el folio el cargo de un servicio adicional del alojamiento (L-17), con el valor y el nombre del servicio
  * y la fecha de hoy. El cargo lo genera ServicioAdicional.generarCargoPara: el servicio debe existir en el alojamiento,
  * estar activo y generar cargo, y el folio debe estar abierto (RN-16); si no, 409. Si no existe la reserva o su folio,

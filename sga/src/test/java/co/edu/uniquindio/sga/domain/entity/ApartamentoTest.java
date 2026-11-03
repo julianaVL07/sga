@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Matriz de trazabilidad: RN-02, implementada en Apartamento.admite() y Apartamento.validarCapacidadPara();
+ * 7.3 (imágenes: de 1 a 10, exactamente una principal y URL http o https), implementada en
+ * Apartamento.validarImagenes() (desde crear y agregarImagen) y en el constructor de Imagen;
  * 7.3 (retiro de la venta con eliminación lógica, 12.4), implementada en Apartamento.retirarDeLaVenta();
  * 7.4 (CU-24 histórico de tarifas y CU-25 activación), implementada en Apartamento.definirTarifa(tarifa, fecha),
  * Apartamento.definirTarifas() y Apartamento.activar();
@@ -395,5 +398,84 @@ class ApartamentoTest {
         apartamento.definirTarifa(new Tarifa("T-BASE", Dinero.de(280_000)));
         apartamento.activar(List.of(Temporada.crearBase("T-BASE", "Base")));
         return apartamento;
+    }
+
+    // ---------------------------------------------------------------- 7.3: imágenes
+
+    @Test
+    @DisplayName("7.3: un apartamento con 1 imagen principal se acepta")
+    void aceptarUnaImagenPrincipal() {
+        Apartamento apartamento = conImagenes(imagenes(1, 0));
+
+        assertEquals(1, apartamento.getImagenes().size());
+        assertEquals("https://coral.co/apt-101-1.jpg", apartamento.imagenPrincipal().url());
+    }
+
+    @Test
+    @DisplayName("7.3: un apartamento con 10 imágenes y exactamente una principal se acepta")
+    void aceptarDiezImagenesConUnaPrincipal() {
+        Apartamento apartamento = conImagenes(imagenes(10, 4));
+
+        assertEquals(10, apartamento.getImagenes().size());
+        assertEquals("https://coral.co/apt-101-5.jpg", apartamento.imagenPrincipal().url());
+    }
+
+    @Test
+    @DisplayName("7.3: sin imágenes o con 11 se rechaza; agregar la imagen número 11 también se rechaza")
+    void rechazarCantidadDeImagenesFueraDeRango() {
+        ReglaDominioException sinImagenes = assertThrows(ReglaDominioException.class, () -> conImagenes(List.of()));
+        assertTrue(sinImagenes.getMessage().contains("entre 1 y 10 imágenes"));
+
+        ReglaDominioException once = assertThrows(ReglaDominioException.class, () -> conImagenes(imagenes(11, 0)));
+        assertTrue(once.getMessage().contains("entre 1 y 10 imágenes"));
+
+        Apartamento conDiez = conImagenes(imagenes(10, 0));
+        Imagen otra = new Imagen("https://coral.co/apt-101-11.jpg", false);
+        assertThrows(ReglaDominioException.class, () -> conDiez.agregarImagen(otra));
+        assertEquals(10, conDiez.getImagenes().size());
+    }
+
+    @Test
+    @DisplayName("7.3: sin imagen principal o con dos principales se rechaza")
+    void rechazarSinPrincipalOConDosPrincipales() {
+        ReglaDominioException sinPrincipal = assertThrows(ReglaDominioException.class,
+                () -> conImagenes(List.of(new Imagen("https://coral.co/a.jpg", false),
+                        new Imagen("https://coral.co/b.jpg", false))));
+        assertTrue(sinPrincipal.getMessage().contains("exactamente una imagen principal"));
+
+        ReglaDominioException dosPrincipales = assertThrows(ReglaDominioException.class,
+                () -> conImagenes(List.of(new Imagen("https://coral.co/a.jpg", true),
+                        new Imagen("https://coral.co/b.jpg", true))));
+        assertTrue(dosPrincipales.getMessage().contains("exactamente una imagen principal"));
+
+        Apartamento apartamento = conImagenes(imagenes(1, 0));
+        Imagen segundaPrincipal = new Imagen("https://coral.co/apt-101-2.jpg", true);
+        assertThrows(ReglaDominioException.class, () -> apartamento.agregarImagen(segundaPrincipal));
+        assertEquals(1, apartamento.getImagenes().size());
+    }
+
+    @Test
+    @DisplayName("7.3: la URL de la imagen debe empezar con http:// o https://")
+    void rechazarUrlQueNoSeaHttp() {
+        assertDoesNotThrow(() -> new Imagen("http://coral.co/a.jpg", true));
+        assertDoesNotThrow(() -> new Imagen("https://coral.co/a.jpg", true));
+
+        for (String url : List.of("ftp://coral.co/a.jpg", "coral.co/a.jpg", "file:///C:/a.jpg", " ")) {
+            ReglaDominioException error = assertThrows(ReglaDominioException.class, () -> new Imagen(url, true));
+            assertTrue(error.getMessage().startsWith("7.3"), url);
+        }
+    }
+
+    /** APT-101 recién creado con las imágenes dadas; Apartamento.crear aplica validarImagenes. */
+    private static Apartamento conImagenes(List<Imagen> imagenes) {
+        return Apartamento.crear(new IdentificacionApartamento("APT-101"), "Apartamento 101", "Vista al mar", 1,
+                new Capacidad(3), new Dotacion(List.of("Aire acondicionado")), imagenes);
+    }
+
+    /** n imágenes https numeradas desde 1; la de la posición indicada (desde 0) es la principal. */
+    private static List<Imagen> imagenes(int n, int principal) {
+        return IntStream.range(0, n)
+                .mapToObj(i -> new Imagen("https://coral.co/apt-101-" + (i + 1) + ".jpg", i == principal))
+                .toList();
     }
 }

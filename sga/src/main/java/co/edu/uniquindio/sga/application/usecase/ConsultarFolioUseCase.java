@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Objects;
 
 /**
- * GET /api/reservas/{codigo}/folio
+ * CU-31. GET /api/reservas/{codigo}/folio
  * Consulta el folio de una reserva: cargos, pagos, saldo y cierre (7.7). Es la URL que devuelve la cabecera
  * Location al registrar un pago (CU-15). Solo lee; si no existe la reserva o su folio responde 404.
  * Actor: recepcionista.
