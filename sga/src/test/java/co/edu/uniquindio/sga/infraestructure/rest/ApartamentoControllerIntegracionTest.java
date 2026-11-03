@@ -72,6 +72,13 @@ class ApartamentoControllerIntegracionTest {
         // 201 con Location: apunta al bloqueo creado
         String idBloqueo = JsonPath.read(creado.andReturn().getResponse().getContentAsString(), "$.id");
         creado.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-301/bloqueos/" + idBloqueo)));
+        // El Location lleva a un recurso que existe: el mismo bloqueo
+        get(creado.andReturn().getResponse().getHeader("Location"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(idBloqueo))
+                .andExpect(jsonPath("$.identificacionApartamento").value("APT-301"))
+                .andExpect(jsonPath("$.motivo").value("Mantenimiento de la piscina"))
+                .andExpect(jsonPath("$.vigente").value(true));
 
         get(disponibles)
                 .andExpect(status().isOk())
@@ -118,6 +125,13 @@ class ApartamentoControllerIntegracionTest {
                 .andExpect(jsonPath("$.fechaAtencion").isEmpty());
         String idNovedad = JsonPath.read(creada.andReturn().getResponse().getContentAsString(), "$.id");
         creada.andExpect(header().string("Location", endsWith("/api/apartamentos/APT-201/novedades/" + idNovedad)));
+        // El Location lleva a un recurso que existe: la misma novedad
+        get(creada.andReturn().getResponse().getHeader("Location"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(idNovedad))
+                .andExpect(jsonPath("$.identificacionApartamento").value("APT-201"))
+                .andExpect(jsonPath("$.descripcion").value("Falta una toalla de piscina"))
+                .andExpect(jsonPath("$.gravedad").value("BAJA"));
     }
 
     @Test
@@ -142,6 +156,37 @@ class ApartamentoControllerIntegracionTest {
         post("/api/apartamentos/APT-999/novedades",
                 "{\"autor\":\"Luz\",\"descripcion\":\"Grieta\",\"gravedad\":\"MEDIA\"}")
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    @DisplayName("404: bloqueo o novedad inexistente, de otro apartamento o de un apartamento que no existe")
+    void bloqueoONovedadInexistenteResponde404() throws Exception {
+        LocalDate inicio = LocalDate.now(BOGOTA).plusDays(150);
+        String idBloqueo = JsonPath.read(post("/api/apartamentos/APT-102/bloqueos",
+                "{\"fechaInicio\":\"" + inicio + "\",\"fechaFin\":\"" + inicio.plusDays(2) + "\",\"motivo\":\"Pintura\"}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        String idNovedad = JsonPath.read(post("/api/apartamentos/APT-102/novedades",
+                "{\"autor\":\"Luz\",\"descripcion\":\"Grieta en la pared\",\"gravedad\":\"MEDIA\"}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+
+        get("/api/apartamentos/APT-102/bloqueos/" + idBloqueo).andExpect(status().isOk());
+        get("/api/apartamentos/APT-102/bloqueos/BLQ-no-existe")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensaje", startsWith("No se encontró el bloqueo")));
+        get("/api/apartamentos/APT-101/bloqueos/" + idBloqueo).andExpect(status().isNotFound());
+        get("/api/apartamentos/APT-999/bloqueos/" + idBloqueo)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensaje", startsWith("No se encontró el apartamento")));
+
+        get("/api/apartamentos/APT-102/novedades/" + idNovedad).andExpect(status().isOk());
+        get("/api/apartamentos/APT-102/novedades/NOV-no-existe")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensaje", startsWith("No se encontró la novedad")));
+        get("/api/apartamentos/APT-101/novedades/" + idNovedad).andExpect(status().isNotFound());
+        get("/api/apartamentos/APT-999/novedades/" + idNovedad)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensaje", startsWith("No se encontró el apartamento")));
     }
 
     // ==================== 7.6: historial de novedades ====================
