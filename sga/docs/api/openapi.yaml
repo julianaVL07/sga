@@ -136,8 +136,10 @@ paths:
       description: |
         Cambia fechas, ocupantes, apartamento o mascotas de una reserva no iniciada. Revalida con las tarifas
         vigentes y asienta la diferencia en el folio (RN-14). Las mascotas se revalidan con la política del
-        alojamiento (L-16) y, si la reserva no traía mascotas, se asienta el cargo de aseo. Un campo en null
-        se conserva.
+        alojamiento (L-16) y, si la reserva no traía mascotas, se asienta el cargo de aseo. Si traía mascotas y
+        ya no (`cantidadMascotas: 0`), el cargo de aseo se corrige con su movimiento inverso en el folio (RN-16);
+        si sigue trayendo mascotas y solo cambia la cantidad o el peso, no se cobra ni se revierte (cargo único
+        por estancia). Un campo en null se conserva.
         Mapea a `ModificarReservaUseCase`.
       operationId: modificarReserva
       requestBody:

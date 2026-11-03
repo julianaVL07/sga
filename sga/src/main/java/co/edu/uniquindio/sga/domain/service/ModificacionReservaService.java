@@ -9,6 +9,8 @@ import co.edu.uniquindio.sga.domain.repository.AlojamientoRepository;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
+import co.edu.uniquindio.sga.domain.valueobject.Cargo;
+import co.edu.uniquindio.sga.domain.valueobject.CargoAseoMascota;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
@@ -26,9 +28,10 @@ import java.util.Objects;
  *
  * Reglas: RN-14 (se revalidan todas las condiciones de creación, sin contar la propia reserva, y la
  * diferencia de valor se asienta como ajuste en el folio), RN-22 (la política de cancelación congelada
- * no cambia; la cotización se reemplaza por una con las tarifas vigentes) y L-16 (las mascotas resultantes
+ * no cambia; la cotización se reemplaza por una con las tarifas vigentes), L-16 (las mascotas resultantes
  * deben ser admitidas por la política del alojamiento; si la reserva no traía mascotas y ahora sí, se asienta
- * el cargo único de aseo en el folio).
+ * el cargo único de aseo en el folio) y RN-16 (si traía mascotas y ya no, el cargo de aseo se corrige con su
+ * movimiento inverso; si sigue trayendo mascotas, aunque cambie la cantidad o el peso, no se cobra ni se revierte).
  */
 public class ModificacionReservaService {
 
@@ -101,6 +104,9 @@ public class ModificacionReservaService {
         disponibilidadService.validarDisponibilidad(apartamento, estancia, ocupantes.size(), reserva.getCodigo());
         Cotizacion nuevaCotizacion = cotizadorService.cotizar(apartamento, estancia, ocupantes,
                 alojamiento.getUmbralEdadFacturable());
+        // RN-16: si ya no trae mascotas, el cargo de aseo a revertir debe existir antes de tocar la reserva o el folio.
+        boolean quitaMascotas = traiaMascotas && !mascotas.traeMascotas();
+        Cargo cargoDeAseoARevertir = quitaMascotas ? cargoDeAseoVigente(folio, codigo) : null;
 
         Dinero diferencia = reserva.modificar(apartamento, estancia, ocupantes, mascotas, nuevaCotizacion,
                 alojamiento.getUmbralEdadFacturable(), ahora);
@@ -110,10 +116,29 @@ public class ModificacionReservaService {
         if (mascotas.traeMascotas() && !traiaMascotas) {
             folio.agregarCargo(alojamiento.getPoliticaMascotas().generarCargoServicio(ahora.toLocalDate()));
         }
+        // RN-14 y RN-16: si ya no trae mascotas, el cargo de aseo asentado se corrige con su movimiento inverso.
+        if (quitaMascotas) {
+            folio.registrarMovimientoInverso(cargoDeAseoARevertir,
+                    "Modificación de la reserva: el grupo ya no trae mascotas", ahora.toLocalDate());
+        }
 
         reservaRepository.guardar(reserva);
         folioRepository.guardar(folio);
         return diferencia;
+    }
+
+    /**
+     * RN-16: el último cargo de aseo de mascota del folio que todavía no tiene movimiento inverso. Si no lo hay,
+     * no se inventa un movimiento.
+     */
+    private static Cargo cargoDeAseoVigente(Folio folio, CodigoReserva codigo) {
+        List<Cargo> cargosDeAseo = folio.getCargos().stream().filter(CargoAseoMascota::esCargoDeAseo).toList();
+        long reversos = folio.getCargos().stream().filter(CargoAseoMascota::esReversoDeCargoDeAseo).count();
+        if (cargosDeAseo.size() <= reversos) {
+            throw new ReglaDominioException("RN-16: El folio de la reserva " + codigo.valor()
+                    + " no tiene un cargo de aseo de mascota vigente para revertir");
+        }
+        return cargosDeAseo.get(cargosDeAseo.size() - 1);
     }
 
     private Reserva buscarReserva(CodigoReserva codigo) {
