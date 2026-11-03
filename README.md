@@ -1,6 +1,6 @@
 # SGA - Sistema de Gestión de Alojamiento
 
-Proyecto final de Programación Avanzada (Ingeniería de Sistemas y Computación, Universidad del Quindío, 2026-2).
+Proyecto final de Programación Avanzada (Ingeniería de Sistemas y Computación, 2026-2).
 
 El SGA es el backend que maneja la operación del Apartahotel Coral, en Bocagrande (Cartagena): apartamentos, temporadas y tarifas, disponibilidad, cotizaciones, reservas, la llegada y la salida de los huéspedes, el folio de cada reserva y las reservas que llegan desde un canal externo.
 
@@ -20,7 +20,7 @@ El SGA es el backend que maneja la operación del Apartahotel Coral, en Bocagran
 
 ## Arquitectura
 
-Usamos **arquitectura hexagonal** (puertos y adaptadores) :
+Usamos **arquitectura hexagonal** (puertos y adaptadores):
 
 ```
 domain/           El negocio. No conoce Spring, JPA ni HTTP.
@@ -65,8 +65,10 @@ Cuando en la consola salga `Started SgaApplication`, la API queda en `http://loc
 Para correr las pruebas:
 
 ```bash
-./gradlew test
+./gradlew clean test       # en Windows (PowerShell): .\gradlew.bat clean test
 ```
+
+El reporte queda en `sga/build/reports/tests/test/index.html`.
 
 ## Datos iniciales
 
@@ -100,7 +102,7 @@ La base es en memoria, así que cada vez que arranca la app se cargan solos esto
 
 ## Endpoints
 
-Son 48 operaciones. Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
+Son 50 operaciones. Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
 
 **Reservas**
 - `POST /api/reservas` crear una reserva (201 con `Location`); acepta mascotas opcionales (`cantidadMascotas`, `pesoMascotaMasPesadaKg`)
@@ -159,7 +161,7 @@ Son 48 operaciones. Todos los listados devuelven 10 resultados por página y las
 - `GET /api/politica-cancelacion/versiones` versiones de la política
 - `PUT /api/politica-cancelacion` publicar una versión nueva
 
-El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`, que coinciden en las 48 operaciones.
+El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`, que coinciden en las 50 operaciones.
 
 Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
 
@@ -180,12 +182,13 @@ En `sga/docs/api/sga.http` dejamos una colección de 164 peticiones que recorre 
 ## Estado del proyecto
 
 - **Entrega 1:** dominio con sus reglas y pruebas unitarias.
-- **Entrega 2:** casos de uso, API REST (48 operaciones), persistencia en H2 con datos iniciales, consultas paginadas y documentación. Cerramos las fases 1 y 2 de las tres:
-  - Reservas: reglas de canal en el dominio, mascotas en la reserva (L-16) y pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16.
-  - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, `Location` en bloqueos y novedades, historial de novedades y apartamentos pendientes de preparación.
-  - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
-- **Verificación:** las 228 pruebas pasan (`./gradlew test --rerun`), las 164 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
-- **Pendiente para el corte 4:** usuarios y seguridad con JWT y roles, imágenes en un servicio externo, notificaciones, el componente de IA, reportes y la gestión de canales. El frontend en React y el despliegue van después.
+- **Entrega 2:** casos de uso, API REST (50 operaciones), persistencia en H2 con datos iniciales, consultas paginadas y documentación. Cerramos las fases 1 y 2 de las tres:
+    - Reservas: reglas de canal en el dominio, mascotas en la reserva (L-16) y pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16.
+    - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
+    - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
+    - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
+- **Verificación:** las 250 pruebas pasan (`./gradlew test --rerun`), las 164 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Pendiente:** usuarios y seguridad con JWT y roles, que quedaron fuera de esta entrega por decisión del equipo. Para el corte 4 quedan las imágenes en un servicio externo, las notificaciones, el componente de IA, los reportes y la gestión de canales. El frontend en React y el despliegue van después.
 
 ## Forma de trabajo
 
