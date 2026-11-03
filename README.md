@@ -182,13 +182,13 @@ En `sga/docs/api/sga.http` dejamos una colección de 164 peticiones que recorre 
 ## Estado del proyecto
 
 - **Entrega 1:** dominio con sus reglas y pruebas unitarias.
-- **Entrega 2:** casos de uso, API REST (50 operaciones), persistencia en H2 con datos iniciales, consultas paginadas y documentación. Cerramos las fases 1 y 2 de las tres:
+- **Entrega 2:** casos de uso, API REST (50 operaciones), persistencia en H2 con datos iniciales, consultas paginadas y documentación. Además, frente a la Entrega 1 hicimos estos cambios (el detalle está en `sga/docs/entrega-2/cambios-frente-entrega-1.md`):
     - Reservas: reglas de canal en el dominio, mascotas en la reserva (L-16) y pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16.
     - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
     - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
     - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
 - **Verificación:** las 250 pruebas pasan (`./gradlew test --rerun`), las 164 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
-- **Pendiente:** usuarios y seguridad con JWT y roles, que quedaron fuera de esta entrega por decisión del equipo. Para el corte 4 quedan las imágenes en un servicio externo, las notificaciones, el componente de IA, los reportes y la gestión de canales. El frontend en React y el despliegue van después.
+- **No incluido en esta entrega:** usuarios y seguridad con JWT y roles; por ahora todos los endpoints están abiertos.
 
 ## Forma de trabajo
 
