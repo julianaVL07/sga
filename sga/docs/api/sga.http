@@ -397,9 +397,12 @@ Content-Type: application/json
 }
 
 > {%
-    client.test("4.2 201 bloqueo", function () {
+    client.test("4.2 201 bloqueo con Location", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.headers.valueOf("Location") != null, "Falta la cabecera Location");
     });
+    client.global.set("idBloqueo", response.body.id);
+    client.global.set("locationBloqueo", response.headers.valueOf("Location"));
 %}
 
 ### 4.3 CU-17 Registrar una novedad del apartamento
@@ -413,9 +416,12 @@ Content-Type: application/json
 }
 
 > {%
-    client.test("4.3 201 novedad", function () {
+    client.test("4.3 201 novedad con Location", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.headers.valueOf("Location") != null, "Falta la cabecera Location");
     });
+    client.global.set("idNovedad", response.body.id);
+    client.global.set("locationNovedad", response.headers.valueOf("Location"));
 %}
 
 ### 4.4 CU-08 Consultar disponibilidad desde el canal externo (página 0, 10 por página, 12.4)
@@ -583,6 +589,30 @@ GET {{host}}/api/reservas/{{reservaConMascotas}}
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
         client.assert(response.body.cantidadMascotas === 2, "Se esperaban 2 mascotas");
         client.assert(response.body.pesoMascotaMasPesadaKg === 9, "Se esperaba 9 kg para la mascota más pesada");
+    });
+%}
+
+### 4.14 CU-13 Seguir el Location del bloqueo de 4.2: el mismo bloqueo, vigente
+GET {{locationBloqueo}}
+
+> {%
+    client.test("4.14 200 bloqueo del Location", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === client.global.get("idBloqueo"), "Debía ser el bloqueo creado en 4.2");
+        client.assert(response.body.identificacionApartamento === "APT-102", "El bloqueo era de APT-102");
+        client.assert(response.body.vigente === true, "El bloqueo debía seguir vigente");
+    });
+%}
+
+### 4.15 CU-17 Seguir el Location de la novedad de 4.3: la misma novedad
+GET {{locationNovedad}}
+
+> {%
+    client.test("4.15 200 novedad del Location", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === client.global.get("idNovedad"), "Debía ser la novedad creada en 4.3");
+        client.assert(response.body.identificacionApartamento === "APT-301", "La novedad era de APT-301");
+        client.assert(response.body.descripcion === "Copa de cristal rota en la cocina", "Descripción inesperada");
     });
 %}
 
@@ -1404,6 +1434,42 @@ GET {{host}}/api/apartamentos/APT-999/novedades
 
 > {%
     client.test("8.6 404 historial de novedades", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.7 404 Bloqueo inexistente en un apartamento que sí existe
+GET {{host}}/api/apartamentos/APT-102/bloqueos/BLQ-no-existe
+
+> {%
+    client.test("8.7 404 bloqueo inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.8 404 El bloqueo de 4.2 es de APT-102: pedirlo bajo APT-101 no lo encuentra
+GET {{host}}/api/apartamentos/APT-101/bloqueos/{{idBloqueo}}
+
+> {%
+    client.test("8.8 404 bloqueo de otro apartamento", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.9 404 Novedad inexistente en un apartamento que sí existe
+GET {{host}}/api/apartamentos/APT-301/novedades/NOV-no-existe
+
+> {%
+    client.test("8.9 404 novedad inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 8.10 404 La novedad de 4.3 es de APT-301: pedirla bajo APT-101 no la encuentra
+GET {{host}}/api/apartamentos/APT-101/novedades/{{idNovedad}}
+
+> {%
+    client.test("8.10 404 novedad de otro apartamento", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
 %}
