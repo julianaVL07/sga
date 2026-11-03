@@ -18,6 +18,7 @@ import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
 import co.edu.uniquindio.sga.domain.valueobject.TipoCargo;
@@ -35,7 +36,8 @@ import java.util.Objects;
  * Reglas: las condiciones de creación 1 a 6 (RN-01 a RN-04, RN-07, RN-20, RP-01 por medio de
  * DisponibilidadApartamentoService y de Reserva.crear), RN-05 (la cotización debe coincidir con las
  * tarifas vigentes), RN-19 (un identificador externo no se repite), RN-22 (cotización y política quedan
- * congeladas), RP-02 (depósito de garantía al abrir el folio) y RP-03 (recargo por llegada nocturna).
+ * congeladas), RP-02 (depósito de garantía al abrir el folio), RP-03 (recargo por llegada nocturna) y L-16
+ * (mascotas admitidas por la política del alojamiento y cargo único de aseo en el folio).
  */
 public class CreacionReservaService {
 
@@ -75,14 +77,41 @@ public class CreacionReservaService {
     }
 
     /**
+     * CU-03: reserva creada por el huésped (PORTAL) o por recepción (DIRECTO). Sin canal se asume PORTAL.
+     * RN-19: el canal EXTERNO no entra por aquí, sino por ConciliacionCanalExternoService (CU-08), que exige
+     * el identificador del canal y descarta los duplicados.
+     */
+    public Reserva registrarReservaPropia(IdentificacionApartamento aptoId, Estancia estancia, Titular titular,
+                                          List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
+                                          PoliticaCancelacion politica, CanalOrigen canal, Mascotas mascotas,
+                                          LocalDateTime ahora) {
+        if (canal == CanalOrigen.EXTERNO) {
+            throw new ReglaDominioException("RN-19: Las reservas del canal externo se reciben por RecibirReservaExternaUseCase");
+        }
+        CanalOrigen canalPropio = canal == null ? CanalOrigen.PORTAL : canal;
+        return registrarNuevaReserva(aptoId, estancia, titular, ocupantes, horaLlegada, cotizacion, politica,
+                canalPropio, null, mascotas, ahora);
+    }
+
+    /** Reserva sin mascotas (canal externo y datos iniciales). */
+    public Reserva registrarNuevaReserva(IdentificacionApartamento aptoId, Estancia estancia, Titular titular,
+                                         List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
+                                         PoliticaCancelacion politica, CanalOrigen canal,
+                                         String identificadorExterno, LocalDateTime ahora) {
+        return registrarNuevaReserva(aptoId, estancia, titular, ocupantes, horaLlegada, cotizacion, politica, canal,
+                identificadorExterno, Mascotas.ninguna(), ahora);
+    }
+
+    /**
      * @param cotizacion           la que se le mostró al titular; puede ser null y entonces se calcula aquí.
      * @param identificadorExterno obligatorio solo para el canal EXTERNO (RN-19).
+     * @param mascotas             L-16; null equivale a sin mascotas.
      * @param ahora                fecha y hora de Colombia (3.1); el plazo de confirmación se mide desde aquí.
      */
     public Reserva registrarNuevaReserva(IdentificacionApartamento aptoId, Estancia estancia, Titular titular,
                                          List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
                                          PoliticaCancelacion politica, CanalOrigen canal,
-                                         String identificadorExterno, LocalDateTime ahora) {
+                                         String identificadorExterno, Mascotas mascotas, LocalDateTime ahora) {
         requerido(aptoId, "El apartamento es obligatorio");
         requerido(ahora, "La fecha actual es obligatoria");
         Alojamiento alojamiento = alojamientoRepository.obtener()
@@ -96,6 +125,10 @@ public class CreacionReservaService {
                     + identificadorExterno);
         }
 
+        // L-16: la política del alojamiento debe admitir la cantidad y el peso de las mascotas.
+        Mascotas mascotasDelGrupo = mascotas == null ? Mascotas.ninguna() : mascotas;
+        mascotasDelGrupo.validarContra(alojamiento.getPoliticaMascotas());
+
         int totalOcupantes = ocupantes == null ? 0 : ocupantes.size();
         disponibilidadService.validarDisponibilidad(apartamento, estancia, totalOcupantes, null);
 
@@ -107,7 +140,8 @@ public class CreacionReservaService {
         }
 
         Reserva reserva = Reserva.crear(siguienteCodigo(ahora.getYear()), apartamento, estancia, titular, ocupantes, canal,
-                identificadorExterno, horaLlegada, vigente, politica, alojamiento.getUmbralEdadFacturable(), ahora);
+                identificadorExterno, horaLlegada, vigente, mascotasDelGrupo, politica,
+                alojamiento.getUmbralEdadFacturable(), ahora);
 
         LocalDate hoy = ahora.toLocalDate();
         Cargo cargoAlojamiento = new Cargo(TipoCargo.ALOJAMIENTO,
@@ -117,6 +151,10 @@ public class CreacionReservaService {
 
         if (horaLlegada != null && alojamiento.esLlegadaNocturna(horaLlegada)) {
             servicioRecepcionNocturna(alojamiento).generarCargoPara(folio, hoy);
+        }
+        // L-16: cargo único de aseo por estancia cuando el grupo trae mascotas.
+        if (mascotasDelGrupo.traeMascotas()) {
+            folio.agregarCargo(alojamiento.getPoliticaMascotas().generarCargoServicio(hoy));
         }
 
         reservaRepository.guardar(reserva);

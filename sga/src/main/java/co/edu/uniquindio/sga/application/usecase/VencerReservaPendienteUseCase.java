@@ -2,6 +2,9 @@ package co.edu.uniquindio.sga.application.usecase;
 
 import co.edu.uniquindio.sga.domain.service.VencimientoReservasService;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -11,6 +14,7 @@ import java.util.Objects;
  * Cancela las reservas PENDIENTES que superaron el plazo de confirmación (12 horas en Coral) y libera sus
  * noches (RN-21, RN-12). Actor: sistema.
  */
+@Service
 public class VencerReservaPendienteUseCase {
 
     private final VencimientoReservasService vencimientoService;
@@ -22,6 +26,7 @@ public class VencerReservaPendienteUseCase {
     }
 
     /** @return cuántas reservas vencieron en esta ejecución. */
+    @Transactional
     public int ejecutar() {
         return vencimientoService.cancelarReservasExpiradas(LocalDateTime.now(reloj));
     }

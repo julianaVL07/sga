@@ -1,10 +1,14 @@
 package co.edu.uniquindio.sga.application.usecase;
 
+import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
+import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.service.CotizadorEstanciaService;
 import co.edu.uniquindio.sga.domain.valueobject.Cotizacion;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,16 +19,25 @@ import java.util.Objects;
  * Calcula el valor noche por noche con su desglose, sin guardar nada (RN-05, RN-06).
  * Usa el umbral de edad configurado en el alojamiento (L-09). Actores: huésped y recepcionista.
  */
+
+@Service
 public class CotizarEstanciaUseCase {
 
+    private final ApartamentoRepository apartamentoRepository;
     private final CotizadorEstanciaService cotizadorService;
 
-    public CotizarEstanciaUseCase(CotizadorEstanciaService cotizadorService) {
+    public CotizarEstanciaUseCase(ApartamentoRepository apartamentoRepository,
+                                  CotizadorEstanciaService cotizadorService) {
+        this.apartamentoRepository = Objects.requireNonNull(apartamentoRepository);
         this.cotizadorService = Objects.requireNonNull(cotizadorService);
     }
 
+    @Transactional(readOnly = true)
     public Cotizacion ejecutar(IdentificacionApartamento apartamento, LocalDate fechaEntrada, LocalDate fechaSalida,
                                List<Ocupante> ocupantes) {
+        if (apartamento == null || !apartamentoRepository.existe(apartamento)) {
+            throw new ApartamentoNoEncontradoException(apartamento);
+        }
         return cotizadorService.cotizar(apartamento, new Estancia(fechaEntrada, fechaSalida), ocupantes, null);
     }
 }

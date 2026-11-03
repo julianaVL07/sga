@@ -8,9 +8,13 @@ import co.edu.uniquindio.sga.domain.repository.AlojamientoRepository;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.repository.BloqueoRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
+import co.edu.uniquindio.sga.domain.valueobject.ApartamentoDisponible;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
+import co.edu.uniquindio.sga.domain.valueobject.Coordenada;
+import co.edu.uniquindio.sga.domain.valueobject.CriterioBusqueda;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,23 +33,61 @@ public class DisponibilidadApartamentoService {
     private final ApartamentoRepository apartamentoRepository;
     private final BloqueoRepository bloqueoRepository;
     private final AlojamientoRepository alojamientoRepository;
+    private final CotizadorEstanciaService cotizador;
 
     public DisponibilidadApartamentoService(ReservaRepository reservaRepository,
                                             ApartamentoRepository apartamentoRepository,
                                             BloqueoRepository bloqueoRepository,
-                                            AlojamientoRepository alojamientoRepository) {
+                                            AlojamientoRepository alojamientoRepository,
+                                            CotizadorEstanciaService cotizador) {
         this.reservaRepository = Objects.requireNonNull(reservaRepository);
         this.apartamentoRepository = Objects.requireNonNull(apartamentoRepository);
         this.bloqueoRepository = Objects.requireNonNull(bloqueoRepository);
         this.alojamientoRepository = Objects.requireNonNull(alojamientoRepository);
+        this.cotizador = Objects.requireNonNull(cotizador);
     }
 
-    /** F-06: apartamentos vendibles para la estancia y el tamaño del grupo. */
+    /** Arma su propio cotizador con los mismos repositorios; lo usan las pruebas que no lo necesitan aparte. */
+    public DisponibilidadApartamentoService(ReservaRepository reservaRepository,
+                                            ApartamentoRepository apartamentoRepository,
+                                            BloqueoRepository bloqueoRepository,
+                                            AlojamientoRepository alojamientoRepository) {
+        this(reservaRepository, apartamentoRepository, bloqueoRepository, alojamientoRepository,
+                new CotizadorEstanciaService(apartamentoRepository, alojamientoRepository));
+    }
+
+    /** F-06: apartamentos vendibles para la estancia y el tamaño del grupo. Lo usa también el canal externo. */
     public List<Apartamento> buscarDisponibles(Estancia estancia, int totalOcupantes) {
         requerido(estancia, "La estancia es obligatoria");
         obtenerAlojamiento().validarEstanciaMinima(estancia);
         return apartamentoRepository.listarVigentesParaVenta().stream()
                 .filter(apartamento -> estaDisponible(apartamento, estancia, totalOcupantes, null))
+                .toList();
+    }
+
+    /**
+     * CU-01 con filtros (7.5). Primero decide la disponibilidad igual que {@link #buscarDisponibles(Estancia, int)}
+     * (RN-01, RN-02, RN-07, RN-20, RP-01); sobre ese resultado aplica los filtros del criterio: capacidad mínima,
+     * característica de la dotación (sin distinguir mayúsculas) y rango de precio del valor estimado de la estancia.
+     * El valor estimado lo calcula CotizadorEstanciaService (RN-05, RN-06); si no llegan fechas de nacimiento,
+     * todos los ocupantes cuentan como facturables (ver CotizadorEstanciaService.estimar).
+     *
+     * @param fechasNacimiento opcional (null o vacía); si trae datos debe haber una por ocupante.
+     * @param criterio         opcional; null equivale a {@link CriterioBusqueda#sinFiltros()}.
+     * @return disponibles ordenados por identificación, con su valor estimado.
+     */
+    public List<ApartamentoDisponible> buscarDisponibles(Estancia estancia, int totalOcupantes,
+                                                         List<LocalDate> fechasNacimiento,
+                                                         CriterioBusqueda criterio) {
+        CriterioBusqueda filtros = criterio == null ? CriterioBusqueda.sinFiltros() : criterio;
+        Coordenada ubicacion = obtenerAlojamiento().getUbicacion();
+        return buscarDisponibles(estancia, totalOcupantes).stream()
+                .filter(apartamento -> filtros.cumpleCapacidad(apartamento.getCapacidad()))
+                .filter(apartamento -> filtros.cumpleCaracteristica(apartamento.getDotacion()))
+                .map(apartamento -> new ApartamentoDisponible(apartamento,
+                        cotizador.estimar(apartamento, estancia, totalOcupantes, fechasNacimiento).valorTotal(),
+                        ubicacion))
+                .filter(disponible -> filtros.cumplePrecio(disponible.valorEstimado()))
                 .toList();
     }
 

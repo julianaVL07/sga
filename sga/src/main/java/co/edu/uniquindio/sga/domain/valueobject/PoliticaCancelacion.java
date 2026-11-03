@@ -42,6 +42,22 @@ public record PoliticaCancelacion(int version, LocalDate fechaVigencia, String c
                 .toList();
     }
 
+    /**
+     * CU-30 (7.4, F-07): la versión siguiente de esta política, vigente desde la fecha dada. Esta versión no cambia:
+     * es inmutable y las reservas que la congelaron la siguen usando (RN-22). L-10 lo valida el constructor.
+     */
+    public PoliticaCancelacion nuevaVersion(String nuevaConsecuenciaNoShow, List<TramoCancelacion> nuevosTramos,
+                                            LocalDate vigenteDesde) {
+        if (vigenteDesde == null) {
+            throw new ReglaDominioException("F-07: la nueva versión de la política debe tener fecha de vigencia");
+        }
+        if (vigenteDesde.isBefore(fechaVigencia)) {
+            throw new ReglaDominioException("F-07: la nueva versión no puede regir antes que la versión " + version
+                    + " (vigente desde " + fechaVigencia + ")");
+        }
+        return new PoliticaCancelacion(version + 1, vigenteDesde, nuevaConsecuenciaNoShow, nuevosTramos);
+    }
+
     /** El tramo que aplica es el de mayor antelación mínima que se cumple. */
     public int obtenerPorcentajeRetencion(int diasAntelacion) {
         return tramoPara(diasAntelacion).porcentajeRetencion();

@@ -65,7 +65,7 @@ public class Folio {
         }
         Folio folio = new Folio(id, reserva, depositoGarantia, fechaApertura, List.of(), List.of(), false, null, null);
         folio.agregarCargo(cargoAlojamiento);
-        folio.agregarCargo(depositoGarantia.generarCargoAjuste(fechaApertura));
+        folio.agregarCargo(depositoGarantia.generarCargo(fechaApertura));
         return folio;
     }
 
@@ -103,6 +103,17 @@ public class Folio {
             throw new ReglaDominioException("El valor del pago debe ser mayor que cero");
         }
         pagos.add(pago);
+    }
+
+    /**
+     * RN-16: el cargo registrado en esa posición del folio, contando desde 0 en el orden en que se asentaron (es la
+     * misma posición de la lista de cargos que ve el cliente). Sirve para identificar el cargo que se va a corregir.
+     */
+    public Cargo cargoEn(int posicion) {
+        if (posicion < 0 || posicion >= cargos.size()) {
+            throw new ReglaDominioException("RN-16: El folio " + id + " no tiene un cargo en la posición " + posicion);
+        }
+        return cargos.get(posicion);
     }
 
     /**

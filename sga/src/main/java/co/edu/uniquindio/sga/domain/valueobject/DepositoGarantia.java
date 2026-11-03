@@ -5,8 +5,9 @@ import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import java.time.LocalDate;
 
 /**
- * Depósito de garantía reembolsable por dotación (RP-02): cargo de tipo ajuste que se asienta de manera
- * obligatoria en el folio al crear la reserva ($250.000 COP en el Anexo A). El monto es configuración.
+ * Depósito de garantía reembolsable por dotación (RP-02): cargo de tipo AJUSTE_MODIFICACION que se asienta de
+ * manera obligatoria en el folio al crear la reserva ($250.000 COP en el Anexo A, glosario y 7.7). El monto es
+ * configuración.
  */
 public record DepositoGarantia(String concepto, Dinero monto, boolean reembolsado) {
 
@@ -25,8 +26,8 @@ public record DepositoGarantia(String concepto, Dinero monto, boolean reembolsad
         return new DepositoGarantia(concepto, monto, false);
     }
 
-    /** RP-02: cargo de tipo ajuste que se asienta al abrir el folio. */
-    public Cargo generarCargoAjuste(LocalDate fechaActual) {
+    /** RP-02: cargo de tipo AJUSTE_MODIFICACION que se asienta al abrir el folio. */
+    public Cargo generarCargo(LocalDate fechaActual) {
         return new Cargo(TipoCargo.AJUSTE_MODIFICACION, concepto, monto, fechaActual);
     }
 

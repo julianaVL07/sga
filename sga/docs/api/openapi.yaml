@@ -1,9 +1,2375 @@
+# docs/api/openapi.yaml
+# --- Diseño de la API del SGA (Guía 07), con los endpoints implementados (Guía 08) ---
 openapi: 3.1.0
+
 info:
-  title: Title
-  description: Title
+  title: API SGA - Apartahotel Coral
+  description: |
+    API RESTful del Sistema de Gestión de Alojamiento (SGA) del Apartahotel Coral, Cartagena.
+
+    Convención de errores (Guía 07, 4.6): `400` el mensaje está mal escrito,
+    `404` el identificador no existe, `409` una regla del negocio (RN/RP) lo impide.
+    Todos los errores responden con el esquema `ErrorResponse`.
   version: 1.0.0
+
 servers:
-  - url: 'https'
+  - url: http://localhost:8080
+    description: Servidor de desarrollo local
+
+tags:
+  - name: Reservas
+    description: Ciclo de vida del agregado Reserva en el Apartahotel Coral
+  - name: Operación en recepción
+    description: Registro de llegada y salida del grupo
+  - name: Apartamentos
+    description: Disponibilidad y operación de los apartamentos del Apartahotel Coral
+  - name: Cotizaciones
+    description: Valor de una estancia en el Apartahotel Coral antes de reservar
+  - name: Folio
+    description: 'Cuenta de la reserva: cargos, pagos, saldo y cierre'
+  - name: Canal externo
+    description: Integración con plataformas de terceros (CU-08)
+
 paths:
-  
+
+  # ==================== RESERVAS ====================
+
+  /api/reservas:
+    get:
+      tags: [Reservas]
+      summary: Listar reservas (CU-19)
+      description: |
+        Reservas de la más reciente a la más antigua, 10 por página (7.5 "Listados", 12.4). Todos los filtros
+        son opcionales; desde y hasta acotan la fecha de entrada de la estancia (ambas incluidas).
+        La numeración de páginas empieza en 0. Mapea a `ListarReservasUseCase`.
+      operationId: listarReservas
+      parameters:
+        - { name: estado, in: query, required: false, schema: { $ref: '#/components/schemas/EstadoReserva' } }
+        - { name: apartamento, in: query, required: false, schema: { type: string }, example: APT-101 }
+        - { name: canal, in: query, required: false, schema: { $ref: '#/components/schemas/CanalOrigen' } }
+        - { name: titular, in: query, required: false, description: Número de documento del titular, schema: { type: string }, example: '1094000000' }
+        - { name: desde, in: query, required: false, schema: { type: string, format: date }, example: '2026-11-01' }
+        - { name: hasta, in: query, required: false, schema: { type: string, format: date }, example: '2026-11-30' }
+        - { name: pagina, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Página de reservas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+    post:
+      tags: [Reservas]
+      summary: Crear una reserva (CU-03)
+      description: |
+        Crea la reserva en PENDIENTE, congela cotización y política (RN-22) y abre su folio con el
+        depósito de garantía (RP-02), si la llegada es desde las 20:00, la recepción nocturna (RP-03) y, si el
+        grupo trae mascotas, el cargo único de aseo de $110.000 (L-16). Se aceptan máximo 2 mascotas de hasta
+        10 kg; si no, responde 409 con el código L-16. Las mascotas son opcionales (sin dato = 0).
+        Mapea a `CrearReservaUseCase`.
+      operationId: crearReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearReservaRequest'
+            example:
+              identificacionApartamento: APT-101
+              fechaEntrada: '2026-11-20'
+              fechaSalida: '2026-11-22'
+              horaEstimadaLlegada: '16:30'
+              canalOrigen: PORTAL
+              titular:
+                nombre: Ana Gómez
+                tipoDocumento: CC
+                numeroDocumento: '1094000000'
+                email: ana@correo.co
+                telefono: '3001234567'
+              ocupantes:
+                - nombre: Ana Gómez
+                  tipoDocumento: CC
+                  numeroDocumento: '1094000000'
+                  fechaNacimiento: '1990-05-20'
+                - nombre: Sofía Gómez
+                  fechaNacimiento: '2021-03-02'
+              cantidadMascotas: 1
+              pesoMascotaMasPesadaKg: 8
+      responses:
+        '201':
+          description: Reserva creada. El header Location trae la URL de la reserva.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    get:
+      tags: [Reservas]
+      summary: Consultar una reserva (CU-18)
+      description: Mapea a `ConsultarReservaUseCase`.
+      operationId: consultarReserva
+      responses:
+        '200':
+          description: Detalle de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+    put:
+      tags: [Reservas]
+      summary: Modificar una reserva (CU-11)
+      description: |
+        Cambia fechas, ocupantes, apartamento o mascotas de una reserva no iniciada. Revalida con las tarifas
+        vigentes y asienta la diferencia en el folio (RN-14). Las mascotas se revalidan con la política del
+        alojamiento (L-16) y, si la reserva no traía mascotas, se asienta el cargo de aseo. Si traía mascotas y
+        ya no (`cantidadMascotas: 0`), el cargo de aseo se corrige con su movimiento inverso en el folio (RN-16);
+        si sigue trayendo mascotas y solo cambia la cantidad o el peso, no se cobra ni se revierte (cargo único
+        por estancia). Un campo en null se conserva.
+        Mapea a `ModificarReservaUseCase`.
+      operationId: modificarReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModificarReservaRequest'
+            example:
+              fechaSalida: '2026-11-23'
+      responses:
+        '200':
+          description: Reserva modificada y diferencia asentada en el folio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModificacionReservaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/confirmar:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Reservas]
+      summary: Confirmar una reserva (CU-10)
+      description: |
+        PENDIENTE → CONFIRMADA. Exige hora estimada de llegada (RN-09), plazo vigente (RN-21) y anticipo
+        del 50 % cubierto en el folio (L-11). El cuerpo es opcional. Mapea a `ConfirmarReservaUseCase`.
+      operationId: confirmarReserva
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmarReservaRequest'
+      responses:
+        '200':
+          description: Reserva confirmada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/cancelar:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Reservas]
+      summary: Cancelar una reserva (CU-09)
+      description: |
+        Calcula la retención con la política congelada (RN-13), la asienta en el folio y libera las noches
+        (RN-12). Mapea a `CancelarReservaUseCase`.
+      operationId: cancelarReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarReservaRequest'
+            example:
+              motivo: Cambio de planes del titular
+      responses:
+        '200':
+          description: Reserva cancelada con la retención aplicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetencionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/no-show:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Reservas]
+      summary: Declarar no-show (CU-12)
+      description: |
+        Desde las 22:00 del día de entrada (L-15) marca NO_SHOW, retiene el 50 % del total (RN-13) y libera
+        las noches (RN-12). Mapea a `DeclararNoShowUseCase`.
+      operationId: declararNoShow
+      responses:
+        '200':
+          description: No-show declarado con la retención aplicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetencionResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== OPERACIÓN EN RECEPCIÓN ====================
+
+  /api/reservas/{codigo}/registrar-llegada:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Operación en recepción]
+      summary: Registrar la llegada (CU-04)
+      description: |
+        La reserva pasa a EN_CURSO y el apartamento a OCUPADO. Exige reserva CONFIRMADA con la fecha de
+        entrada alcanzada (RN-10) y apartamento PREPARADO (RN-11). Mapea a `RegistrarLlegadaUseCase`.
+      operationId: registrarLlegada
+      responses:
+        '200':
+          description: Llegada registrada; devuelve la reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/registrar-salida:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [Operación en recepción]
+      summary: Registrar la salida (CU-05)
+      description: |
+        La reserva pasa a FINALIZADA (RN-12) y el apartamento a PENDIENTE_PREPARACION. El folio debe quedar
+        cerrado: saldo en cero o autorización del administrador (RN-17). Mapea a `RegistrarSalidaUseCase`.
+      operationId: registrarSalida
+      responses:
+        '200':
+          description: Salida registrada; devuelve la reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== APARTAMENTOS ====================
+
+  /api/apartamentos:
+    get:
+      tags: [Apartamentos]
+      summary: Listar apartamentos (CU-20)
+      description: |
+        Apartamentos no eliminados del alojamiento, ordenados por identificación, 10 por página (7.3, 12.4).
+        Los retirados de la venta (eliminación lógica) no aparecen. Solo consulta.
+        Mapea a `ConsultarApartamentosUseCase.listar`.
+      operationId: listarApartamentos
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+    # CU-22 (agregado): registrar un apartamento
+    post:
+      tags: [Apartamentos]
+      summary: Registrar un apartamento (CU-22)
+      description: |
+        Crea el apartamento con identificación, nombre, descripción, dormitorios, capacidad, dotación,
+        imágenes (1 a 10, exactamente una principal) y, opcionalmente, tarifas por temporada que rigen desde hoy.
+        Nace PREPARADO e INACTIVO: no sale en la búsqueda hasta activarlo con CU-25 (7.3, 7.4).
+        El DTO solo revisa la forma (400); las reglas las valida el dominio (409).
+        Mapea a `RegistrarApartamentoUseCase` y `AdministracionApartamentoService.registrar`.
+      operationId: registrarApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarApartamentoRequest'
+      responses:
+        '201':
+          description: Apartamento registrado (inactivo)
+          headers:
+            Location:
+              description: URL del detalle del apartamento, por ejemplo /api/apartamentos/APT-401
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Identificación repetida (L-04), máximo de apartamentos (L-03), imágenes fuera de 1..10 o sin una
+            única principal, capacidad o dormitorios menores que 1, dotación vacía (L-06), o una tarifa
+            con temporada inexistente o valor no mayor que cero (7.4)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/disponibles:
+    get:
+      tags: [Apartamentos]
+      summary: Buscar apartamentos disponibles con filtros y paginación (CU-01)
+      description: |
+        Apartamentos libres en todas las noches de la estancia y con capacidad para el grupo
+        (RN-01, RN-02, RN-07, RN-20, RP-01). La disponibilidad la decide `DisponibilidadApartamentoService`;
+        sobre ese resultado se aplican los filtros opcionales y luego la paginación (10 por página, 7.5, 12.4).
+        Solo consulta. Mapea a `BuscarApartamentoDisponibleUseCase.buscar`.
+
+        - **valorEstimado** es el valor de toda la estancia para el grupo (RN-05, RN-06). Si no se envían
+          `fechasNacimiento`, todos los ocupantes cuentan como facturables (el estimado es el máximo posible).
+        - **precioMinimo / precioMaximo** se comparan con ese valor estimado, no con la tarifa de una noche.
+        - **caracteristica** busca un texto dentro de la dotación del apartamento, sin distinguir mayúsculas
+          ni tildes (por ejemplo `hidromasaje`).
+        - **Sin filtro de servicios:** los servicios de 7.5 son del alojamiento (servicios adicionales como
+          la recepción nocturna o el paseo por la bahía) y se ofrecen igual en todos los apartamentos, así que
+          no sirven para distinguir uno de otro. Lo que distingue a un apartamento es su dotación, que se filtra
+          con `caracteristica`.
+        - Un apartamento FUERA_DE_SERVICIO no sale de la búsqueda por su estado (3.3); sale cuando tiene un
+          bloqueo en esas noches (RN-07).
+      operationId: buscarApartamentosDisponibles
+      parameters:
+        - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
+        - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
+        - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+        - name: fechasNacimiento
+          in: query
+          required: false
+          description: Una fecha por ocupante para aplicar el umbral de edad facturable (RN-06)
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string, format: date } }
+          example: [ '1990-05-20', '2022-03-01' ]
+        - { name: capacidadMinima, in: query, required: false, schema: { type: integer, minimum: 1 }, example: 4 }
+        - name: precioMinimo
+          in: query
+          required: false
+          description: Valor estimado mínimo de la estancia, en pesos
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: precioMaximo
+          in: query
+          required: false
+          description: Valor estimado máximo de la estancia, en pesos; debe ser mayor o igual que precioMinimo
+          schema: { type: integer, format: int64, minimum: 0 }
+          example: 2000000
+        - name: caracteristica
+          in: query
+          required: false
+          description: Texto que debe aparecer en algún elemento de la dotación
+          schema: { type: string }
+          example: hidromasaje
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos disponibles (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoDisponibleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Las fechas no forman una estancia válida (RN-03, RN-04, RP-01) o los filtros son inconsistentes
+            (7.5: capacidad mínima <= 0, precio negativo, precioMinimo > precioMaximo, fechas de nacimiento
+            que no coinciden con los ocupantes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/pendientes-preparacion:
+    get:
+      tags: [Apartamentos]
+      summary: Listar apartamentos pendientes de preparación (7.1)
+      description: |
+        Apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, que el personal de servicio debe
+        atender, ordenados por identificación, 10 por página (7.1, 12.4). Ruta fija: el controlador la declara
+        antes de /api/apartamentos/{id}. Solo consulta.
+        Mapea a `ConsultarApartamentosUseCase.pendientesDePreparacion`.
+      operationId: listarPendientesDePreparacion
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos por preparar (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/apartamentos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el detalle de un apartamento (CU-20)
+      description: |
+        Datos, dotación, imágenes con la principal, capacidad, estado operativo, tarifas por temporada y
+        bloqueos vigentes (7.3). Un apartamento retirado de la venta responde 404.
+        Mapea a `ConsultarApartamentosUseCase.detalle`.
+      operationId: consultarApartamento
+      responses:
+        '200':
+          description: Detalle del apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+    # CU-23 (agregado): actualizar un apartamento
+    put:
+      tags: [Apartamentos]
+      summary: Actualizar un apartamento (CU-23)
+      description: |
+        Reemplaza nombre, descripción, dormitorios, dotación y capacidad. Cambiar la capacidad NO afecta las
+        reservas ya creadas, pero la respuesta lista los códigos de las reservas activas o futuras cuyo grupo
+        supera la nueva capacidad (7.3); el cálculo lo hace `AdministracionApartamentoService`.
+        Un apartamento retirado de la venta responde 404. Mapea a `ActualizarApartamentoUseCase`.
+      operationId: actualizarApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarApartamentoRequest'
+      responses:
+        '200':
+          description: Apartamento actualizado, con la advertencia de capacidad si aplica
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActualizacionApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Capacidad menor que 1 (RN-02), dormitorios menores que 1 o dotación vacía (L-06)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/retirar:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Retirar un apartamento de la venta (CU-21)
+      description: |
+        Eliminación lógica (12.4): el apartamento queda eliminado e inactivo, deja de salir en el listado y en
+        la búsqueda, y las reservas históricas lo siguen referenciando. No existe DELETE: retirar es una
+        operación de negocio que exige que no haya reservas activas ni futuras (7.3).
+        Mapea a `RetirarApartamentoUseCase`.
+      operationId: retirarApartamento
+      responses:
+        '200':
+          description: Apartamento retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Tiene reservas activas o futuras, o ya estaba retirado (7.3)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/bloqueos:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    post:
+      tags: [Apartamentos]
+      summary: Registrar un bloqueo (CU-13)
+      description: |
+        Retira el apartamento de la venta en un rango de fechas; se rechaza si hay reservas activas en esas
+        noches (7.3, RN-01). Mapea a `RegistrarBloqueoUseCase`.
+      operationId: registrarBloqueo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarBloqueoRequest'
+            example:
+              fechaInicio: '2026-12-01'
+              fechaFin: '2026-12-03'
+              motivo: Mantenimiento del aire acondicionado
+      responses:
+        '201':
+          description: Bloqueo registrado
+          headers:
+            Location:
+              description: URL del bloqueo creado, por ejemplo /api/apartamentos/APT-301/bloqueos/{idBloqueo}
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloqueoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/apartamentos/{id}/bloqueos/{idBloqueo}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+      - name: idBloqueo
+        in: path
+        required: true
+        description: Id del bloqueo, el que trae el Location de POST /api/apartamentos/{id}/bloqueos
+        schema: { type: string, example: BLQ-3f2a9c1e-7b4d-4e8a-9f10-2c6d5e8b1a47 }
+    get:
+      tags: [Apartamentos]
+      summary: Consultar un bloqueo (CU-13)
+      description: |
+        Bloqueo del apartamento, vigente o levantado (se conserva). Es el recurso al que apunta la cabecera
+        Location al registrarlo. Solo consulta. Mapea a `ConsultarBloqueoUseCase.consultar`.
+      operationId: consultarBloqueo
+      responses:
+        '200':
+          description: Bloqueo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloqueoResponse'
+        '404':
+          description: No existe el apartamento, no existe el bloqueo o el bloqueo es de otro apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/iniciar-preparacion:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Iniciar la preparación (CU-16)
+      description: |
+        El personal de servicio empieza a preparar el apartamento: PENDIENTE_PREPARACION → EN_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.iniciarPreparacion`.
+      operationId: iniciarPreparacion
+      responses:
+        '200':
+          description: Apartamento EN_PREPARACION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/terminar-preparacion:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Terminar la preparación (CU-16)
+      description: |
+        El apartamento queda listo para recibir un grupo: EN_PREPARACION → PREPARADO.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.terminarPreparacion`.
+      operationId: terminarPreparacion
+      responses:
+        '200':
+          description: Apartamento PREPARADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/poner-fuera-de-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Poner fuera de servicio (CU-16)
+      description: |
+        Decisión del administrador desde cualquier estado no ocupado → FUERA_DE_SERVICIO. No bloquea la venta
+        futura; para eso se registra un bloqueo (3.3).
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.ponerFueraDeServicio`.
+      operationId: ponerFueraDeServicio
+      responses:
+        '200':
+          description: Apartamento FUERA_DE_SERVICIO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/restablecer-servicio:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Restablecer el servicio (CU-16)
+      description: |
+        El apartamento vuelve al servicio y debe prepararse: FUERA_DE_SERVICIO → PENDIENTE_PREPARACION.
+        Operación de negocio sin cuerpo; si la transición no está permitida por 7.6 responde 409.
+        Mapea a `EstadoOperativoApartamentoUseCase.restablecerServicio`.
+      operationId: restablecerServicio
+      responses:
+        '200':
+          description: Apartamento PENDIENTE_PREPARACION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Transición de estado operativo no permitida (7.6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/novedades:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    post:
+      tags: [Apartamentos]
+      summary: Registrar una novedad (CU-17)
+      description: Daño, faltante o incidencia con autor, descripción y gravedad (7.6). Mapea a `RegistrarNovedadUseCase`.
+      operationId: registrarNovedad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarNovedadRequest'
+            example:
+              autor: Pedro Ruiz
+              descripcion: Copa de cristal rota en la cocina
+              gravedad: BAJA
+      responses:
+        '201':
+          description: Novedad registrada
+          headers:
+            Location:
+              description: URL de la novedad creada, por ejemplo /api/apartamentos/APT-201/novedades/{idNovedad}
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NovedadResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el historial de novedades (7.6)
+      description: |
+        Novedades del apartamento de la más reciente a la más antigua, 10 por página (7.6, 12.4). Incluye las
+        de un apartamento retirado de la venta, porque el historial se conserva. Solo consulta.
+        Mapea a `ConsultarNovedadesUseCase.historial`.
+      operationId: historialNovedades
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página del historial (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaNovedadResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /api/apartamentos/{id}/novedades/{idNovedad}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+      - name: idNovedad
+        in: path
+        required: true
+        description: Id de la novedad, el que trae el Location de POST /api/apartamentos/{id}/novedades
+        schema: { type: string, example: NOV-8d1c4b7a-2e3f-4a5b-9c6d-7e8f9a0b1c2d }
+    get:
+      tags: [Apartamentos]
+      summary: Consultar una novedad (CU-17)
+      description: |
+        Novedad del apartamento (7.6). Es el recurso al que apunta la cabecera Location al registrarla.
+        Solo consulta. Mapea a `ConsultarNovedadesUseCase.consultar`.
+      operationId: consultarNovedad
+      responses:
+        '200':
+          description: Novedad encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NovedadResponse'
+        '404':
+          description: No existe el apartamento, no existe la novedad o la novedad es de otro apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== COTIZACIONES ====================
+
+  /api/cotizaciones:
+    post:
+      tags: [Cotizaciones]
+      summary: Cotizar una estancia (CU-02)
+      description: |
+        Calcula noche a noche con la tarifa de cada temporada (RN-05, RP-01) y solo cobra a los ocupantes
+        desde 6 años (RN-06). No crea la reserva. Mapea a `CotizarEstanciaUseCase`.
+      operationId: cotizarEstancia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CotizarEstanciaRequest'
+            example:
+              identificacionApartamento: APT-101
+              fechaEntrada: '2026-11-20'
+              fechaSalida: '2026-11-22'
+              ocupantes:
+                - nombre: Ana Gómez
+                  fechaNacimiento: '1990-05-20'
+                - nombre: Sofía Gómez
+                  fechaNacimiento: '2021-03-02'
+      responses:
+        '200':
+          description: Cotización con el detalle por noche
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== FOLIO ====================
+
+  /api/reservas/{codigo}/folio:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    get:
+      tags: [ Folio ]
+      summary: Consultar el folio
+      description: |
+        Cargos, pagos, saldo y estado de cierre del folio de la reserva (7.7). El folio nace con el cargo de
+        alojamiento y el depósito de garantía de RP-02 (tipo AJUSTE_MODIFICACION). Es el recurso al que apunta la
+        cabecera Location de un pago registrado. Solo consulta. Mapea a `ConsultarFolioUseCase`.
+      operationId: consultarFolio
+      responses:
+        '200':
+          description: El folio de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/folio/pagos:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar un pago (CU-15)
+      description: |
+        Abono contra el folio con su medio y su fecha (RN-15). Admite pagos parciales; un pago no se edita
+        ni se borra (RN-16). Mapea a `RegistrarPagoUseCase`.
+      operationId: registrarPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarPagoRequest'
+            example:
+              valor: 310000
+              medio: TRANSFERENCIA_BANCARIA
+      responses:
+        '201':
+          description: Pago registrado; devuelve el folio con el nuevo saldo
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/folio/cerrar:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    put:
+      tags: [ Folio ]
+      summary: Cerrar el folio (CU-06)
+      description: Solo si el saldo es exactamente cero (RN-17). Mapea a `CerrarFolioUseCase`.
+      operationId: cerrarFolio
+      responses:
+        '200':
+          description: Folio cerrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/reservas/{codigo}/folio/autorizacion-cierre:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Autorizar el cierre con saldo (CU-07)
+      description: |
+        El administrador cierra el folio aunque tenga saldo; queda registrado quién autoriza y por qué
+        (RN-17). Mapea a `AutorizarCierreFolioUseCase`.
+      operationId: autorizarCierreFolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutorizarCierreFolioRequest'
+            example:
+              autorizadoPor: Marta Ríos (administradora)
+              motivo: Saldo de $5.000 por redondeo aceptado por el huésped
+      responses:
+        '200':
+          description: Folio cerrado con autorización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  # ==================== CANAL EXTERNO ====================
+
+  /api/canales/{canal}/disponibilidad:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+    get:
+      tags: [ Canal externo ]
+      summary: Consultar disponibilidad desde el canal (CU-08)
+      description: |
+        Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por página
+        (12.4). La consulta queda en la bitácora (7.8). Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
+      operationId: consultarDisponibilidadCanal
+      parameters:
+        - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
+        - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
+        - { name: ocupantes, in: query, required: true, schema: { type: integer, minimum: 1 }, example: 2 }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de apartamentos disponibles (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaApartamentoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          $ref: '#/components/responses/ReglaDeNegocio'
+
+  /api/canales/{canal}/reservas:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+    post:
+      tags: [ Canal externo ]
+      summary: Recibir una reserva del canal (CU-08)
+      description: |
+        Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). Si ya están
+        vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el identificador externo ya llegó,
+        DUPLICADO_IGNORADO (RN-19). Todo mensaje queda en la bitácora (7.8), también los rechazados.
+        Mapea a `RecibirReservaExternaUseCase.ejecutar`.
+      operationId: recibirReservaExterna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaExternaRequest'
+            example:
+              identificadorExterno: BK-889201
+              identificacionApartamento: APT-101
+              fechaEntrada: '2026-11-20'
+              fechaSalida: '2026-11-22'
+              titular:
+                nombre: Ana Gómez
+                tipoDocumento: CC
+                numeroDocumento: '1094000111'
+                email: ana@example.com
+                telefono: '3001234567'
+              ocupantes:
+                - nombre: Ana Gómez
+                  tipoDocumento: CC
+                  numeroDocumento: '1094000111'
+                  fechaNacimiento: '1990-05-20'
+      responses:
+        '201':
+          description: ACEPTADO, la reserva nace PENDIENTE con su folio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '200':
+          description: DUPLICADO_IGNORADO, el mensaje ya había llegado (RN-19)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: RECHAZADO_CONFLICTO, las noches ya están vendidas o bloqueadas (RN-18)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '422':
+          description: RECHAZADO_INVALIDO, los datos no cumplen las reglas de la reserva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+
+
+  /api/canales/{canal}/reservas/{identificadorExterno}/cancelar:
+    parameters:
+      - $ref: '#/components/parameters/Canal'
+      - name: identificadorExterno
+        in: path
+        required: true
+        description: Identificador de la reserva en el canal
+        schema:
+          type: string
+          example: BK-889201
+    put:
+      tags: [ Canal externo ]
+      summary: Cancelar una reserva del canal (CU-08)
+      description: |
+        Cancela la reserva que el mismo canal creó con ese identificador; una cancelación repetida responde
+        DUPLICADO_IGNORADO (RN-19). Mapea a `RecibirReservaExternaUseCase.cancelar`.
+      operationId: cancelarReservaExterna
+      responses:
+        '200':
+          description: ACEPTADO o DUPLICADO_IGNORADO (RN-19)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+        '422':
+          description: RECHAZADO_INVALIDO, no hay una reserva del canal con ese identificador o ya no se puede cancelar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+
+  # ==================== CU-22 a CU-25: ADMINISTRACIÓN Y TARIFAS (7.3, 7.4) ====================
+  # POST /api/apartamentos (CU-22) y PUT /api/apartamentos/{id} (CU-23) están en sus rutas de arriba.
+
+  /api/apartamentos/{id}/tarifas:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Definir tarifas por temporada (CU-24)
+      description: |
+        Una o varias tarifas por ocupante facturable y por noche que rigen desde hoy. La tarifa anterior de
+        cada temporada no se pierde: queda en el histórico con la fecha desde la que estuvo vigente y la fecha
+        en que se reemplazó (7.4). La cotización y las reservas siguen usando solo la tarifa vigente (RN-05).
+        Si una tarifa no cumple, no se aplica ninguna. Un apartamento retirado de la venta responde 404.
+        Mapea a `TarifasApartamentoUseCase.definir`.
+      operationId: definirTarifasApartamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefinirTarifasRequest'
+      responses:
+        '200':
+          description: Tarifas definidas; el detalle trae las vigentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La temporada no existe en el alojamiento, está repetida o el valor no es mayor que cero (7.4)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/tarifas/historico:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    get:
+      tags: [Apartamentos]
+      summary: Consultar el histórico de tarifas (CU-24)
+      description: |
+        Tarifas vigentes (vigenteHasta null) y reemplazadas, de la más reciente a la más antigua,
+        10 por página (7.4, 12.4). Solo consulta. Mapea a `TarifasApartamentoUseCase.historico`.
+      operationId: historicoTarifasApartamento
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página del histórico (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaRegistroTarifaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          description: No existe o fue retirado de la venta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/{id}/activar:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+    put:
+      tags: [Apartamentos]
+      summary: Activar un apartamento (CU-25)
+      description: |
+        Pone el apartamento a la venta. Exige tarifa en todas las temporadas del alojamiento (7.4);
+        uno retirado de la venta no puede activarse (7.3). Mapea a `ActivarApartamentoUseCase`.
+      operationId: activarApartamento
+      responses:
+        '200':
+          description: Apartamento activo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApartamentoDetalleResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: Le falta tarifa en alguna temporada (7.4) o fue retirado de la venta (7.3)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== CU-26 Y CU-27: VISTA DE RECEPCIÓN (7.1) ====================
+
+  /api/reservas/llegadas:
+    get:
+      tags: [Reservas]
+      summary: Llegadas previstas del día (CU-26)
+      description: |
+        Reservas CONFIRMADA cuya fecha de entrada es la fecha pedida (7.1, 7.6), ordenadas por apartamento,
+        10 por página (12.4). Sin fecha se usa hoy en la zona horaria del alojamiento
+        (`sga.alojamiento.zona-horaria`). Mapea a `ListarLlegadasYSalidasUseCase.llegadas`.
+      operationId: listarLlegadasPrevistas
+      parameters:
+        - { name: fecha, in: query, required: false, description: Por defecto hoy en America/Bogota, schema: { type: string, format: date }, example: '2026-11-14' }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de llegadas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/reservas/salidas:
+    get:
+      tags: [Reservas]
+      summary: Salidas previstas del día (CU-26)
+      description: |
+        Reservas EN_CURSO cuya fecha de salida es la fecha pedida (7.1, 7.6), ordenadas por apartamento,
+        10 por página (12.4). Sin fecha se usa hoy en la zona horaria del alojamiento
+        (`sga.alojamiento.zona-horaria`). Mapea a `ListarLlegadasYSalidasUseCase.salidas`.
+      operationId: listarSalidasPrevistas
+      parameters:
+        - { name: fecha, in: query, required: false, description: Por defecto hoy en America/Bogota, schema: { type: string, format: date }, example: '2026-11-04' }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de salidas (puede venir vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaReservaResumen'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/reservas/calendario:
+    get:
+      tags: [Operación en recepción]
+      summary: Calendario de ocupación de un apartamento (CU-27)
+      description: |
+        Estado de cada noche entre desde (incluida) y hasta (excluida), como la estancia (3.1): LIBRE,
+        RESERVADA (reserva activa PENDIENTE, CONFIRMADA o EN_CURSO, RN-12; trae su código y estado) o
+        BLOQUEADA (bloqueo vigente, RN-07; trae el motivo). Las reservas canceladas, finalizadas o no-show
+        no retienen la noche y no aparecen.
+
+        Decisión del equipo: máximo 62 noches por consulta (dos meses completos, suficiente para la vista
+        mensual de recepción con el mes siguiente). Mapea a `ConsultarCalendarioOcupacionUseCase` y
+        `CalendarioOcupacionService`.
+      operationId: consultarCalendarioOcupacion
+      parameters:
+        - { name: apartamento, in: query, required: true, schema: { type: string }, example: APT-201 }
+        - { name: desde, in: query, required: true, description: Primera noche que se muestra, schema: { type: string, format: date }, example: '2026-11-01' }
+        - { name: hasta, in: query, required: true, description: Primera noche que ya no se muestra (excluida), schema: { type: string, format: date }, example: '2026-11-08' }
+      responses:
+        '200':
+          description: Calendario noche por noche
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarioOcupacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La fecha desde no es anterior a hasta o el rango supera 62 noches (7.1)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== CU-28 A CU-30: CONFIGURACIÓN DEL ALOJAMIENTO (administrador) ====================
+
+  /api/alojamiento:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar el alojamiento (CU-28)
+      description: |
+        Datos, ubicación, horario, normas de convivencia, servicios adicionales (L-17) y parámetros vigentes
+        de la sección 6. Los parámetros son de solo lectura: se configuran en application.properties
+        (`sga.alojamiento.*`) y no se cambian por API. Mapea a `ConfiguracionAlojamientoUseCase.consultar`.
+      operationId: consultarAlojamiento
+      responses:
+        '200':
+          description: El alojamiento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoResponse'
+    put:
+      tags: [Configuración del alojamiento]
+      summary: Actualizar los datos del alojamiento (CU-28)
+      description: |
+        Reemplaza nombre, descripción, ciudad, dirección, ubicación y normas de convivencia con
+        `Alojamiento.actualizarDatos`. El horario es opcional: si llegan las horas se aplica con
+        `Alojamiento.definirHorario` (L-12); si no llega ninguna se conserva el vigente. Los parámetros de
+        la sección 6 no cambian. Mapea a `ConfiguracionAlojamientoUseCase.actualizar`.
+      operationId: actualizarAlojamiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarAlojamientoRequest'
+      responses:
+        '200':
+          description: Alojamiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: Coordenada fuera de rango (7.3) o llega solo una de las dos horas del horario (L-12)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Listar temporadas (CU-29)
+      description: |
+        Temporadas del alojamiento con sus rangos de fechas (fecha final excluida, nota de A.3), en el orden
+        en que se registraron, 10 por página (12.4). La base no tiene rangos: cubre las fechas que no son de
+        otra temporada (F-05). Mapea a `TemporadasUseCase.listar`.
+      operationId: listarTemporadas
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de temporadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaTemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+    post:
+      tags: [Configuración del alojamiento]
+      summary: Crear una temporada con las tarifas de los apartamentos activos (CU-29)
+      description: |
+        Regla 7.4: todo apartamento activo debe tener tarifa en todas las temporadas, por eso la temporada
+        nueva trae la tarifa de cada apartamento activo. `CreacionTemporadaService` crea la temporada y asigna
+        las tarifas en una sola operación: si falta alguna, no se crea la temporada ni se asigna ninguna
+        tarifa. Cada tarifa queda en el histórico del apartamento desde hoy (`Apartamento.definirTarifa`,
+        CU-24). Que no se solape con otra temporada ni sea una segunda base lo valida
+        `Alojamiento.agregarTemporada` (7.4, F-05). Mapea a `TemporadasUseCase.crear`.
+      operationId: crearTemporada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearTemporadaRequest'
+      responses:
+        '201':
+          description: Temporada creada
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Falta la tarifa de un apartamento activo, un apartamento no existe o está repetido, un valor no es
+            mayor que cero, una temporada no base no tiene rangos, se solapa con otra (7.4) o ya hay una
+            temporada base (F-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/temporadas/{id}:
+    parameters:
+      - { name: id, in: path, required: true, description: Id de la temporada, schema: { type: string }, example: T-ALTA }
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar una temporada (CU-29)
+      description: |
+        La temporada con sus rangos de fechas (fecha final excluida). Es el recurso al que apunta la cabecera
+        Location al crearla o al agregarle un rango. Mapea a `TemporadasUseCase.consultar`.
+      operationId: consultarTemporada
+      responses:
+        '200':
+          description: La temporada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /api/temporadas/{id}/rangos:
+    parameters:
+      - { name: id, in: path, required: true, description: Id de la temporada, schema: { type: string }, example: T-MEDIA }
+    post:
+      tags: [Configuración del alojamiento]
+      summary: Agregar un rango a una temporada (CU-29)
+      description: |
+        El rango (fecha final excluida) no puede solaparse con otra temporada (`Alojamiento.agregarRangoATemporada`)
+        ni con los rangos de la misma; la temporada base no tiene rangos (`Temporada.agregarRango`, 7.4, F-05).
+        Mapea a `TemporadasUseCase.agregarRango`.
+      operationId: agregarRangoTemporada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RangoFechasRequest'
+      responses:
+        '201':
+          description: Rango agregado; devuelve la temporada con todos sus rangos
+          headers:
+            Location:
+              description: URL de la temporada, por ejemplo /api/temporadas/T-FESTIVAL
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporadaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El rango se solapa, la fecha fin no es posterior a la de inicio o la temporada es la base (7.4, F-05)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/politica-cancelacion:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Consultar la política de cancelación vigente (CU-30)
+      description: |
+        La única versión vigente (7.4, F-07), la de mayor número: es la que se congela en cada reserva nueva
+        (RN-22). Al arrancar, si no hay ninguna, se guarda la versión 1 con `sga.politica-cancelacion.*`.
+        Mapea a `PoliticaCancelacionUseCase.vigente`.
+      operationId: consultarPoliticaCancelacionVigente
+      responses:
+        '200':
+          description: La versión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaCancelacionResponse'
+    put:
+      tags: [Configuración del alojamiento]
+      summary: Actualizar la política de cancelación (CU-30)
+      description: |
+        Crea la versión N+1 con los tramos y la consecuencia del no-show dados, vigente desde hoy. La versión
+        anterior se conserva sin cambios y las reservas existentes siguen con la versión que congelaron al
+        crearse (RN-22). L-10 lo valida el dominio. Mapea a `PoliticaCancelacionUseCase.actualizar` y
+        `PoliticaCancelacionService.actualizar`.
+      operationId: actualizarPoliticaCancelacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarPoliticaCancelacionRequest'
+      responses:
+        '200':
+          description: Nueva versión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoliticaCancelacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '409':
+          description: |
+            Menos de dos tramos, dos tramos con la misma antelación, ningún tramo desde 0 días, antelación
+            negativa o porcentaje fuera de 0 a 100 (L-10)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/politica-cancelacion/versiones:
+    get:
+      tags: [Configuración del alojamiento]
+      summary: Listar las versiones de la política de cancelación (CU-30)
+      description: |
+        Todas las versiones, de la más reciente a la más antigua, 10 por página (F-07, 12.4).
+        Mapea a `PoliticaCancelacionUseCase.versiones`.
+      operationId: listarVersionesPoliticaCancelacion
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de versiones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaPoliticaCancelacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  # ==================== FOLIO: CARGOS Y CORRECCIONES (7.1, RN-16) ====================
+
+  /api/reservas/{codigo}/folio/cargos:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar el cargo de un servicio adicional (7.1)
+      description: |
+        Asienta en el folio el cargo de un servicio adicional del alojamiento (L-17), con el nombre y el valor del
+        servicio y la fecha de hoy. El cargo lo genera `ServicioAdicional.generarCargoPara`: el servicio debe existir
+        en el alojamiento, estar activo y generar cargo, y el folio debe estar abierto. El cargo no se edita ni se
+        borra; se corrige con un movimiento inverso (RN-16). Mapea a `RegistrarCargoServicioUseCase`.
+      operationId: registrarCargoServicio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarCargoServicioRequest'
+            example:
+              idServicio: SRV-CENA-BALCON
+      responses:
+        '201':
+          description: Cargo registrado; devuelve el folio con el nuevo saldo
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: |
+            El alojamiento no ofrece el servicio, no está activo o no genera cargo (L-17), o el folio está cerrado
+            (RN-16)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/reservas/{codigo}/folio/correcciones:
+    parameters:
+      - $ref: '#/components/parameters/CodigoReserva'
+    post:
+      tags: [ Folio ]
+      summary: Registrar una corrección (RN-16)
+      description: |
+        Toda corrección es un movimiento inverso: el cargo original no se edita ni se borra, y
+        `Folio.registrarMovimientoInverso` asienta un cargo del mismo tipo con el valor opuesto, el motivo y la fecha
+        de hoy. El cargo se identifica por su posición en la lista `cargos` de `FolioResponse`, contando desde 0
+        (en un folio nuevo, 0 es el alojamiento y 1 el depósito de garantía). Mapea a
+        `RegistrarCorreccionFolioUseCase`.
+      operationId: registrarCorreccionFolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarCorreccionRequest'
+            example:
+              indiceCargo: 2
+              motivo: La cena no se consumió
+      responses:
+        '201':
+          description: Corrección registrada; devuelve el folio con el saldo corregido
+          headers:
+            Location:
+              description: URL del folio de la reserva, por ejemplo /api/reservas/RES-2026-00001/folio
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolioResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: No hay un cargo en esa posición o el folio está cerrado (RN-16)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+
+  parameters:
+    CodigoReserva:
+      name: codigo
+      in: path
+      required: true
+      description: Código de la reserva con formato RES-YYYY-NNNNN
+      schema:
+        type: string
+        pattern: '^RES-\d{4}-\d{5}$'
+        example: RES-2026-00001
+    IdApartamento:
+      name: id
+      in: path
+      required: true
+      description: Identificación del apartamento
+      schema:
+        type: string
+        example: APT-101
+    PaginaApartamentos:
+      name: pagina
+      in: query
+      required: false
+      description: Número de página, empieza en 0 (10 resultados por página, 12.4)
+      schema: { type: integer, minimum: 0, default: 0 }
+    Canal:
+      name: canal
+      in: path
+      required: true
+      description: Nombre de la plataforma externa que llama; para el dominio es el canal EXTERNO
+      schema:
+        type: string
+        example: booking
+
+  responses:
+    DatosInvalidos:
+      description: El mensaje está mal escrito (validación, JSON, fecha o enum inválidos)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NoEncontrado:
+      description: El identificador no existe
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ReglaDeNegocio:
+      description: Una regla del negocio (RN/RP) lo impide; el mensaje empieza por el código de la regla
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ---------- Apartamentos y operación ----------
+
+    EstadoOperativo:
+      type: string
+      enum: [ PREPARADO, OCUPADO, PENDIENTE_PREPARACION, EN_PREPARACION, FUERA_DE_SERVICIO ]
+
+    GravedadNovedad:
+      type: string
+      enum: [ BAJA, MEDIA, ALTA ]
+
+    CotizarEstanciaRequest:
+      type: object
+      required: [ identificacionApartamento, fechaEntrada, fechaSalida, ocupantes ]
+      properties:
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        ocupantes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+
+    RegistrarBloqueoRequest:
+      type: object
+      required: [ fechaInicio, fechaFin, motivo ]
+      properties:
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date, description: Primera noche que ya no queda bloqueada }
+        motivo: { type: string }
+
+    RegistrarNovedadRequest:
+      type: object
+      required: [ autor, descripcion, gravedad ]
+      properties:
+        autor: { type: string }
+        descripcion: { type: string }
+        gravedad: { $ref: '#/components/schemas/GravedadNovedad' }
+
+    ApartamentoResponse:
+      type: object
+      properties:
+        identificacion: { type: string, example: APT-101 }
+        nombre: { type: string }
+        descripcion: { type: string }
+        dormitorios: { type: integer }
+        capacidadMaxima: { type: integer }
+        dotacion: { type: array, items: { type: string } }
+        imagenes: { type: array, items: { type: string } }
+        estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
+
+    PaginaApartamentoResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ApartamentoResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64, example: 5 }
+        totalPaginas: { type: integer, example: 1 }
+
+    PaginaNovedadResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/NovedadResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64, example: 1 }
+        totalPaginas: { type: integer, example: 1 }
+
+    ApartamentoDisponibleResponse:
+      type: object
+      description: Tarjeta del resultado de la búsqueda (7.5)
+      properties:
+        identificacion: { type: string, example: APT-301 }
+        nombre: { type: string, example: Gran Coral Imperial }
+        imagenPrincipal: { type: string }
+        capacidadMaxima: { type: integer, example: 6 }
+        valorEstimado: { type: integer, format: int64, description: Valor de toda la estancia en pesos, example: 1000000 }
+        latitud: { type: number, format: double, description: Del alojamiento, example: 10.3975 }
+        longitud: { type: number, format: double, description: Del alojamiento, example: -75.559 }
+
+    PaginaApartamentoDisponibleResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ApartamentoDisponibleResponse' }
+        pagina: { type: integer, example: 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    ApartamentoDetalleResponse:
+      type: object
+      properties:
+        identificacion: { type: string, example: APT-301 }
+        nombre: { type: string }
+        descripcion: { type: string }
+        dormitorios: { type: integer }
+        capacidadMaxima: { type: integer }
+        dotacion: { type: array, items: { type: string } }
+        imagenes:
+          type: array
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              principal: { type: boolean }
+        imagenPrincipal: { type: string }
+        estadoOperativo: { $ref: '#/components/schemas/EstadoOperativo' }
+        activo: { type: boolean }
+        eliminado: { type: boolean, description: Eliminación lógica (12.4) }
+        tarifas:
+          type: array
+          description: Valor por ocupante facturable y por noche en cada temporada (7.4)
+          items:
+            type: object
+            properties:
+              idTemporada: { type: string, example: T-BASE }
+              valorPorOcupante: { type: integer, format: int64, example: 250000 }
+        bloqueosVigentes:
+          type: array
+          items: { $ref: '#/components/schemas/BloqueoResponse' }
+
+    DetalleNocheResponse:
+      type: object
+      properties:
+        fecha: { type: string, format: date }
+        temporada: { type: string, example: Base }
+        tarifaAplicada: { type: integer, format: int64, description: Pesos por ocupante facturable }
+        ocupantesFacturables: { type: integer }
+        subtotal: { type: integer, format: int64 }
+
+    CotizacionResponse:
+      type: object
+      properties:
+        identificacionApartamento: { type: string }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        noches: { type: integer }
+        detalles:
+          type: array
+          items: { $ref: '#/components/schemas/DetalleNocheResponse' }
+        valorTotal: { type: integer, format: int64 }
+
+    BloqueoResponse:
+      type: object
+      properties:
+        id: { type: string }
+        identificacionApartamento: { type: string }
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date }
+        motivo: { type: string }
+        vigente: { type: boolean }
+
+    NovedadResponse:
+      type: object
+      properties:
+        id: { type: string }
+        identificacionApartamento: { type: string }
+        fecha: { type: string, format: date }
+        autor: { type: string }
+        descripcion: { type: string }
+        gravedad: { $ref: '#/components/schemas/GravedadNovedad' }
+        fechaAtencion: { type: string, format: date, nullable: true }
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer, example: 409 }
+        error: { type: string, example: Conflict }
+        mensaje: { type: string, example: 'RN-09: la reserva debe tener hora estimada de llegada' }
+        path: { type: string, example: /api/reservas/RES-2026-00001/confirmar }
+        errores:
+          type: object
+          description: Campo → mensaje; solo en los 400 de validación
+          additionalProperties: { type: string }
+
+    CanalOrigen:
+      type: string
+      enum: [PORTAL, DIRECTO, EXTERNO]
+
+    EstadoReserva:
+      type: string
+      enum: [PENDIENTE, CONFIRMADA, EN_CURSO, FINALIZADA, CANCELADA, NO_SHOW]
+
+    TitularRequest:
+      type: object
+      required: [nombre, tipoDocumento, numeroDocumento, email, telefono]
+      properties:
+        nombre: { type: string }
+        tipoDocumento: { type: string, example: CC }
+        numeroDocumento: { type: string }
+        email: { type: string, format: email }
+        telefono: { type: string }
+
+    OcupanteRequest:
+      type: object
+      required: [nombre, fechaNacimiento]
+      properties:
+        nombre: { type: string }
+        tipoDocumento: { type: string, description: Opcional }
+        numeroDocumento: { type: string, description: Opcional }
+        fechaNacimiento: { type: string, format: date }
+
+    CrearReservaRequest:
+      type: object
+      required: [identificacionApartamento, fechaEntrada, fechaSalida, canalOrigen, titular, ocupantes]
+      properties:
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        horaEstimadaLlegada: { type: string, example: '16:30', description: Opcional al crear; obligatoria para confirmar (RN-09) }
+        canalOrigen: { $ref: '#/components/schemas/CanalOrigen' }
+        titular: { $ref: '#/components/schemas/TitularRequest' }
+        ocupantes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+        cantidadMascotas: { type: integer, minimum: 0, example: 1, description: Opcional; sin dato = 0. Máximo 2 lo valida el dominio (L-16) }
+        pesoMascotaMasPesadaKg: { type: integer, minimum: 0, example: 8, description: Opcional; sin dato = 0. Hasta 10 kg lo valida el dominio (L-16) }
+
+    ModificarReservaRequest:
+      type: object
+      description: Todos los campos son opcionales; el que viene en null se conserva
+      properties:
+        identificacionApartamento: { type: string }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        ocupantes:
+          type: array
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+        cantidadMascotas: { type: integer, minimum: 0, description: L-16; con 0 se quitan las mascotas }
+        pesoMascotaMasPesadaKg: { type: integer, minimum: 0, description: L-16 }
+
+    ConfirmarReservaRequest:
+      type: object
+      properties:
+        horaEstimadaLlegada: { type: string, example: '21:00' }
+
+    CancelarReservaRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo: { type: string }
+
+    TitularResponse:
+      type: object
+      properties:
+        nombre: { type: string }
+        tipoDocumento: { type: string }
+        numeroDocumento: { type: string }
+        email: { type: string }
+        telefono: { type: string }
+
+    OcupanteResponse:
+      type: object
+      properties:
+        nombre: { type: string }
+        tipoDocumento: { type: string, nullable: true }
+        numeroDocumento: { type: string, nullable: true }
+        fechaNacimiento: { type: string, format: date }
+
+    ReservaDetalleResponse:
+      type: object
+      properties:
+        codigo: { type: string, example: RES-2026-00001 }
+        estado: { $ref: '#/components/schemas/EstadoReserva' }
+        canalOrigen: { $ref: '#/components/schemas/CanalOrigen' }
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        noches: { type: integer }
+        horaEstimadaLlegada: { type: string, nullable: true }
+        titular: { $ref: '#/components/schemas/TitularResponse' }
+        ocupantes:
+          type: array
+          items: { $ref: '#/components/schemas/OcupanteResponse' }
+        totalOcupantes: { type: integer }
+        valorTotal: { type: integer, format: int64, description: Valor congelado en pesos (RN-22) }
+        versionPoliticaCancelacion: { type: integer }
+        cantidadMascotas: { type: integer, description: 0 si no trae mascotas (L-16) }
+        pesoMascotaMasPesadaKg: { type: integer, description: 0 si no trae mascotas (L-16) }
+        fechaCreacion: { type: string, format: date-time }
+        fechaConfirmacion: { type: string, format: date-time, nullable: true }
+        motivoCancelacion: { type: string, nullable: true }
+
+    ModificacionReservaResponse:
+      type: object
+      properties:
+        reserva: { $ref: '#/components/schemas/ReservaDetalleResponse' }
+        diferencia: { type: integer, format: int64, description: En pesos; negativa si baja el valor }
+
+    RetencionResponse:
+      type: object
+      properties:
+        codigo: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoReserva' }
+        retencion: { type: integer, format: int64, description: En pesos (RN-13) }
+
+    ReservaResumenResponse:
+      type: object
+      properties:
+        codigo: { type: string, example: RES-2026-00001 }
+        estado: { $ref: '#/components/schemas/EstadoReserva' }
+        apartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        nombreTitular: { type: string }
+        totalOcupantes: { type: integer }
+        canalOrigen: { $ref: '#/components/schemas/CanalOrigen' }
+        valorTotal: { type: integer, format: int64, description: Valor congelado en pesos (RN-22) }
+
+    PaginaReservaResumen:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ReservaResumenResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    # ---------- Folio y canal externo ----------
+
+    MedioPago:
+      type: string
+      enum: [ TARJETA_DEBITO_CREDITO, TRANSFERENCIA_BANCARIA ]
+
+    TipoCargo:
+      type: string
+      description: |
+        Tipos de cargo del folio (7.7). AJUSTE_MODIFICACION es la diferencia de una modificación (RN-14) y también
+        el depósito de garantía de RP-02 y su devolución (valor negativo), como lo definen el Anexo A y el glosario.
+      enum: [ ALOJAMIENTO, SERVICIO_ADICIONAL, AJUSTE_MODIFICACION, PENALIDAD_CANCELACION_NOSHOW ]
+
+    TipoEventoCanal:
+      type: string
+      enum: [ CONSULTA_DISPONIBILIDAD, CREACION_RESERVA, CANCELACION_RESERVA ]
+
+    ResultadoEventoCanal:
+      type: string
+      enum: [ ACEPTADO, RECHAZADO_CONFLICTO, RECHAZADO_INVALIDO, DUPLICADO_IGNORADO ]
+
+    RegistrarPagoRequest:
+      type: object
+      required: [ valor, medio ]
+      properties:
+        valor: { type: integer, format: int64, minimum: 1, description: Pesos enteros }
+        medio: { $ref: '#/components/schemas/MedioPago' }
+
+    AutorizarCierreFolioRequest:
+      type: object
+      required: [ autorizadoPor, motivo ]
+      properties:
+        autorizadoPor: { type: string }
+        motivo: { type: string }
+
+    ReservaExternaRequest:
+      type: object
+      required: [ identificadorExterno, identificacionApartamento, fechaEntrada, fechaSalida, titular, ocupantes ]
+      properties:
+        identificadorExterno: { type: string, example: BK-889201 }
+        identificacionApartamento: { type: string, example: APT-101 }
+        fechaEntrada: { type: string, format: date }
+        fechaSalida: { type: string, format: date }
+        horaEstimadaLlegada: { type: string, nullable: true, example: '16:30:00' }
+        titular: { $ref: '#/components/schemas/TitularRequest' }
+        ocupantes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OcupanteRequest' }
+
+    CargoResponse:
+      type: object
+      properties:
+        tipo: { $ref: '#/components/schemas/TipoCargo' }
+        concepto: { type: string }
+        valor: { type: integer, format: int64, description: Negativo si es un ajuste a la baja o un movimiento inverso }
+        fecha: { type: string, format: date }
+
+    PagoResponse:
+      type: object
+      properties:
+        valor: { type: integer, format: int64 }
+        medio: { $ref: '#/components/schemas/MedioPago' }
+        fecha: { type: string, format: date }
+
+    FolioResponse:
+      type: object
+      properties:
+        codigoReserva: { type: string, example: RES-2026-00001 }
+        fechaApertura: { type: string, format: date }
+        depositoGarantia: { type: integer, format: int64, example: 250000 }
+        cargos:
+          type: array
+          items: { $ref: '#/components/schemas/CargoResponse' }
+        pagos:
+          type: array
+          items: { $ref: '#/components/schemas/PagoResponse' }
+        totalCargos: { type: integer, format: int64 }
+        totalPagado: { type: integer, format: int64 }
+        saldo: { type: integer, format: int64, description: Cargos menos pagos; negativo si hay saldo a favor }
+        cerrado: { type: boolean }
+        fechaCierre: { type: string, format: date, nullable: true }
+        autorizadoPor: { type: string, nullable: true }
+        motivoAutorizacion: { type: string, nullable: true }
+
+    EventoCanalResponse:
+      type: object
+      properties:
+        identificadorExterno: { type: string }
+        tipoEvento: { $ref: '#/components/schemas/TipoEventoCanal' }
+        resultado: { $ref: '#/components/schemas/ResultadoEventoCanal' }
+
+    # ---------- CU-22 a CU-25: administración y tarifas (7.3, 7.4) ----------
+
+    ImagenRequest:
+      type: object
+      required: [ url ]
+      properties:
+        url: { type: string, example: 'https://coral.co/img/apt-401-sala.jpg', description: 'Debe empezar por http:// o https://' }
+        principal: { type: boolean, default: false, description: Exactamente una imagen debe ser la principal }
+
+    TarifaRequest:
+      type: object
+      required: [ idTemporada, valorPorOcupante ]
+      properties:
+        idTemporada: { type: string, example: T-BASE, description: Debe existir en el alojamiento (7.4) }
+        valorPorOcupante: { type: integer, format: int64, example: 300000, description: Pesos por ocupante facturable y por noche; mayor que cero (7.4) }
+
+    RegistrarApartamentoRequest:
+      type: object
+      required: [ identificacion, nombre, dormitorios, capacidadMaxima, dotacion, imagenes ]
+      properties:
+        identificacion: { type: string, example: APT-401, description: Única en el alojamiento (L-04) }
+        nombre: { type: string, example: Coral Esmeralda }
+        descripcion: { type: string, nullable: true }
+        dormitorios: { type: integer, example: 1, description: Al menos 1 }
+        capacidadMaxima: { type: integer, example: 3, description: Al menos 1 (RN-02) }
+        dotacion:
+          type: array
+          description: Al menos un elemento (L-06)
+          items: { type: string }
+        imagenes:
+          type: array
+          description: Entre 1 y 10, exactamente una principal (7.3)
+          items: { $ref: '#/components/schemas/ImagenRequest' }
+        tarifas:
+          type: array
+          nullable: true
+          description: Opcional; sin tarifa en todas las temporadas el apartamento no puede activarse (7.4)
+          items: { $ref: '#/components/schemas/TarifaRequest' }
+
+    ActualizarApartamentoRequest:
+      type: object
+      required: [ nombre, dormitorios, capacidadMaxima, dotacion ]
+      properties:
+        nombre: { type: string, example: Coral Esmeralda Renovado }
+        descripcion: { type: string, nullable: true }
+        dormitorios: { type: integer, example: 2 }
+        capacidadMaxima: { type: integer, example: 2, description: No modifica las reservas ya creadas (7.3) }
+        dotacion:
+          type: array
+          items: { type: string }
+
+    DefinirTarifasRequest:
+      type: object
+      required: [ tarifas ]
+      properties:
+        tarifas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/TarifaRequest' }
+
+    ActualizacionApartamentoResponse:
+      type: object
+      properties:
+        apartamento: { $ref: '#/components/schemas/ApartamentoDetalleResponse' }
+        reservasSobreCapacidad:
+          type: array
+          description: Códigos de reservas activas o futuras cuyo grupo supera la nueva capacidad (7.3)
+          items: { type: string, example: RES-2026-00007 }
+        advertencia:
+          type: string
+          nullable: true
+          description: Presente solo si hay reservas afectadas; empieza por 7.3
+
+    RegistroTarifaResponse:
+      type: object
+      properties:
+        idTemporada: { type: string, example: T-BASE }
+        valorPorOcupante: { type: integer, format: int64, example: 300000 }
+        vigenteDesde: { type: string, format: date, nullable: true, description: Null solo para tarifas cargadas sin fecha (datos iniciales) }
+        vigenteHasta: { type: string, format: date, nullable: true, description: Fecha en que se reemplazó; null si rige hoy }
+        vigente: { type: boolean }
+
+    PaginaRegistroTarifaResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/RegistroTarifaResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    # ---------- CU-27 Calendario de ocupación ----------
+
+    EstadoNoche:
+      type: string
+      enum: [ LIBRE, RESERVADA, BLOQUEADA ]
+
+    NocheCalendarioResponse:
+      type: object
+      properties:
+        fecha: { type: string, format: date, description: La noche va de esta fecha a la siguiente (3.1) }
+        estado: { $ref: '#/components/schemas/EstadoNoche' }
+        codigoReserva: { type: string, nullable: true, example: RES-2026-00003, description: Solo si está RESERVADA }
+        estadoReserva:
+          nullable: true
+          description: Solo si está RESERVADA (PENDIENTE, CONFIRMADA o EN_CURSO)
+          allOf: [ { $ref: '#/components/schemas/EstadoReserva' } ]
+        motivoBloqueo: { type: string, nullable: true, example: Mantenimiento de la piscina de inmersión, description: Solo si está BLOQUEADA }
+
+    CalendarioOcupacionResponse:
+      type: object
+      properties:
+        apartamento: { type: string, example: APT-201 }
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date, description: Excluida }
+        noches:
+          type: array
+          maxItems: 62
+          description: Una entrada por noche, en orden de fecha
+          items: { $ref: '#/components/schemas/NocheCalendarioResponse' }
+
+    # ---------- CU-28 Alojamiento ----------
+
+    ActualizarAlojamientoRequest:
+      type: object
+      required: [nombre, ciudad, latitud, longitud]
+      properties:
+        nombre: { type: string, example: Coral }
+        descripcion: { type: string, nullable: true }
+        ciudad: { type: string, example: Cartagena de Indias }
+        direccion: { type: string, nullable: true, example: 'Sector Bocagrande, Avenida del Malecón' }
+        latitud: { type: number, format: double, minimum: -90, maximum: 90, example: 10.3975, description: Fuera de rango es 409 (7.3) }
+        longitud: { type: number, format: double, minimum: -180, maximum: 180, example: -75.559, description: Fuera de rango es 409 (7.3) }
+        normaConvivencia: { type: string, nullable: true }
+        horaEntrada: { type: string, format: time, nullable: true, example: '15:00', description: Opcional; si llega una hora debe llegar también la otra (L-12) }
+        horaSalida: { type: string, format: time, nullable: true, example: '11:00' }
+
+    ServicioAdicionalResponse:
+      type: object
+      properties:
+        id: { type: string, example: SRV-RECEPCION-NOCTURNA }
+        nombre: { type: string, example: Recepción nocturna }
+        descripcion: { type: string, nullable: true }
+        generaCargo: { type: boolean }
+        valor: { type: integer, format: int64, example: 70000, description: Pesos enteros; 0 si no genera cargo }
+        activo: { type: boolean }
+
+    ParametrosAlojamientoResponse:
+      type: object
+      description: Parámetros de la sección 6 vigentes (solo lectura, se configuran en application.properties)
+      properties:
+        umbralEdadFacturable: { type: integer, nullable: true, example: 6, description: L-09 }
+        tiempoPreparacionHoras: { type: integer, nullable: true, example: 3, description: L-13 }
+        plazoConfirmacionHoras: { type: integer, nullable: true, example: 12, description: L-14 }
+        horaLimiteNoShow: { type: string, format: time, nullable: true, example: '22:00:00', description: L-15 }
+        horaInicioLlegadaNocturna: { type: string, format: time, nullable: true, example: '20:00:00', description: RP-03 }
+        estanciaMinimaNoches: { type: integer, nullable: true, example: 2, description: RP-01 }
+        estanciaMinimaActiva: { type: boolean }
+        exigeAnticipo: { type: boolean, description: L-11 }
+        porcentajeAnticipo: { type: integer, example: 50 }
+        aceptaMascotas: { type: boolean, description: L-16 }
+        cargoAseoMascota: { type: integer, format: int64, example: 110000 }
+        maximoMascotas: { type: integer, example: 2 }
+        pesoMaximoMascotaKg: { type: integer, example: 10 }
+
+    AlojamientoResponse:
+      type: object
+      properties:
+        id: { type: string, example: ALO-CORAL }
+        nombre: { type: string, example: Coral }
+        descripcion: { type: string, nullable: true }
+        ciudad: { type: string, example: Cartagena de Indias }
+        direccion: { type: string, nullable: true }
+        latitud: { type: number, format: double, example: 10.3975 }
+        longitud: { type: number, format: double, example: -75.559 }
+        horaEntrada: { type: string, format: time, example: '15:00:00' }
+        horaSalida: { type: string, format: time, example: '11:00:00' }
+        normaConvivencia: { type: string, nullable: true }
+        serviciosAdicionales:
+          type: array
+          items: { $ref: '#/components/schemas/ServicioAdicionalResponse' }
+        parametros: { $ref: '#/components/schemas/ParametrosAlojamientoResponse' }
+
+    # ---------- CU-29 Temporadas ----------
+
+    TipoTemporada:
+      type: string
+      enum: [ BASE, MEDIA, ALTA ]
+
+    RangoFechasRequest:
+      type: object
+      required: [fechaInicio, fechaFin]
+      description: Fecha final excluida (nota de A.3)
+      properties:
+        fechaInicio: { type: string, format: date, example: '2027-03-01' }
+        fechaFin: { type: string, format: date, example: '2027-03-11' }
+
+    TarifaTemporadaRequest:
+      type: object
+      required: [identificacionApartamento, valorPorOcupante]
+      properties:
+        identificacionApartamento: { type: string, example: APT-101 }
+        valorPorOcupante: { type: integer, format: int64, example: 450000, description: Pesos enteros por ocupante facturable y por noche; debe ser mayor que cero (409) }
+
+    CrearTemporadaRequest:
+      type: object
+      required: [id, nombre, tipo]
+      properties:
+        id: { type: string, example: T-FESTIVAL }
+        nombre: { type: string, example: Festival }
+        tipo: { $ref: '#/components/schemas/TipoTemporada' }
+        rangos:
+          type: array
+          description: Al menos uno si no es BASE; la base no lleva rangos (409, F-05)
+          items: { $ref: '#/components/schemas/RangoFechasRequest' }
+        tarifas:
+          type: array
+          description: Una por cada apartamento activo (7.4); puede incluir apartamentos inactivos no retirados
+          items: { $ref: '#/components/schemas/TarifaTemporadaRequest' }
+
+    RangoFechasResponse:
+      type: object
+      properties:
+        fechaInicio: { type: string, format: date }
+        fechaFin: { type: string, format: date, description: Excluida }
+
+    TemporadaResponse:
+      type: object
+      properties:
+        id: { type: string, example: T-MEDIA }
+        nombre: { type: string, example: Media }
+        tipo: { $ref: '#/components/schemas/TipoTemporada' }
+        rangos:
+          type: array
+          items: { $ref: '#/components/schemas/RangoFechasResponse' }
+
+    PaginaTemporadaResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/TemporadaResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    # ---------- CU-30 Política de cancelación ----------
+
+    TramoCancelacionRequest:
+      type: object
+      required: [antelacionMinimaDias, porcentajeRetencion]
+      properties:
+        antelacionMinimaDias: { type: integer, example: 16, description: No negativa (409, L-10) }
+        porcentajeRetencion: { type: integer, example: 0, description: Entre 0 y 100 (409, L-10) }
+
+    ActualizarPoliticaCancelacionRequest:
+      type: object
+      required: [consecuenciaNoShow, tramos]
+      properties:
+        consecuenciaNoShow: { type: string, example: Se retiene el 60 % del valor total de la estancia }
+        tramos:
+          type: array
+          description: Al menos dos, con antelaciones distintas y uno desde 0 días; si no, 409 (L-10)
+          items: { $ref: '#/components/schemas/TramoCancelacionRequest' }
+
+    TramoCancelacionResponse:
+      type: object
+      properties:
+        antelacionMinimaDias: { type: integer, example: 16 }
+        porcentajeRetencion: { type: integer, example: 0 }
+
+    PoliticaCancelacionResponse:
+      type: object
+      properties:
+        version: { type: integer, example: 1 }
+        vigenteDesde: { type: string, format: date, example: '2026-01-01' }
+        consecuenciaNoShow: { type: string }
+        tramos:
+          type: array
+          description: De la mayor a la menor antelación
+          items: { $ref: '#/components/schemas/TramoCancelacionResponse' }
+
+    PaginaPoliticaCancelacionResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/PoliticaCancelacionResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    # ---------- Folio: cargos y correcciones (7.1, RN-16) ----------
+
+    RegistrarCargoServicioRequest:
+      type: object
+      required: [ idServicio ]
+      properties:
+        idServicio: { type: string, example: SRV-CENA-BALCON, description: Id de un servicio adicional del alojamiento (L-17) }
+
+    RegistrarCorreccionRequest:
+      type: object
+      required: [ indiceCargo, motivo ]
+      properties:
+        indiceCargo: { type: integer, example: 2, description: 'Posición del cargo en la lista cargos del folio, desde 0; si no existe, 409 (RN-16)' }
+        motivo: { type: string, example: La cena no se consumió }

@@ -14,6 +14,7 @@ import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.UmbralEdadFacturable;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -56,7 +57,42 @@ public class CotizadorEstanciaService {
         requerido(umbralAplicado, "L-09: El umbral de edad facturable no está configurado");
 
         int facturables = (int) grupo.stream().filter(o -> o.esFacturableEn(estancia, umbralAplicado)).count();
+        return cotizarFacturables(alojamiento, apartamento, estancia, facturables);
+    }
 
+    /**
+     * 7.5: valor estimado de la estancia para la búsqueda de disponibles, donde el grupo aún no tiene nombres.
+     * Si llegan las fechas de nacimiento, RN-06 decide quién es facturable con el umbral del alojamiento.
+     * Si no llegan, todos los ocupantes cuentan como facturables: el estimado es el valor máximo posible
+     * y la cotización definitiva (CU-02) lo ajusta cuando se conocen las edades.
+     *
+     * @param fechasNacimiento puede ser null o vacía; si trae datos debe haber una por ocupante.
+     */
+    public Cotizacion estimar(Apartamento apartamento, Estancia estancia, int totalOcupantes,
+                              List<LocalDate> fechasNacimiento) {
+        requerido(apartamento, "El apartamento es obligatorio");
+        requerido(estancia, "La estancia es obligatoria");
+        if (totalOcupantes <= 0) {
+            throw new ReglaDominioException("RN-06: El grupo debe tener al menos un ocupante");
+        }
+        if (fechasNacimiento == null || fechasNacimiento.isEmpty()) {
+            Alojamiento alojamiento = alojamientoRepository.obtener()
+                    .orElseThrow(() -> new ReglaDominioException("F-13: No hay un alojamiento configurado"));
+            return cotizarFacturables(alojamiento, apartamento, estancia, totalOcupantes);
+        }
+        if (fechasNacimiento.size() != totalOcupantes) {
+            throw new ReglaDominioException("RN-06: Se recibieron " + fechasNacimiento.size()
+                    + " fechas de nacimiento para " + totalOcupantes + " ocupantes");
+        }
+        List<Ocupante> grupo = new ArrayList<>();
+        for (int i = 0; i < fechasNacimiento.size(); i++) {
+            grupo.add(new Ocupante("Ocupante " + (i + 1), null, fechasNacimiento.get(i)));
+        }
+        return cotizar(apartamento, estancia, grupo, null);
+    }
+
+    private static Cotizacion cotizarFacturables(Alojamiento alojamiento, Apartamento apartamento,
+                                                 Estancia estancia, int facturables) {
         List<DetalleNoche> detalles = estancia.fechasDeNoches().stream()
                 .map(noche -> detallar(alojamiento, apartamento, noche, facturables))
                 .toList();

@@ -7,6 +7,7 @@ import co.edu.uniquindio.sga.domain.valueobject.EstanciaMinima;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.PlazoConfirmacion;
+import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
 import co.edu.uniquindio.sga.domain.valueobject.RegistroLlegadaNocturna;
 import co.edu.uniquindio.sga.domain.valueobject.TiempoPreparacion;
 import co.edu.uniquindio.sga.domain.valueobject.UmbralEdadFacturable;
@@ -233,6 +234,28 @@ public class Alojamiento {
     }
 
     /**
+     * CU-29 (7.4): agrega un rango a una temporada existente. El rango no puede solaparse con otra temporada; que no
+     * se solape con los rangos de la misma temporada y que la base no tenga rangos lo valida Temporada.agregarRango.
+     */
+    public void agregarRangoATemporada(String idTemporada, RangoFechas rango) {
+        requerido(rango, "El rango es obligatorio");
+        Temporada temporada = buscarTemporada(idTemporada)
+                .orElseThrow(() -> new ReglaDominioException("7.4: No existe la temporada " + idTemporada));
+        temporadas.stream()
+                .filter(otra -> !otra.equals(temporada) && otra.seSolapaCon(rango))
+                .findFirst()
+                .ifPresent(otra -> {
+                    throw new ReglaDominioException("7.4: El rango " + rango.fechaInicio() + " a " + rango.fechaFin()
+                            + " se solapa con la temporada " + otra.getNombre());
+                });
+        temporada.agregarRango(rango);
+    }
+
+    public Optional<Temporada> buscarTemporada(String idTemporada) {
+        return temporadas.stream().filter(t -> t.getId().equals(idTemporada)).findFirst();
+    }
+
+    /**
      * RN-05: temporada que aplica a una noche. Una temporada con fechas propias tiene prioridad;
      * si ninguna la cubre, aplica la base (7.4: ninguna fecha reservable queda sin temporada).
      */
@@ -295,6 +318,13 @@ public class Alojamiento {
 
     public Optional<ServicioAdicional> buscarServicioAdicional(String idServicio) {
         return serviciosAdicionales.stream().filter(s -> s.getId().equals(idServicio)).findFirst();
+    }
+
+    /** L-17: solo se cobran los servicios adicionales que ofrece el alojamiento. */
+    public ServicioAdicional obtenerServicioAdicional(String idServicio) {
+        return buscarServicioAdicional(idServicio)
+                .orElseThrow(() -> new ReglaDominioException("L-17: El alojamiento no ofrece el servicio adicional "
+                        + idServicio));
     }
 
     // ---------------------------------------------------------------- Getters

@@ -2,6 +2,8 @@ package co.edu.uniquindio.sga.infrastructure.persistence.inmemory;
 
 import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
+import co.edu.uniquindio.sga.domain.repository.FiltroReservas;
+import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
@@ -25,6 +27,10 @@ public class ReservaRepositoryInMemory implements ReservaRepository {
 
     private static final Comparator<Reserva> MAS_RECIENTE_PRIMERO =
             Comparator.comparing(Reserva::getFechaCreacion).reversed();
+
+    /** CU-26: la recepcionista recorre las llegadas y salidas apartamento por apartamento. */
+    private static final Comparator<Reserva> POR_APARTAMENTO =
+            Comparator.comparing((Reserva r) -> r.getApartamento().codigo()).thenComparing(r -> r.getCodigo().valor());
 
     private final Map<CodigoReserva, Reserva> almacen = new ConcurrentHashMap<>();
 
@@ -105,8 +111,34 @@ public class ReservaRepositoryInMemory implements ReservaRepository {
     }
 
     @Override
+    public Pagina<Reserva> listarLlegadasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return Pagina.de(listarLlegadasPrevistas(fecha).stream().sorted(POR_APARTAMENTO).toList(), pagina, tamano);
+    }
+
+    @Override
+    public Pagina<Reserva> listarSalidasPrevistas(LocalDate fecha, int pagina, int tamano) {
+        return Pagina.de(listarSalidasPrevistas(fecha).stream().sorted(POR_APARTAMENTO).toList(), pagina, tamano);
+    }
+
+    @Override
     public List<Reserva> listarTodas() {
         return almacen.values().stream().sorted(MAS_RECIENTE_PRIMERO).toList();
+    }
+
+    @Override
+    public Pagina<Reserva> listar(FiltroReservas filtro, int pagina, int tamano) {
+        FiltroReservas criterios = filtro == null ? FiltroReservas.sinFiltro() : filtro;
+        List<Reserva> filtradas = almacen.values().stream()
+                .filter(r -> criterios.estado() == null || r.getEstado() == criterios.estado())
+                .filter(r -> criterios.apartamento() == null || r.esDelApartamento(criterios.apartamento()))
+                .filter(r -> criterios.canal() == null || r.getCanalOrigen() == criterios.canal())
+                .filter(r -> criterios.documentoTitular() == null
+                        || criterios.documentoTitular().equals(r.getTitular().documento().numero()))
+                .filter(r -> criterios.desde() == null || !r.getEstancia().fechaEntrada().isBefore(criterios.desde()))
+                .filter(r -> criterios.hasta() == null || !r.getEstancia().fechaEntrada().isAfter(criterios.hasta()))
+                .sorted(MAS_RECIENTE_PRIMERO.thenComparing(r -> r.getCodigo().valor(), Comparator.reverseOrder()))
+                .toList();
+        return Pagina.de(filtradas, pagina, tamano);
     }
 
     private Stream<Reserva> delApartamento(IdentificacionApartamento apartamento) {
