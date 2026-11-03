@@ -25,7 +25,7 @@ en [`docs/api/sga.http`](../api/sga.http).
 
 Además, **CU-01 Buscar apartamentos disponibles** se amplió con los filtros y la paginación de 7.5 (ver sección 2).
 
-Al cerrar las fases 1 y 2 se agregaron operaciones que completan casos de uso existentes. Para que coincidan con el
+Durante esta entrega también se agregaron operaciones que completan casos de uso existentes. Para que coincidan con el
 documento de casos de uso se numeran como casos nuevos (CU-31 a CU-35). La consulta de una temporada sigue dentro
 de CU-29, y la de un bloqueo o una novedad dentro de CU-13 y CU-17:
 
@@ -103,7 +103,7 @@ Todos los listados (`/api/reservas`, `/api/reservas/llegadas`, `/api/reservas/sa
 `/api/politica-cancelacion/versiones`) devuelven 10 resultados por página (`sga.paginacion.tamano=10`) y numeran
 las páginas desde 0. El contrato `docs/api/openapi.yaml` incluye todos los endpoints nuevos y modificados, y se
 verificó contra lo que publica Swagger (`/v3/api-docs`, `/swagger-ui.html`) con la aplicación recién arrancada: las
-48 operaciones coinciden en ruta, método, parámetros, cuerpo, códigos de respuesta y campos de la petición y de la
+50 operaciones coinciden en ruta, método, parámetros, cuerpo, códigos de respuesta y campos de la petición y de la
 respuesta exitosa, y ningún endpoint de los controllers queda sin documentar.
 
 ## 3. Clases nuevas
@@ -180,7 +180,7 @@ respuesta exitosa, y ningún endpoint de los controllers queda sin documentar.
   relativas a hoy. `DatosInicialesCoralConfig` agrega un apartamento fuera de servicio con bloqueo (APT-202) y un
   bloqueo vigente (APT-301).
 - `PoliticaCancelacionProperties`, `DatosInicialesPoliticaCancelacionConfig` y `OpenApiConfig` (ver secciones 4 y 8).
-- Casos de uso de las fases 1 y 2: `EstadoOperativoApartamentoUseCase` (reemplaza a `CambiarEstadoOperativoUseCase`,
+- Otros casos de uso nuevos: `EstadoOperativoApartamentoUseCase` (reemplaza a `CambiarEstadoOperativoUseCase`,
   que se eliminó junto con `CambiarEstadoOperativoRequest`), `ConsultarNovedadesUseCase`, `ConsultarFolioUseCase`,
   `RegistrarCargoServicioUseCase` y `RegistrarCorreccionFolioUseCase`, con los DTO `RegistrarCargoServicioRequest` y
   `RegistrarCorreccionRequest`.
@@ -303,7 +303,7 @@ apartamento, se agregaría un campo a `CriterioBusqueda` sin cambiar el resto de
 
   Antes springdoc pintaba los 400/404/409 con el esquema de la respuesta exitosa. Las respuestas 409/422 del canal
   externo conservan `EventoCanalResponse`, que es lo que de verdad devuelven.
-- Los endpoints de CU-22 a CU-35 y los de las fases 1 y 2 (operaciones de CU-16, temporada, bloqueo y novedad por
+- Los endpoints de CU-22 a CU-35 y las operaciones que completan casos existentes (CU-16, temporada, bloqueo y novedad por
   id) se agregaron al contrato con sus esquemas. La comparación con Swagger da 50 operaciones iguales, en ruta,
   método, parámetros, códigos de respuesta y campos de la petición y de la respuesta exitosa (ver sección 2).
 - `docs/api/sga.http`: recorrido completo y ejecutable de la API contra la aplicación recién arrancada:
@@ -319,14 +319,14 @@ apartamento, se agregaría un campo a `CriterioBusqueda` sin cambiar el resto de
   `client.test`.
 - `docs/trazabilidad/matriz-trazabilidad.md`: matriz regla → clase y método → caso de uso → endpoint → código →
   pruebas unitarias y de integración, con los nombres reales de las pruebas.
-- Pruebas: `./gradlew test --rerun` ejecuta 228 pruebas (136 unitarias y 92 de integración) y todas pasan. Se
+- Pruebas: `./gradlew test --rerun` ejecuta 250 pruebas (158 unitarias y 92 de integración) y todas pasan. Se
   agregaron pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16 (`ReservaTest`,
   `ModificacionReservaServiceTest`, `VencimientoReservasServiceTest` y `CreacionReservaServiceTest`), de RN-01,
   RN-20, RP-01 y las transiciones de 7.6 (`DisponibilidadApartamentoServiceTest`, `ApartamentoTest`) y de RN-12,
   RN-13, RN-16, RN-18, RN-19 y RP-02 (`CancelarReservaServiceTest`, `ConciliacionCanalExternoServiceTest`,
   `FolioTest`), del estado de origen de 7.6 y de la reversión del cargo de aseo (`ApartamentoTest`,
   `ModificacionReservaServiceTest`), y de las imágenes y la ubicación de 7.3 (`ApartamentoTest`,
-  `CoordenadaTest`). Con esto ninguna regla de 7.3 queda sin prueba unitaria.
+  `CoordenadaTest`). Con esto ninguna regla de 7.3 queda sin prueba unitaria. También se agregaron pruebas unitarias de L-03, L-06, L-09, L-12, L-13, L-14, L-17, 3.2, 3.3 y del formato del código de reserva, así que todas las reglas de la matriz tienen prueba unitaria.
 
 ## 9. CU-16: operaciones de estado operativo en lugar del endpoint genérico
 
@@ -404,7 +404,7 @@ Decisiones del equipo:
 ## 11. Depósito de garantía como `AJUSTE_MODIFICACION` (RP-02)
 
 En la entrega 1 el depósito de garantía se asentaba en el folio como un cargo `AJUSTE_MODIFICACION`. Durante esta
-entrega se le dio un tipo propio, y en el cierre de la fase 1 se **volvió a `AJUSTE_MODIFICACION`**, como lo
+entrega se le dio un tipo propio y después se **volvió a `AJUSTE_MODIFICACION`**, como lo
 definen el Anexo A, el glosario y 7.7. Así quedó:
 
 - `TipoCargo` tiene los cuatro tipos de la entrega 1: `ALOJAMIENTO`, `SERVICIO_ADICIONAL`, `AJUSTE_MODIFICACION` y
@@ -423,7 +423,7 @@ negativa) y responde `PaginaResponse<ApartamentoResponse>` de 10 en 10, como los
 disponibilidad no cambian: se decide la disponibilidad primero y después se pagina. Lo prueba
 `CanalExternoControllerIntegracionTest#disponibilidadPaginada`, y en `sga.http` la petición 4.4.
 
-## 13. Pendiente para el corte 4
+## 13. No incluido en esta entrega
 
 Lo siguiente **no se implementa en esta entrega**:
 
@@ -432,10 +432,3 @@ Lo siguiente **no se implementa en esta entrega**:
   cierre del folio con saldo), CU-21 (retirar un apartamento) y poner fuera de servicio un apartamento corresponden
   solo al administrador. Entrará como adaptador de infraestructura (filtro de Spring Security y configuración de
   roles), sin tocar el dominio ni los casos de uso.
-- **Imágenes en un servicio externo.** Hoy un apartamento guarda las URL de sus imágenes (de 1 a 10, una principal,
-  7.3) pero el SGA no las sube ni las almacena.
-- **Notificaciones** al titular (confirmación, cancelación, vencimiento del plazo, recordatorios).
-- **El componente de IA.**
-- **Reportes** de ocupación e ingresos.
-- **Gestión de canales.** Hoy el canal externo es un adaptador de entrada (disponibilidad, recibir y cancelar
-  reservas); falta administrar los canales y su configuración.
