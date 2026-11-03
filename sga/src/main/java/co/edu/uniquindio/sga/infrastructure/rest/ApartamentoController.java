@@ -16,6 +16,7 @@ import co.edu.uniquindio.sga.application.dto.response.RegistroTarifaResponse;
 import co.edu.uniquindio.sga.application.usecase.ActivarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.ActualizarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.BuscarApartamentoDisponibleUseCase;
+import co.edu.uniquindio.sga.application.usecase.ConsultarBloqueoUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarApartamentosUseCase;
 import co.edu.uniquindio.sga.application.usecase.ConsultarNovedadesUseCase;
 import co.edu.uniquindio.sga.application.usecase.EstadoOperativoApartamentoUseCase;
@@ -73,6 +74,7 @@ public class ApartamentoController {
 
     private final BuscarApartamentoDisponibleUseCase buscarApartamentoDisponibleUseCase;
     private final RegistrarBloqueoUseCase registrarBloqueoUseCase;
+    private final ConsultarBloqueoUseCase consultarBloqueoUseCase;
     private final EstadoOperativoApartamentoUseCase estadoOperativoUseCase;
     private final RegistrarNovedadUseCase registrarNovedadUseCase;
     private final ConsultarNovedadesUseCase consultarNovedadesUseCase;
@@ -185,6 +187,18 @@ public class ApartamentoController {
         return ResponseEntity.created(location).body(mapper.aBloqueoResponse(bloqueo));
     }
 
+    /** CU-13. GET /api/apartamentos/{id}/bloqueos/{idBloqueo}: el recurso al que apunta el Location del POST. */
+    @GetMapping("/{id}/bloqueos/{idBloqueo}")
+    @Operation(summary = "Consultar un bloqueo",
+            description = "Bloqueo del apartamento, vigente o levantado; es la URL del Location al registrarlo (CU-13)")
+    @ApiResponse(responseCode = "200", description = "Bloqueo encontrado")
+    @ApiResponse(responseCode = "404", description = "No existe el apartamento, no existe el bloqueo o es de otro "
+            + "apartamento")
+    public ResponseEntity<BloqueoResponse> consultarBloqueo(@PathVariable String id, @PathVariable String idBloqueo) {
+        Bloqueo bloqueo = consultarBloqueoUseCase.consultar(new IdentificacionApartamento(id), idBloqueo);
+        return ResponseEntity.ok(mapper.aBloqueoResponse(bloqueo));
+    }
+
     // ==================== CU-16: estado operativo (7.6), una operación por transición ====================
 
     /** CU-16. PUT /api/apartamentos/{id}/iniciar-preparacion */
@@ -267,6 +281,18 @@ public class ApartamentoController {
             @PathVariable String id, @RequestParam(defaultValue = "0") @Min(0) int pagina) {
         Pagina<Novedad> novedades = consultarNovedadesUseCase.historial(new IdentificacionApartamento(id), pagina);
         return ResponseEntity.ok(PaginaMapper.aResponse(novedades, mapper::aNovedadResponse));
+    }
+
+    /** CU-17. GET /api/apartamentos/{id}/novedades/{idNovedad}: el recurso al que apunta el Location del POST. */
+    @GetMapping("/{id}/novedades/{idNovedad}")
+    @Operation(summary = "Consultar una novedad",
+            description = "Novedad del apartamento; es la URL del Location al registrarla (CU-17, 7.6)")
+    @ApiResponse(responseCode = "200", description = "Novedad encontrada")
+    @ApiResponse(responseCode = "404", description = "No existe el apartamento, no existe la novedad o es de otro "
+            + "apartamento")
+    public ResponseEntity<NovedadResponse> consultarNovedad(@PathVariable String id, @PathVariable String idNovedad) {
+        Novedad novedad = consultarNovedadesUseCase.consultar(new IdentificacionApartamento(id), idNovedad);
+        return ResponseEntity.ok(mapper.aNovedadResponse(novedad));
     }
 
     // ==================== CU-22 a CU-25: administración y tarifas (7.3, 7.4) ====================

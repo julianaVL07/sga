@@ -15,7 +15,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -274,6 +279,87 @@ class ApartamentoTest {
         assertTrue(sinPreparar.getMessage().startsWith("RN-11"));
         assertThrows(ReglaDominioException.class, apartamento::terminarPreparacion);
         assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: liberarTrasSalida desde FUERA_DE_SERVICIO se rechaza; solo se libera un apartamento OCUPADO")
+    void rechazarLiberarTrasSalidaDesdeFueraDeServicio() {
+        Apartamento apartamento = apartamentoEn(EstadoOperativo.FUERA_DE_SERVICIO);
+
+        ReglaDominioException error = assertThrows(ReglaDominioException.class, apartamento::liberarTrasSalida);
+
+        assertTrue(error.getMessage().startsWith("7.6"));
+        assertEquals(EstadoOperativo.FUERA_DE_SERVICIO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: restablecerServicio desde OCUPADO se rechaza; solo se restablece un apartamento FUERA_DE_SERVICIO")
+    void rechazarRestablecerServicioDesdeOcupado() {
+        Apartamento apartamento = apartamentoEn(EstadoOperativo.OCUPADO);
+
+        ReglaDominioException error = assertThrows(ReglaDominioException.class, apartamento::restablecerServicio);
+
+        assertTrue(error.getMessage().startsWith("7.6"));
+        assertEquals(EstadoOperativo.OCUPADO, apartamento.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: cada método de negocio funciona desde su estado de origen y llega a su destino")
+    void cadaMetodoFuncionaDesdeSuEstadoDeOrigen() {
+        Apartamento preparado = apartamentoEn(EstadoOperativo.PREPARADO);
+        preparado.recibirGrupo();
+        assertEquals(EstadoOperativo.OCUPADO, preparado.getEstadoOperativo());
+
+        Apartamento ocupado = apartamentoEn(EstadoOperativo.OCUPADO);
+        ocupado.liberarTrasSalida();
+        assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, ocupado.getEstadoOperativo());
+
+        Apartamento pendiente = apartamentoEn(EstadoOperativo.PENDIENTE_PREPARACION);
+        pendiente.iniciarPreparacion();
+        assertEquals(EstadoOperativo.EN_PREPARACION, pendiente.getEstadoOperativo());
+
+        Apartamento enPreparacion = apartamentoEn(EstadoOperativo.EN_PREPARACION);
+        enPreparacion.terminarPreparacion();
+        assertEquals(EstadoOperativo.PREPARADO, enPreparacion.getEstadoOperativo());
+
+        Apartamento fueraDeServicio = apartamentoEn(EstadoOperativo.FUERA_DE_SERVICIO);
+        fueraDeServicio.restablecerServicio();
+        assertEquals(EstadoOperativo.PENDIENTE_PREPARACION, fueraDeServicio.getEstadoOperativo());
+    }
+
+    @Test
+    @DisplayName("7.6: fuera de su estado de origen cada método lanza ReglaDominioException y el estado no cambia")
+    void cadaMetodoRechazaLosDemasEstadosDeOrigen() {
+        Map<String, Consumer<Apartamento>> metodos = new LinkedHashMap<>();
+        Map<String, Set<EstadoOperativo>> origenes = new LinkedHashMap<>();
+        metodos.put("recibirGrupo", Apartamento::recibirGrupo);
+        origenes.put("recibirGrupo", EnumSet.of(EstadoOperativo.PREPARADO));
+        metodos.put("liberarTrasSalida", Apartamento::liberarTrasSalida);
+        origenes.put("liberarTrasSalida", EnumSet.of(EstadoOperativo.OCUPADO));
+        metodos.put("iniciarPreparacion", Apartamento::iniciarPreparacion);
+        origenes.put("iniciarPreparacion", EnumSet.of(EstadoOperativo.PENDIENTE_PREPARACION));
+        metodos.put("terminarPreparacion", Apartamento::terminarPreparacion);
+        origenes.put("terminarPreparacion", EnumSet.of(EstadoOperativo.EN_PREPARACION));
+        metodos.put("ponerFueraDeServicio", Apartamento::ponerFueraDeServicio);
+        origenes.put("ponerFueraDeServicio", EnumSet.complementOf(
+                EnumSet.of(EstadoOperativo.OCUPADO, EstadoOperativo.FUERA_DE_SERVICIO)));
+        metodos.put("restablecerServicio", Apartamento::restablecerServicio);
+        origenes.put("restablecerServicio", EnumSet.of(EstadoOperativo.FUERA_DE_SERVICIO));
+
+        metodos.forEach((nombre, metodo) -> {
+            for (EstadoOperativo estado : EstadoOperativo.values()) {
+                Apartamento apartamento = apartamentoEn(estado);
+                if (origenes.get(nombre).contains(estado)) {
+                    assertDoesNotThrow(() -> metodo.accept(apartamento), nombre + " desde " + estado);
+                } else {
+                    ReglaDominioException error = assertThrows(ReglaDominioException.class,
+                            () -> metodo.accept(apartamento), nombre + " desde " + estado);
+                    String codigoEsperado = nombre.equals("recibirGrupo") ? "RN-11" : "7.6";
+                    assertTrue(error.getMessage().startsWith(codigoEsperado), nombre + ": " + error.getMessage());
+                    assertEquals(estado, apartamento.getEstadoOperativo(), nombre + " no debía cambiar " + estado);
+                }
+            }
+        });
     }
 
     /** Lleva un apartamento nuevo (PREPARADO) al estado pedido usando solo los métodos de negocio. */

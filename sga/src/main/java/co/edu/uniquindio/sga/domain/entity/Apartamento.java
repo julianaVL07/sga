@@ -142,32 +142,51 @@ public class Apartamento {
         cambiarEstadoOperativo(EstadoOperativo.OCUPADO);
     }
 
-    /** Salida del grupo: OCUPADO → PENDIENTE_PREPARACION. */
+    /** Salida del grupo: solo desde OCUPADO → PENDIENTE_PREPARACION (7.6). */
     public void liberarTrasSalida() {
+        exigirEstadoDeOrigen("liberarlo tras la salida", EstadoOperativo.OCUPADO);
         cambiarEstadoOperativo(EstadoOperativo.PENDIENTE_PREPARACION);
     }
 
-    /** Personal de servicio: PENDIENTE_PREPARACION → EN_PREPARACION. */
+    /** Personal de servicio: solo desde PENDIENTE_PREPARACION → EN_PREPARACION (7.6). */
     public void iniciarPreparacion() {
+        exigirEstadoDeOrigen("iniciar la preparación", EstadoOperativo.PENDIENTE_PREPARACION);
         cambiarEstadoOperativo(EstadoOperativo.EN_PREPARACION);
     }
 
-    /** Personal de servicio: EN_PREPARACION → PREPARADO. */
+    /** Personal de servicio: solo desde EN_PREPARACION → PREPARADO (7.6). */
     public void terminarPreparacion() {
+        exigirEstadoDeOrigen("terminar la preparación", EstadoOperativo.EN_PREPARACION);
         cambiarEstadoOperativo(EstadoOperativo.PREPARADO);
     }
 
     /**
-     * Decisión administrativa (7.6): FUERA_DE_SERVICIO desde cualquier estado no ocupado.
+     * Decisión administrativa (7.6): FUERA_DE_SERVICIO desde cualquier estado menos OCUPADO y FUERA_DE_SERVICIO.
      * Recordatorio 3.3: esto no bloquea la venta futura; para eso el administrador registra un Bloqueo.
      */
     public void ponerFueraDeServicio() {
+        if (estadoOperativo == EstadoOperativo.OCUPADO || estadoOperativo == EstadoOperativo.FUERA_DE_SERVICIO) {
+            throw new ReglaDominioException("7.6: El apartamento " + identificacion.codigo() + " está "
+                    + estadoOperativo + " y no puede ponerse fuera de servicio");
+        }
         cambiarEstadoOperativo(EstadoOperativo.FUERA_DE_SERVICIO);
     }
 
-    /** Al volver al servicio el apartamento debe prepararse antes de recibir un grupo. */
+    /**
+     * Solo desde FUERA_DE_SERVICIO → PENDIENTE_PREPARACION (7.6): al volver al servicio el apartamento debe
+     * prepararse antes de recibir un grupo.
+     */
     public void restablecerServicio() {
+        exigirEstadoDeOrigen("restablecer el servicio", EstadoOperativo.FUERA_DE_SERVICIO);
         cambiarEstadoOperativo(EstadoOperativo.PENDIENTE_PREPARACION);
+    }
+
+    /** 7.6: cada método de negocio exige su estado de origen, no solo que el destino sea alcanzable. */
+    private void exigirEstadoDeOrigen(String operacion, EstadoOperativo origenRequerido) {
+        if (estadoOperativo != origenRequerido) {
+            throw new ReglaDominioException("7.6: El apartamento " + identificacion.codigo() + " está "
+                    + estadoOperativo + " y para " + operacion + " debe estar " + origenRequerido);
+        }
     }
 
     /**

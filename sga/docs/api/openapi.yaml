@@ -572,6 +572,35 @@ paths:
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
+  /api/apartamentos/{id}/bloqueos/{idBloqueo}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+      - name: idBloqueo
+        in: path
+        required: true
+        description: Id del bloqueo, el que trae el Location de POST /api/apartamentos/{id}/bloqueos
+        schema: { type: string, example: BLQ-3f2a9c1e-7b4d-4e8a-9f10-2c6d5e8b1a47 }
+    get:
+      tags: [Apartamentos]
+      summary: Consultar un bloqueo (CU-13)
+      description: |
+        Bloqueo del apartamento, vigente o levantado (se conserva). Es el recurso al que apunta la cabecera
+        Location al registrarlo. Solo consulta. Mapea a `ConsultarBloqueoUseCase.consultar`.
+      operationId: consultarBloqueo
+      responses:
+        '200':
+          description: Bloqueo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloqueoResponse'
+        '404':
+          description: No existe el apartamento, no existe el bloqueo o el bloqueo es de otro apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/apartamentos/{id}/iniciar-preparacion:
     parameters:
       - $ref: '#/components/parameters/IdApartamento'
@@ -735,6 +764,35 @@ paths:
           $ref: '#/components/responses/DatosInvalidos'
         '404':
           $ref: '#/components/responses/NoEncontrado'
+
+  /api/apartamentos/{id}/novedades/{idNovedad}:
+    parameters:
+      - $ref: '#/components/parameters/IdApartamento'
+      - name: idNovedad
+        in: path
+        required: true
+        description: Id de la novedad, el que trae el Location de POST /api/apartamentos/{id}/novedades
+        schema: { type: string, example: NOV-8d1c4b7a-2e3f-4a5b-9c6d-7e8f9a0b1c2d }
+    get:
+      tags: [Apartamentos]
+      summary: Consultar una novedad (CU-17)
+      description: |
+        Novedad del apartamento (7.6). Es el recurso al que apunta la cabecera Location al registrarla.
+        Solo consulta. Mapea a `ConsultarNovedadesUseCase.consultar`.
+      operationId: consultarNovedad
+      responses:
+        '200':
+          description: Novedad encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NovedadResponse'
+        '404':
+          description: No existe el apartamento, no existe la novedad o la novedad es de otro apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ==================== COTIZACIONES ====================
 
