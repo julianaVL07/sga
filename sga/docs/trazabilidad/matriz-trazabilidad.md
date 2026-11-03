@@ -5,7 +5,7 @@ los adaptadores REST de `infrastructure/rest` y las pruebas de `src/test`. Los c
 `docs/api/sga.http` completo contra la aplicación recién arrancada (164 peticiones, todas pasan); el número entre
 paréntesis es la petición de ese archivo que provoca el caso (por ejemplo, `409 (5.1)`).
 
-Estado al cerrar las fases 1 y 2 de las tres integrantes: `./gradlew test --rerun` ejecuta **228 pruebas** (136
+Estado final de la entrega 2: `./gradlew test --rerun` ejecuta **250 pruebas** (158
 unitarias y 92 de integración) y todas pasan.
 
 Convenciones:
