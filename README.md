@@ -130,7 +130,9 @@ Son 48 operaciones. Todos los listados devuelven 10 resultados por página y las
 - `PUT /api/apartamentos/{id}/iniciar-preparacion`, `/terminar-preparacion`, `/poner-fuera-de-servicio` y `/restablecer-servicio` operaciones del estado operativo
 - `GET /api/apartamentos/pendientes-preparacion` los que están en PENDIENTE_PREPARACION o EN_PREPARACION
 - `POST /api/apartamentos/{id}/bloqueos` registrar un bloqueo (201 con `Location`)
+- `GET /api/apartamentos/{id}/bloqueos/{idBloqueo}` consultar un bloqueo, también si ya se levantó (es el recurso del `Location`)
 - `POST /api/apartamentos/{id}/novedades` registrar una novedad (201 con `Location`)
+- `GET /api/apartamentos/{id}/novedades/{idNovedad}` consultar una novedad (es el recurso del `Location`)
 - `GET /api/apartamentos/{id}/novedades` historial de novedades, de la más reciente a la más antigua
 
 **Cotizaciones**
@@ -163,7 +165,7 @@ Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuan
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección de 156 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
+En `sga/docs/api/sga.http` dejamos una colección de 164 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -182,7 +184,7 @@ En `sga/docs/api/sga.http` dejamos una colección de 156 peticiones que recorre 
   - Reservas: reglas de canal en el dominio, mascotas en la reserva (L-16) y pruebas unitarias de RN-04, RN-10, RN-12, RN-14, RN-21, RN-22, RP-03, L-15 y L-16.
   - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, `Location` en bloqueos y novedades, historial de novedades y apartamentos pendientes de preparación.
   - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
-- **Verificación:** las 210 pruebas pasan (`./gradlew test --rerun`), las 156 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Verificación:** las 228 pruebas pasan (`./gradlew test --rerun`), las 164 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
 - **Pendiente para el corte 4:** usuarios y seguridad con JWT y roles, imágenes en un servicio externo, notificaciones, el componente de IA, reportes y la gestión de canales. El frontend en React y el despliegue van después.
 
 ## Forma de trabajo
