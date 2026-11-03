@@ -17,7 +17,7 @@ import java.util.Objects;
  * en el listado ni en el detalle (12.4). Solo consulta: no modifica datos.
  * Actor: administrador.
  *
- * 7.1. GET /api/apartamentos/pendientes-preparacion?pagina=
+ * CU-35 (7.1). GET /api/apartamentos/pendientes-preparacion?pagina=
  * Apartamentos que el personal de servicio debe atender (PENDIENTE_PREPARACION o EN_PREPARACION).
  * Actor: personal de servicio.
  */
@@ -39,7 +39,7 @@ public class ConsultarApartamentosUseCase {
         return apartamentoRepository.listarNoEliminados(pagina, tamanoPagina);
     }
 
-    /** 7.1: apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, por identificación. */
+    /** CU-35 (7.1): apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, por identificación. */
     @Transactional(readOnly = true)
     public Pagina<Apartamento> pendientesDePreparacion(int pagina) {
         return apartamentoRepository.listarPendientesDePreparacion(pagina, tamanoPagina);

@@ -14,7 +14,8 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 /**
- * POST /api/reservas/{codigo}/folio/correcciones (RN-16: toda corrección es un movimiento inverso)
+ * CU-33. POST /api/reservas/{codigo}/folio/correcciones
+ * (RN-16: toda corrección es un movimiento inverso)
  * Corrige un cargo del folio sin editarlo ni borrarlo: Folio.registrarMovimientoInverso asienta un cargo del mismo
  * tipo con el valor opuesto, con el motivo y la fecha de hoy. El cargo se identifica por su posición en la lista de
  * cargos del folio (desde 0). Si no hay un cargo en esa posición o el folio está cerrado, 409 (RN-16). Si no existe la
