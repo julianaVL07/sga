@@ -40,7 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Matriz de trazabilidad: RN-04 (Reserva.crear), RN-08 (métodos explícitos de transición), RN-09 (Reserva.confirmar),
  * RN-10 (Reserva.registrarLlegada), RN-12 (Reserva.estaActiva y ocupaNochesDe), RN-22 (cotización y política
- * congeladas) y L-15 (Reserva.declararNoShow).
+ * congeladas), L-15 (Reserva.declararNoShow) y 3.2 (el titular es un ocupante facturable, Reserva.crear con
+ * Titular.esTitularFacturable).
  */
 class ReservaTest {
 
@@ -273,6 +274,37 @@ class ReservaTest {
         reserva.declararNoShow(ENTRADA.atTime(HORA_LIMITE_NO_SHOW), HORA_LIMITE_NO_SHOW);
 
         assertEquals(EstadoReserva.NO_SHOW, reserva.getEstado());
+    }
+
+    // ---------------------------------------------------------------- 3.2
+
+    @Test
+    @DisplayName("3.2: un titular que viaja y tiene la edad facturable (35 años, umbral de 6) se acepta")
+    void aceptarTitularFacturable() {
+        Ocupante nino = new Ocupante("Luis Gómez", new DocumentoIdentidad("RC", "1094000002"),
+                LocalDate.of(2023, 1, 10));
+
+        Reserva conNino = Reserva.crear(CodigoReserva.generar(2026, 2), apartamento, estancia, titular,
+                List.of(ana, nino), CanalOrigen.PORTAL, null, null, cotizacionBase(estancia), politica, UMBRAL, AHORA);
+
+        assertEquals(titular, conNino.getTitular());
+        assertEquals(EstadoReserva.PENDIENTE, conNino.getEstado());
+        assertEquals(1, conNino.ocupantesFacturables(UMBRAL));
+    }
+
+    @Test
+    @DisplayName("3.2: un titular que no viaja o que es menor del umbral de edad facturable se rechaza")
+    void rechazarTitularNoFacturable() {
+        Ocupante otroAdulto = new Ocupante("Carlos Ruiz", new DocumentoIdentidad("CC", "1094000001"),
+                LocalDate.of(1985, 3, 15));
+        Ocupante titularMenor = new Ocupante("Ana Gómez", titular.documento(), LocalDate.of(2023, 1, 10));
+
+        for (List<Ocupante> ocupantes : List.of(List.of(otroAdulto), List.of(titularMenor, otroAdulto))) {
+            ReglaDominioException error = assertThrows(ReglaDominioException.class,
+                    () -> Reserva.crear(CodigoReserva.generar(2026, 3), apartamento, estancia, titular, ocupantes,
+                            CanalOrigen.PORTAL, null, null, cotizacionBase(estancia), politica, UMBRAL, AHORA));
+            assertTrue(error.getMessage().startsWith("3.2"), ocupantes.toString());
+        }
     }
 
     // ---------------------------------------------------------------- Apoyo

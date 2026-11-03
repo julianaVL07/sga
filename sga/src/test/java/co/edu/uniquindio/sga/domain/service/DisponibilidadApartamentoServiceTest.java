@@ -1,16 +1,22 @@
 package co.edu.uniquindio.sga.domain.service;
 
+import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
 import co.edu.uniquindio.sga.domain.entity.Reserva;
 import co.edu.uniquindio.sga.domain.entity.Temporada;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.valueobject.ApartamentoDisponible;
+import co.edu.uniquindio.sga.domain.valueobject.Capacidad;
 import co.edu.uniquindio.sga.domain.valueobject.CriterioBusqueda;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
+import co.edu.uniquindio.sga.domain.valueobject.Dotacion;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.EstanciaMinima;
+import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Imagen;
 import co.edu.uniquindio.sga.domain.valueobject.PlazoConfirmacion;
 import co.edu.uniquindio.sga.domain.valueobject.RangoFechas;
+import co.edu.uniquindio.sga.domain.valueobject.Tarifa;
 import co.edu.uniquindio.sga.domain.valueobject.TiempoPreparacion;
 import co.edu.uniquindio.sga.domain.valueobject.TipoTemporada;
 import co.edu.uniquindio.sga.domain.valueobject.UmbralEdadFacturable;
@@ -28,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Matriz de trazabilidad: RN-01 (reservas activas solapadas), RN-07 (bloqueos) y RN-20 (tiempo de preparación),
+ * Matriz de trazabilidad: RN-01 (reservas activas solapadas), RN-07 (bloqueos), RN-20 (tiempo de preparación) y
+ * 3.3 (solo se vende un apartamento activo y no retirado),
  * implementadas en DisponibilidadApartamentoService (estaDisponible, validarDisponibilidad, conflictoDeInventario);
  * RP-01 (estancia mínima de fin de semana), que el servicio aplica con Alojamiento.validarEstanciaMinima;
  * 7.5 (filtros de la búsqueda), implementada en DisponibilidadApartamentoService.buscarDisponibles con criterio.
@@ -51,6 +58,34 @@ class DisponibilidadApartamentoServiceTest {
                 () -> disponibilidad.validarDisponibilidad(escenario.apartamento, dentroDelBloqueo, 1, null));
         assertTrue(error.getMessage().startsWith("RN-07"));
         assertTrue(disponibilidad.buscarDisponibles(dentroDelBloqueo, 1).isEmpty());
+    }
+
+    // ==================== 3.3: solo se vende un apartamento activo y no retirado ====================
+
+    @Test
+    @DisplayName("3.3: un apartamento inactivo o retirado de la venta no está disponible; uno activo sí")
+    void rechazarApartamentoInactivoORetirado() {
+        Estancia libre = new Estancia(LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 5));
+        assertDoesNotThrow(() -> disponibilidad.validarDisponibilidad(escenario.apartamento, libre, 1, null));
+
+        Apartamento inactivo = Apartamento.crear(new IdentificacionApartamento("APT-102"), "Apartamento 102",
+                "Vista a la ciudad", 1, new Capacidad(3), new Dotacion(List.of("Aire acondicionado")),
+                List.of(new Imagen("https://coral.co/apt-102.jpg", true)));
+        inactivo.definirTarifa(new Tarifa("T-BASE", Dinero.de(310_000)));
+        escenario.apartamentos.guardar(inactivo);
+
+        escenario.apartamento.retirarDeLaVenta(false);
+        escenario.apartamentos.guardar(escenario.apartamento);
+
+        for (Apartamento noVendible : List.of(inactivo, escenario.apartamento)) {
+            String codigo = noVendible.getIdentificacion().codigo();
+            assertFalse(disponibilidad.estaDisponible(noVendible, libre, 1, null), codigo);
+            ReglaDominioException error = assertThrows(ReglaDominioException.class,
+                    () -> disponibilidad.validarDisponibilidad(noVendible, libre, 1, null));
+            assertTrue(error.getMessage().startsWith("3.3"), codigo);
+            assertTrue(error.getMessage().contains(codigo), codigo);
+        }
+        assertTrue(disponibilidad.buscarDisponibles(libre, 1).isEmpty());
     }
 
     // ==================== RN-01: sin reservas activas solapadas ====================
