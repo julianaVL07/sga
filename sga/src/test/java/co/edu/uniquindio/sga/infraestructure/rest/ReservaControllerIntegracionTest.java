@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
@@ -23,6 +24,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -158,6 +160,37 @@ class ReservaControllerIntegracionTest {
 
 
     // ==================== CU-19: listado ====================
+
+    @Test
+    @DisplayName("RN-14 y RN-16: quitar las mascotas revierte el cargo de aseo en el folio; volver a traerlas lo cobra")
+    void quitarMascotasRevierteElCargoDeAseoEnElFolio() throws Exception {
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(90);
+        String cuerpo = reserva("APT-201", entrada, entrada.plusDays(2), "16:00", "PORTAL")
+                .replaceFirst("\\}\\s*$", ",\"cantidadMascotas\":1,\"pesoMascotaMasPesadaKg\":8}");
+        String codigo = codigo(post("/api/reservas", cuerpo).andExpect(status().isCreated()));
+        String folio = "/api/reservas/" + codigo + "/folio";
+        ResultActions conMascotas = get(folio)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cargos[?(@.concepto == 'Cargo por aseo de mascota')].valor", contains(110000)));
+        long saldoConMascotas = numero(conMascotas, "$.saldo");
+
+        put("/api/reservas/" + codigo, "{\"cantidadMascotas\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.diferencia").value(0));
+        ResultActions sinMascotas = get(folio)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cargos[?(@.concepto =~ /Reverso de 'Cargo por aseo de mascota'.*ya no trae mascotas/)].valor",
+                        contains(-110000)));
+        assertEquals(saldoConMascotas - 110_000, numero(sinMascotas, "$.saldo"));
+
+        // Si vuelve a traer mascotas, el cargo de aseo se asienta otra vez
+        put("/api/reservas/" + codigo, "{\"cantidadMascotas\":2,\"pesoMascotaMasPesadaKg\":9}")
+                .andExpect(status().isOk());
+        ResultActions otraVez = get(folio)
+                .andExpect(jsonPath("$.cargos[?(@.concepto == 'Cargo por aseo de mascota')].valor",
+                        contains(110000, 110000)));
+        assertEquals(saldoConMascotas, numero(otraVez, "$.saldo"));
+    }
 
     @Test
     @DisplayName("CU-19: el listado muestra primero la reserva más reciente")
