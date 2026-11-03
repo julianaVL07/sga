@@ -592,11 +592,48 @@ GET {{host}}/api/reservas/{{reservaConMascotas}}
     });
 %}
 
-### 4.14 CU-13 Seguir el Location del bloqueo de 4.2: el mismo bloqueo, vigente
+### 4.14 CU-11 Quitar las mascotas de la reserva de 4.12 (RN-14): la estancia no cambia, la diferencia es 0
+PUT {{host}}/api/reservas/{{reservaConMascotas}}
+Content-Type: application/json
+
+{
+  "cantidadMascotas": 0
+}
+
+> {%
+    client.test("4.14 200 reserva sin mascotas", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.reserva.cantidadMascotas === 0, "La reserva ya no debía traer mascotas");
+        client.assert(response.body.diferencia === 0, "Quitar mascotas no cambia el valor de la estancia");
+    });
+%}
+
+### 4.15 RN-16 El folio de la reserva de 4.12 tiene el movimiento inverso del cargo de aseo ($110.000)
+GET {{host}}/api/reservas/{{reservaConMascotas}}/folio
+
+> {%
+    client.test("4.15 200 folio con el cargo de aseo revertido", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var cargos = response.body.cargos;
+        var aseo = cargos.filter(function (c) { return c.concepto === "Cargo por aseo de mascota"; });
+        var reversos = cargos.filter(function (c) {
+            return c.concepto.indexOf("Reverso de 'Cargo por aseo de mascota'") === 0;
+        });
+        client.assert(aseo.length === 1 && aseo[0].valor === 110000, "Debía estar el cargo de aseo original de 4.12");
+        client.assert(reversos.length === 1 && reversos[0].valor === -110000,
+            "Debía estar el movimiento inverso de -110.000 (RN-16)");
+        client.assert(reversos[0].concepto.indexOf("el grupo ya no trae mascotas") > 0,
+            "El reverso debía indicar el motivo: " + reversos[0].concepto);
+        client.assert(response.body.saldo === response.body.totalCargos - response.body.totalPagado,
+            "El saldo debía ser cargos menos pagos");
+    });
+%}
+
+### 4.16 CU-13 Seguir el Location del bloqueo de 4.2: el mismo bloqueo, vigente
 GET {{locationBloqueo}}
 
 > {%
-    client.test("4.14 200 bloqueo del Location", function () {
+    client.test("4.16 200 bloqueo del Location", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
         client.assert(response.body.id === client.global.get("idBloqueo"), "Debía ser el bloqueo creado en 4.2");
         client.assert(response.body.identificacionApartamento === "APT-102", "El bloqueo era de APT-102");
@@ -604,11 +641,11 @@ GET {{locationBloqueo}}
     });
 %}
 
-### 4.15 CU-17 Seguir el Location de la novedad de 4.3: la misma novedad
+### 4.17 CU-17 Seguir el Location de la novedad de 4.3: la misma novedad
 GET {{locationNovedad}}
 
 > {%
-    client.test("4.15 200 novedad del Location", function () {
+    client.test("4.17 200 novedad del Location", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
         client.assert(response.body.id === client.global.get("idNovedad"), "Debía ser la novedad creada en 4.3");
         client.assert(response.body.identificacionApartamento === "APT-301", "La novedad era de APT-301");
