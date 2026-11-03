@@ -45,7 +45,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Único lugar donde se elige qué adaptador implementa cada puerto *Repository del dominio.
- * Fases 1 a 3: adaptadores en memoria. En la Fase 4 se cambió el cuerpo de cada método por el adaptador JPA
+ * Al principio se usaron adaptadores en memoria; después se cambió el cuerpo de cada método por el adaptador JPA
  * y ninguna otra clase se enteró (arquitectura hexagonal). Las clases en memoria se conservan para las pruebas
  * y no llevan @Repository: si lo tuvieran, Spring encontraría dos beans del mismo tipo.
  */
