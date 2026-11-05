@@ -6,6 +6,7 @@ import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.NovedadNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.TemporadaNoEncontradaException;
+import co.edu.uniquindio.sga.application.exception.UsuarioYaRegistradoException;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -58,6 +59,12 @@ public class GlobalExceptionHandler {
     /** 409: toda regla violada, RN-01 a RN-22 y RP-01 a RP-03. La única excepción de dominio del SGA. */
     @ExceptionHandler(ReglaDominioException.class)
     public ResponseEntity<ErrorResponse> reglaDominio(ReglaDominioException ex, HttpServletRequest req) {
+        return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    /** 409: el correo o el documento del registro ya pertenecen a otro usuario (Guía 12). */
+    @ExceptionHandler(UsuarioYaRegistradoException.class)
+    public ResponseEntity<ErrorResponse> usuarioYaRegistrado(UsuarioYaRegistradoException ex, HttpServletRequest req) {
         return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
     }
 

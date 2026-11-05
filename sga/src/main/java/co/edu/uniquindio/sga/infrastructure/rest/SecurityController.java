@@ -1,13 +1,16 @@
 package co.edu.uniquindio.sga.infrastructure.rest;
 
 import co.edu.uniquindio.sga.application.dto.request.LoginRequest;
+import co.edu.uniquindio.sga.application.dto.request.RegistroUsuarioRequest;
 import co.edu.uniquindio.sga.application.dto.response.TokenResponse;
+import co.edu.uniquindio.sga.application.dto.response.UsuarioRegistradoResponse;
 import co.edu.uniquindio.sga.application.security.SecurityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,5 +34,15 @@ public class SecurityController {
     @ApiResponse(responseCode = "401", description = "Credenciales inválidas o usuario inactivo")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(securityService.login(request));
+    }
+
+    /** POST -> /api/auth/registro */
+    @PostMapping("/registro")
+    @Operation(summary = "Registrar un huésped", description = "Crea un usuario con rol HUESPED")
+    @ApiResponse(responseCode = "201", description = "Usuario registrado")
+    @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "409", description = "El correo o el documento ya están registrados")
+    public ResponseEntity<UsuarioRegistradoResponse> registrar(@Valid @RequestBody RegistroUsuarioRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(securityService.registrar(request));
     }
 }
