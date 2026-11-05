@@ -7,6 +7,7 @@ import co.edu.uniquindio.sga.application.dto.response.UsuarioRegistradoResponse;
 import co.edu.uniquindio.sga.application.security.SecurityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class SecurityController {
 
     /** POST -> /api/auth/login */
     @PostMapping("/login")
+    @SecurityRequirements // este endpoint es público: no exige token en Swagger
     @Operation(summary = "Iniciar sesión", description = "Devuelve un JWT para usar como Bearer token")
     @ApiResponse(responseCode = "200", description = "Token emitido")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
@@ -38,6 +40,7 @@ public class SecurityController {
 
     /** POST -> /api/auth/registro */
     @PostMapping("/registro")
+    @SecurityRequirements // este endpoint es público: no exige token en Swagger
     @Operation(summary = "Registrar un huésped", description = "Crea un usuario con rol HUESPED")
     @ApiResponse(responseCode = "201", description = "Usuario registrado")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")

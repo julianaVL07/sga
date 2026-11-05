@@ -10,6 +10,8 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.tags.Tag;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +24,7 @@ import java.util.Set;
  * Documentación que publica Swagger UI (/swagger-ui.html), alineada con docs/api/openapi.yaml (Guía 07 y 08).
  * Fija el título, la versión y el orden de los tags del contrato, y declara ErrorResponse (4.6) como cuerpo de
  * los errores: sin esto springdoc pinta los 400, 404 y 409 con el esquema de la respuesta exitosa.
+ * Declara además el esquema bearerAuth y lo exige por defecto: es lo que muestra el botón Authorize (Guía 12).
  */
 @Configuration
 public class OpenApiConfig {
@@ -29,6 +32,8 @@ public class OpenApiConfig {
     /** Respuestas del canal externo que sí traen EventoCanalResponse (RN-18 y 7.8): no son ErrorResponse. */
     private static final String RUTA_RESERVAS_CANAL = "/api/canales/{canal}/reservas";
     private static final Set<String> CODIGOS_EVENTO_CANAL = Set.of("409", "422");
+
+    private static final String ESQUEMA_BEARER = "bearerAuth";
 
     /** Tags en el orden del contrato; springdoc los publica en el orden en que encuentra los controllers. */
     private static final List<Tag> TAGS = List.of(
@@ -43,6 +48,11 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI sgaOpenApi() {
         return new OpenAPI()
+                .components(new Components().addSecuritySchemes(ESQUEMA_BEARER, new SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")))
+                .addSecurityItem(new SecurityRequirement().addList(ESQUEMA_BEARER))
                 .info(new Info()
                         .title("API SGA - Apartahotel Coral")
                         .version("1.0.0")
