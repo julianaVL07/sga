@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,19 +38,25 @@ public class PoliticaCancelacionController {
 
     /** CU-30. GET /api/politica-cancelacion */
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
     @Operation(summary = "Consultar la política de cancelación vigente",
             description = "La única versión vigente (7.4): la que se congela en cada reserva nueva (RN-22)")
     @ApiResponse(responseCode = "200", description = "La versión vigente")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<PoliticaCancelacionResponse> vigente() {
         return ResponseEntity.ok(mapper.aPoliticaResponse(politicaCancelacionUseCase.vigente()));
     }
 
     /** CU-30. GET /api/politica-cancelacion/versiones?pagina= */
     @GetMapping("/versiones")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Listar las versiones de la política de cancelación",
             description = "Todas las versiones, de la más reciente a la más antigua, 10 por página (F-07, 12.4)")
     @ApiResponse(responseCode = "200", description = "Página de versiones")
     @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<PaginaResponse<PoliticaCancelacionResponse>> versiones(
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
         Pagina<PoliticaCancelacion> versiones = politicaCancelacionUseCase.versiones(pagina);
@@ -58,12 +65,15 @@ public class PoliticaCancelacionController {
 
     /** CU-30. PUT /api/politica-cancelacion */
     @PutMapping
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Actualizar la política de cancelación",
             description = "Crea la versión N+1 con los tramos y la consecuencia del no-show dados, vigente desde hoy. "
                     + "La versión anterior se conserva y las reservas existentes siguen con la que congelaron (RN-22)")
     @ApiResponse(responseCode = "200", description = "Nueva versión vigente")
     @ApiResponse(responseCode = "400", description = "Falta la consecuencia del no-show, los tramos o un dato de un "
             + "tramo")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "Menos de dos tramos, antelaciones repetidas, sin tramo desde 0 "
             + "días o porcentaje fuera de 0 a 100 (L-10)")
     public ResponseEntity<PoliticaCancelacionResponse> actualizar(

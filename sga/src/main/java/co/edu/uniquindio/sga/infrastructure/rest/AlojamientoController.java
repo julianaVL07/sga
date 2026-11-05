@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,22 +33,28 @@ public class AlojamientoController {
 
     /** CU-28. GET /api/alojamiento */
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
     @Operation(summary = "Consultar el alojamiento",
             description = "Datos, ubicación, horario, normas de convivencia, servicios adicionales y parámetros "
                     + "vigentes de la sección 6 (solo lectura: se configuran en application.properties)")
     @ApiResponse(responseCode = "200", description = "El alojamiento")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<AlojamientoResponse> consultar() {
         return ResponseEntity.ok(mapper.aAlojamientoResponse(configuracionAlojamientoUseCase.consultar()));
     }
 
     /** CU-28. PUT /api/alojamiento */
     @PutMapping
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Actualizar los datos del alojamiento",
             description = "Reemplaza nombre, descripción, ciudad, dirección, ubicación y normas de convivencia. El "
                     + "horario (L-12) es opcional: si no llega ninguna hora se conserva el vigente. Los parámetros "
                     + "de la sección 6 no se cambian por API")
     @ApiResponse(responseCode = "200", description = "Alojamiento actualizado")
     @ApiResponse(responseCode = "400", description = "Falta un dato obligatorio o una hora está mal escrita")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "Coordenada fuera de rango (7.3) o falta una de las dos horas "
             + "del horario (L-12)")
     public ResponseEntity<AlojamientoResponse> actualizar(@Valid @RequestBody ActualizarAlojamientoRequest request) {
