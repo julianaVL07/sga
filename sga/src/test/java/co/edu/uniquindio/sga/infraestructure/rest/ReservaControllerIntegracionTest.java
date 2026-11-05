@@ -1,12 +1,14 @@
 // src/test/java/co/edu/uniquindio/sga/infrastructure/rest/ReservaControllerIntegracionTest.java
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -37,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Las pruebas comparten la base H2, por eso cada una usa su propio apartamento o sus propias fechas.
  * Las fechas se calculan con el reloj de Colombia, el mismo que usa el SGA (L-13, RN-10).
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class ReservaControllerIntegracionTest {

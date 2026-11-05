@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -24,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Usa APT-202 hoy y APT-301 en el futuro para no chocar con las demás pruebas que comparten la base H2.
  * Estos endpoints no reciben cuerpo ni parámetros, por eso no tienen un caso 400: solo 404 y 409.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class OperacionReservaControllerIntegracionTest {

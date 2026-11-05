@@ -1,10 +1,12 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -16,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * transversal: todos los errores salen con el mismo cuerpo ErrorResponse (timestamp, status, error,
  * mensaje, path, errores), también los que genera Spring antes de llegar a un controlador.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class ManejoErroresIntegracionTest {

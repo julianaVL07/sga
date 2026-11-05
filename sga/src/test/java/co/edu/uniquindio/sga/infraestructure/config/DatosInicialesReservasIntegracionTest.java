@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Datos de prueba de reservas (12.3): al arrancar la aplicación completa, DatosInicialesReservasConfig deja
  * reservas en los 6 estados de la sección 8 y en los 3 canales de origen, cada una con su folio (F-08).
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 class DatosInicialesReservasIntegracionTest {
 
