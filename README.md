@@ -54,6 +54,8 @@ cd sga/sga
 ./gradlew bootRun          # en Windows (PowerShell): .\gradlew.bat bootRun
 ```
 
+Antes del primer arranque crea la clave del JWT (ver [Seguridad](#seguridad)): sin ella la aplicación no arranca.
+
 Cuando en la consola salga `Started SgaApplication`, la API queda en `http://localhost:8080`.
 
 | Qué | Dónde |
@@ -102,7 +104,7 @@ La base es en memoria, así que cada vez que arranca la app se cargan solos esto
 
 ## Endpoints
 
-Son 50 operaciones. Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
+Son 52 operaciones: las 50 de esta lista y las 2 de autenticación (ver [Seguridad](#seguridad)). Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
 
 **Reservas**
 - `POST /api/reservas` crear una reserva (201 con `Location`); acepta mascotas opcionales (`cantidadMascotas`, `pesoMascotaMasPesadaKg`)
@@ -161,13 +163,13 @@ Son 50 operaciones. Todos los listados devuelven 10 resultados por página y las
 - `GET /api/politica-cancelacion/versiones` versiones de la política
 - `PUT /api/politica-cancelacion` publicar una versión nueva
 
-El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`, que coinciden en las 50 operaciones.
+El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger, que muestra las 52 operaciones, y en el `openapi.yaml`, que todavía describe las 50 sin autenticación.
 
 Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección de 164 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
+En `sga/docs/api/sga.http` dejamos una colección de 179 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -187,8 +189,41 @@ En `sga/docs/api/sga.http` dejamos una colección de 164 peticiones que recorre 
     - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
     - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
     - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
-- **Verificación:** las 250 pruebas pasan (`./gradlew test --rerun`), las 164 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
-- **No incluido en esta entrega:** usuarios y seguridad con JWT y roles; por ahora todos los endpoints están abiertos.
+- **Verificación:** las 262 pruebas pasan (`./gradlew test --rerun`), las 179 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+
+## Seguridad
+
+Los endpoints exigen un token JWT, salvo el login, el registro y las herramientas de desarrollo (Swagger y consola H2). Cada endpoint define qué roles lo usan y, en reservas y folios, el huésped solo accede a lo suyo: **401** es que falta el token o no sirve, **403** que el rol no lo permite o la reserva no es suya.
+
+**Crear la clave.** La aplicación no arranca sin ella y nunca va al repositorio. En `sga/`:
+
+```bash
+echo "sga.jwt.secret=$(openssl rand -base64 48)" > src/main/resources/application-secrets.properties
+```
+
+La plantilla es `application-secrets.properties.example`. En despliegue se usa la variable de entorno `SGA_JWT_SECRET`.
+
+**Usuarios iniciales.** Son datos de prueba de H2, no credenciales reales:
+
+| Rol | Correo | Contraseña |
+|---|---|---|
+| ADMINISTRADOR | `admin@sga.local` | `Admin2026` |
+| RECEPCIONISTA | `recepcion@sga.local` | `Recepcion2026` |
+| PERSONAL_SERVICIO | `servicio@sga.local` | `Servicio2026` |
+| HUESPED (Laura Gomez) | `huesped1@sga.local` | `Huesped2026` |
+| HUESPED (Valentina Rios) | `huesped2@sga.local` | `Huesped2026` |
+
+**Login y registro**, ambos públicos:
+
+- `POST /api/auth/login` recibe `correo` y `contrasena` y devuelve el token, que dura 30 minutos.
+- `POST /api/auth/registro` crea un huésped (201) con `nombre`, `correo`, `contrasena`, `telefono`, `documento` y `fechaNacimiento`. Responde 409 si el correo o el documento ya existen.
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" \
+  -d '{"correo":"recepcion@sga.local","contrasena":"Recepcion2026"}'
+```
+
+**Usar el token.** Envíelo en el encabezado `Authorization: Bearer <token>`. En Swagger UI, péguelo en el botón **Authorize**.
 
 ## Forma de trabajo
 

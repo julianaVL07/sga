@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,10 +35,13 @@ public class OperacionReservaController {
 
     /** CU-04. PUT /api/reservas/{codigo}/registrar-llegada */
     @PutMapping("/{codigo}/registrar-llegada")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar la llegada",
             description = "La reserva pasa a EN_CURSO y el apartamento a OCUPADO. Exige reserva CONFIRMADA con la "
                     + "fecha de entrada alcanzada (RN-10) y apartamento PREPARADO (RN-11)")
     @ApiResponse(responseCode = "200", description = "Llegada registrada")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe una reserva con ese código")
     @ApiResponse(responseCode = "409", description = "La reserva no está CONFIRMADA, no es su fecha o el apartamento no está PREPARADO")
     public ResponseEntity<ReservaDetalleResponse> registrarLlegada(@PathVariable String codigo) {
@@ -48,10 +52,13 @@ public class OperacionReservaController {
 
     /** CU-05. PUT /api/reservas/{codigo}/registrar-salida */
     @PutMapping("/{codigo}/registrar-salida")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar la salida",
             description = "La reserva pasa a FINALIZADA (RN-12) y el apartamento a PENDIENTE_PREPARACION. El folio "
                     + "debe quedar cerrado: saldo en cero o autorización del administrador (RN-17)")
     @ApiResponse(responseCode = "200", description = "Salida registrada")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe una reserva con ese código")
     @ApiResponse(responseCode = "409", description = "La reserva no está EN_CURSO o el folio tiene saldo sin autorizar")
     public ResponseEntity<ReservaDetalleResponse> registrarSalida(@PathVariable String codigo) {

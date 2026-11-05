@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Las pruebas de CU-22 a CU-25 registran apartamentos nuevos (APT-401 a APT-404) y también dejan el contexto sucio,
  * para que el listado y las búsquedas de las demás pruebas sigan viendo solo los 5 apartamentos iniciales.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:sga-apartamentos")
 @AutoConfigureMockMvc
 class ApartamentoControllerIntegracionTest {

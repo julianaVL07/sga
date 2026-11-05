@@ -46,6 +46,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -88,12 +89,15 @@ public class ApartamentoController {
 
     /** CU-01. GET /api/apartamentos/disponibles?entrada=&salida=&ocupantes=&...&pagina= */
     @GetMapping("/disponibles")
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
     @Operation(summary = "Buscar apartamentos disponibles",
             description = "Apartamentos libres en todas las noches de la estancia y con capacidad para el grupo "
                     + "(RN-01, RN-02, RN-07, RN-20), filtrados por capacidad mínima, característica de la dotación "
                     + "y rango de precio del valor estimado de la estancia (7.5). 10 resultados por página")
     @ApiResponse(responseCode = "200", description = "Página de apartamentos disponibles (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Falta un parámetro o una fecha está mal escrita")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "Estancia o filtros inválidos (RN-03, RN-04, RP-01, 7.5)")
     public ResponseEntity<PaginaResponse<ApartamentoDisponibleResponse>> buscarDisponibles(
             @RequestParam LocalDate entrada,
@@ -116,11 +120,14 @@ public class ApartamentoController {
 
     /** CU-20. GET /api/apartamentos?pagina= */
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
     @Operation(summary = "Listar apartamentos",
             description = "Apartamentos no eliminados del alojamiento, ordenados por identificación, 10 por página "
                     + "(7.3, 12.4)")
     @ApiResponse(responseCode = "200", description = "Página de apartamentos (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<PaginaResponse<ApartamentoResponse>> listar(
             @RequestParam(defaultValue = "0") @Min(0) int pagina) {
         Pagina<Apartamento> apartamentos = consultarApartamentosUseCase.listar(pagina);
@@ -132,11 +139,14 @@ public class ApartamentoController {
      * Ruta fija declarada antes de /{id} para que "pendientes-preparacion" no se tome como una identificación.
      */
     @GetMapping("/pendientes-preparacion")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Listar apartamentos pendientes de preparación",
             description = "Apartamentos no eliminados en PENDIENTE_PREPARACION o EN_PREPARACION, que el personal de "
                     + "servicio debe atender, ordenados por identificación, 10 por página (7.1, 12.4)")
     @ApiResponse(responseCode = "200", description = "Página de apartamentos por preparar (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<PaginaResponse<ApartamentoResponse>> pendientesDePreparacion(
             @RequestParam(defaultValue = "0") @Min(0) int pagina) {
         Pagina<Apartamento> pendientes = consultarApartamentosUseCase.pendientesDePreparacion(pagina);
@@ -145,10 +155,13 @@ public class ApartamentoController {
 
     /** CU-20. GET /api/apartamentos/{id} */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
     @Operation(summary = "Consultar el detalle de un apartamento",
             description = "Datos, dotación, imágenes, capacidad, estado operativo, tarifas por temporada y bloqueos "
                     + "vigentes (7.3)")
     @ApiResponse(responseCode = "200", description = "Detalle del apartamento")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe o fue retirado de la venta")
     public ResponseEntity<ApartamentoDetalleResponse> detalle(@PathVariable String id) {
         Apartamento apartamento = consultarApartamentosUseCase.detalle(new IdentificacionApartamento(id));
@@ -157,9 +170,12 @@ public class ApartamentoController {
 
     /** CU-21. PUT /api/apartamentos/{id}/retirar. No hay DELETE: la eliminación es lógica (12.4). */
     @PutMapping("/{id}/retirar")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Retirar un apartamento de la venta",
             description = "Eliminación lógica: solo si no tiene reservas activas ni futuras (7.3, 12.4)")
     @ApiResponse(responseCode = "200", description = "Apartamento retirado de la venta")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Tiene reservas activas o futuras, o ya estaba retirado")
     public ResponseEntity<ApartamentoDetalleResponse> retirar(@PathVariable String id) {
@@ -169,11 +185,14 @@ public class ApartamentoController {
 
     /** CU-13. POST /api/apartamentos/{id}/bloqueos */
     @PostMapping("/{id}/bloqueos")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Registrar un bloqueo",
             description = "Retira el apartamento de la venta en un rango de fechas; se rechaza si hay reservas "
                     + "activas en esas noches (7.3, RN-01)")
     @ApiResponse(responseCode = "201", description = "Bloqueo registrado; Location apunta al bloqueo creado")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Rango inválido o noches con reservas activas")
     public ResponseEntity<BloqueoResponse> registrarBloqueo(@PathVariable String id,
@@ -189,9 +208,12 @@ public class ApartamentoController {
 
     /** CU-13. GET /api/apartamentos/{id}/bloqueos/{idBloqueo}: el recurso al que apunta el Location del POST. */
     @GetMapping("/{id}/bloqueos/{idBloqueo}")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Consultar un bloqueo",
             description = "Bloqueo del apartamento, vigente o levantado; es la URL del Location al registrarlo (CU-13)")
     @ApiResponse(responseCode = "200", description = "Bloqueo encontrado")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe el apartamento, no existe el bloqueo o es de otro "
             + "apartamento")
     public ResponseEntity<BloqueoResponse> consultarBloqueo(@PathVariable String id, @PathVariable String idBloqueo) {
@@ -203,10 +225,13 @@ public class ApartamentoController {
 
     /** CU-16. PUT /api/apartamentos/{id}/iniciar-preparacion */
     @PutMapping("/{id}/iniciar-preparacion")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Iniciar la preparación",
             description = "El personal de servicio empieza a preparar el apartamento: PENDIENTE_PREPARACION → "
                     + "EN_PREPARACION (7.6)")
     @ApiResponse(responseCode = "200", description = "Apartamento EN_PREPARACION")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Transición de estado no permitida (7.6)")
     public ResponseEntity<ApartamentoResponse> iniciarPreparacion(@PathVariable String id) {
@@ -216,9 +241,12 @@ public class ApartamentoController {
 
     /** CU-16. PUT /api/apartamentos/{id}/terminar-preparacion */
     @PutMapping("/{id}/terminar-preparacion")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Terminar la preparación",
             description = "El apartamento queda listo para recibir un grupo: EN_PREPARACION → PREPARADO (7.6)")
     @ApiResponse(responseCode = "200", description = "Apartamento PREPARADO")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Transición de estado no permitida (7.6)")
     public ResponseEntity<ApartamentoResponse> terminarPreparacion(@PathVariable String id) {
@@ -228,10 +256,13 @@ public class ApartamentoController {
 
     /** CU-16. PUT /api/apartamentos/{id}/poner-fuera-de-servicio */
     @PutMapping("/{id}/poner-fuera-de-servicio")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Poner fuera de servicio",
             description = "Decisión del administrador desde cualquier estado no ocupado → FUERA_DE_SERVICIO (7.6). "
                     + "No bloquea la venta futura; para eso se registra un bloqueo (3.3)")
     @ApiResponse(responseCode = "200", description = "Apartamento FUERA_DE_SERVICIO")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Transición de estado no permitida (7.6)")
     public ResponseEntity<ApartamentoResponse> ponerFueraDeServicio(@PathVariable String id) {
@@ -241,10 +272,13 @@ public class ApartamentoController {
 
     /** CU-16. PUT /api/apartamentos/{id}/restablecer-servicio */
     @PutMapping("/{id}/restablecer-servicio")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Restablecer el servicio",
             description = "El apartamento vuelve al servicio y debe prepararse: FUERA_DE_SERVICIO → "
                     + "PENDIENTE_PREPARACION (7.6)")
     @ApiResponse(responseCode = "200", description = "Apartamento PENDIENTE_PREPARACION")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Transición de estado no permitida (7.6)")
     public ResponseEntity<ApartamentoResponse> restablecerServicio(@PathVariable String id) {
@@ -254,10 +288,13 @@ public class ApartamentoController {
 
     /** CU-17. POST /api/apartamentos/{id}/novedades */
     @PostMapping("/{id}/novedades")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar una novedad",
             description = "Daño, faltante o incidencia del apartamento con autor, descripción y gravedad (7.6)")
     @ApiResponse(responseCode = "201", description = "Novedad registrada; Location apunta a la novedad creada")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     public ResponseEntity<NovedadResponse> registrarNovedad(@PathVariable String id,
                                                             @Valid @RequestBody RegistrarNovedadRequest request) {
@@ -272,10 +309,13 @@ public class ApartamentoController {
 
     /** 7.6. GET /api/apartamentos/{id}/novedades?pagina= */
     @GetMapping("/{id}/novedades")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Consultar el historial de novedades",
             description = "Novedades del apartamento de la más reciente a la más antigua, 10 por página (7.6, 12.4)")
     @ApiResponse(responseCode = "200", description = "Página del historial (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     public ResponseEntity<PaginaResponse<NovedadResponse>> historialNovedades(
             @PathVariable String id, @RequestParam(defaultValue = "0") @Min(0) int pagina) {
@@ -285,9 +325,12 @@ public class ApartamentoController {
 
     /** CU-17. GET /api/apartamentos/{id}/novedades/{idNovedad}: el recurso al que apunta el Location del POST. */
     @GetMapping("/{id}/novedades/{idNovedad}")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
     @Operation(summary = "Consultar una novedad",
             description = "Novedad del apartamento; es la URL del Location al registrarla (CU-17, 7.6)")
     @ApiResponse(responseCode = "200", description = "Novedad encontrada")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe el apartamento, no existe la novedad o es de otro "
             + "apartamento")
     public ResponseEntity<NovedadResponse> consultarNovedad(@PathVariable String id, @PathVariable String idNovedad) {
@@ -299,11 +342,14 @@ public class ApartamentoController {
 
     /** CU-22. POST /api/apartamentos */
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Registrar un apartamento",
             description = "Crea el apartamento con datos, dotación, imágenes (1 a 10, una principal) y, opcionalmente, "
                     + "tarifas por temporada. Nace PREPARADO e INACTIVO hasta que se active (7.3, 7.4)")
     @ApiResponse(responseCode = "201", description = "Apartamento registrado; Location apunta a su detalle")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "Identificación repetida (L-04), máximo de apartamentos (L-03) "
             + "o regla del agregado (imágenes, capacidad, dotación, tarifas)")
     public ResponseEntity<ApartamentoDetalleResponse> registrar(@Valid @RequestBody RegistrarApartamentoRequest request) {
@@ -320,11 +366,14 @@ public class ApartamentoController {
 
     /** CU-23. PUT /api/apartamentos/{id} */
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Actualizar un apartamento",
             description = "Nombre, descripción, dormitorios, dotación y capacidad. Cambiar la capacidad no afecta las "
                     + "reservas ya creadas; la respuesta lista las activas o futuras que la superan (7.3)")
     @ApiResponse(responseCode = "200", description = "Apartamento actualizado, con la advertencia de capacidad")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe o fue retirado de la venta")
     @ApiResponse(responseCode = "409", description = "Capacidad, dormitorios o dotación inválidos")
     public ResponseEntity<ActualizacionApartamentoResponse> actualizar(
@@ -337,11 +386,14 @@ public class ApartamentoController {
 
     /** CU-24. PUT /api/apartamentos/{id}/tarifas */
     @PutMapping("/{id}/tarifas")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Definir tarifas por temporada",
             description = "Una o varias tarifas que rigen desde hoy; la anterior de cada temporada queda en el "
                     + "histórico con su fecha de inicio y de reemplazo (7.4)")
     @ApiResponse(responseCode = "200", description = "Tarifas definidas; el detalle trae las vigentes")
     @ApiResponse(responseCode = "400", description = "Lista vacía o datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe o fue retirado de la venta")
     @ApiResponse(responseCode = "409", description = "La temporada no existe, está repetida o el valor no es mayor "
             + "que cero (7.4)")
@@ -354,11 +406,14 @@ public class ApartamentoController {
 
     /** CU-24. GET /api/apartamentos/{id}/tarifas/historico?pagina= */
     @GetMapping("/{id}/tarifas/historico")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Consultar el histórico de tarifas",
             description = "Tarifas vigentes y reemplazadas, de la más reciente a la más antigua, 10 por página "
                     + "(7.4, 12.4)")
     @ApiResponse(responseCode = "200", description = "Página del histórico (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Número de página inválido")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe o fue retirado de la venta")
     public ResponseEntity<PaginaResponse<RegistroTarifaResponse>> historicoTarifas(
             @PathVariable String id, @RequestParam(defaultValue = "0") @Min(0) int pagina) {
@@ -369,9 +424,12 @@ public class ApartamentoController {
 
     /** CU-25. PUT /api/apartamentos/{id}/activar */
     @PutMapping("/{id}/activar")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Activar un apartamento",
             description = "Lo pone a la venta solo si tiene tarifa en todas las temporadas del alojamiento (7.4)")
     @ApiResponse(responseCode = "200", description = "Apartamento activo")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Le falta tarifa en alguna temporada (7.4) o fue retirado de la "
             + "venta (7.3)")

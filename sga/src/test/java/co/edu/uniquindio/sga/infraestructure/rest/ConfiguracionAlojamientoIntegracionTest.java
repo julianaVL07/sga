@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Usa su propia base H2 (sga-configuracion) y las pruebas que cambian datos dejan el contexto sucio, para que las
  * demás pruebas sigan viendo el alojamiento, las temporadas y la política iniciales.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:sga-configuracion")
 @AutoConfigureMockMvc
 class ConfiguracionAlojamientoIntegracionTest {

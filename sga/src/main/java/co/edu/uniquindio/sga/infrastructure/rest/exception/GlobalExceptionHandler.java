@@ -6,6 +6,7 @@ import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.NovedadNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.TemporadaNoEncontradaException;
+import co.edu.uniquindio.sga.application.exception.UsuarioYaRegistradoException;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -13,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -25,6 +28,7 @@ import java.util.Map;
 /**
  * Adaptador de salida de errores: traduce las excepciones del SGA a códigos HTTP (Guía 07, 4.6).
  * El dominio no conoce HTTP; esta clase es la única que decide qué código recibe el cliente.
+ * Convención ampliada (3.14): 401 no sé quién eres · 403 no tienes permiso.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -59,6 +63,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ReglaDominioException.class)
     public ResponseEntity<ErrorResponse> reglaDominio(ReglaDominioException ex, HttpServletRequest req) {
         return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    /** 409: el correo o el documento del registro ya pertenecen a otro usuario (Guía 12). */
+    @ExceptionHandler(UsuarioYaRegistradoException.class)
+    public ResponseEntity<ErrorResponse> usuarioYaRegistrado(UsuarioYaRegistradoException ex, HttpServletRequest req) {
+        return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    /** 401: credenciales inválidas o usuario inactivo en el login (Guía 12). */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> autenticacion(AuthenticationException ex, HttpServletRequest req) {
+        // Mensaje genérico: no revela si el correo existe o si la contraseña era la errada
+        return construir(HttpStatus.UNAUTHORIZED, "Credenciales inválidas", req, null);
+    }
+
+    /** 403: autenticado, pero sin permiso por rol o por propietario (Guía 12). */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> accesoDenegado(AccessDeniedException ex, HttpServletRequest req) {
+        return construir(HttpStatus.FORBIDDEN, "No tiene permiso para realizar esta operación", req, null);
     }
 
     /** 500: lo inesperado. La traza va al log, nunca al cliente. */

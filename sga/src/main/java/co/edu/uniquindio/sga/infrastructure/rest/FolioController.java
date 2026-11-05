@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -54,9 +55,13 @@ public class FolioController {
 
     /** GET /api/reservas/{codigo}/folio: el recurso al que apunta la Location de un pago registrado. */
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR') "
+            + "or (hasAuthority('HUESPED') and @propietarioReserva.esTitular(#codigo, authentication))")
     @Operation(summary = "Consultar el folio",
             description = "Cargos, pagos, saldo y estado de cierre del folio de la reserva (7.7)")
     @ApiResponse(responseCode = "200", description = "El folio de la reserva")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite o no es el titular de la reserva")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "Código de reserva mal formado")
     public ResponseEntity<FolioResponse> consultar(@PathVariable String codigo) {
@@ -65,12 +70,15 @@ public class FolioController {
 
     /** CU-15. POST /api/reservas/{codigo}/folio/pagos */
     @PostMapping("/pagos")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar un pago",
             description = "Abono contra el folio con su medio y su fecha (RN-15). Admite pagos parciales; un pago "
                     + "no se edita ni se borra (RN-16)")
     @ApiResponse(responseCode = "201", description = "Pago registrado; devuelve el folio con el nuevo saldo y "
             + "Location apunta al folio")
     @ApiResponse(responseCode = "400", description = "Falta el valor o el medio, o el valor no es positivo")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "El folio ya está cerrado")
     public ResponseEntity<FolioResponse> registrarPago(@PathVariable String codigo,
@@ -86,12 +94,15 @@ public class FolioController {
 
     /** 7.1. POST /api/reservas/{codigo}/folio/cargos */
     @PostMapping("/cargos")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar el cargo de un servicio adicional",
             description = "Asienta en el folio el cargo de un servicio adicional del alojamiento (L-17), con su valor y "
                     + "la fecha de hoy. El cargo no se edita ni se borra; se corrige con un movimiento inverso (RN-16)")
     @ApiResponse(responseCode = "201", description = "Cargo registrado; devuelve el folio con el nuevo saldo y "
             + "Location apunta al folio")
     @ApiResponse(responseCode = "400", description = "Falta el id del servicio")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "El servicio no existe, no está activo o no genera cargo (L-17), "
             + "o el folio está cerrado (RN-16)")
@@ -103,6 +114,7 @@ public class FolioController {
 
     /** RN-16. POST /api/reservas/{codigo}/folio/correcciones */
     @PostMapping("/correcciones")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Registrar una corrección",
             description = "Corrige un cargo sin editarlo ni borrarlo: asienta un cargo del mismo tipo con el valor "
                     + "opuesto y el motivo (RN-16). El cargo se indica por su posición en la lista cargos del folio, "
@@ -110,6 +122,8 @@ public class FolioController {
     @ApiResponse(responseCode = "201", description = "Corrección registrada; devuelve el folio con el saldo corregido "
             + "y Location apunta al folio")
     @ApiResponse(responseCode = "400", description = "Falta la posición del cargo o el motivo")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "No hay un cargo en esa posición o el folio está cerrado (RN-16)")
     public ResponseEntity<FolioResponse> registrarCorreccion(@PathVariable String codigo,
@@ -121,10 +135,13 @@ public class FolioController {
 
     /** CU-06. PUT /api/reservas/{codigo}/folio/cerrar */
     @PutMapping("/cerrar")
+    @PreAuthorize("hasAnyAuthority('RECEPCIONISTA', 'ADMINISTRADOR')")
     @Operation(summary = "Cerrar el folio",
             description = "Solo si el saldo es exactamente cero (RN-17). Con saldo se usa la autorización del "
                     + "administrador (CU-07)")
     @ApiResponse(responseCode = "200", description = "Folio cerrado")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "El saldo no es cero o el folio ya estaba cerrado")
     public ResponseEntity<FolioResponse> cerrar(@PathVariable String codigo) {
@@ -134,11 +151,14 @@ public class FolioController {
 
     /** CU-07. POST /api/reservas/{codigo}/folio/autorizacion-cierre */
     @PostMapping("/autorizacion-cierre")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Autorizar el cierre con saldo",
             description = "El administrador cierra el folio aunque tenga saldo; queda registrado quién autoriza y "
                     + "por qué (RN-17)")
     @ApiResponse(responseCode = "200", description = "Folio cerrado con autorización")
     @ApiResponse(responseCode = "400", description = "Falta quién autoriza o el motivo")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe la reserva o su folio")
     @ApiResponse(responseCode = "409", description = "El folio ya estaba cerrado")
     public ResponseEntity<FolioResponse> autorizarCierre(@PathVariable String codigo,

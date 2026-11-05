@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,12 +50,15 @@ public class CanalExternoController {
 
     /** CU-08, operación 1. GET /api/canales/{canal}/disponibilidad?entrada=&salida=&ocupantes=&pagina= */
     @GetMapping("/disponibilidad")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Consultar disponibilidad desde el canal",
             description = "Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por "
                     + "página (12.4). La consulta queda en la bitácora (7.8)")
     @ApiResponse(responseCode = "200", description = "Página de apartamentos disponibles (puede venir vacía)")
     @ApiResponse(responseCode = "400", description = "Falta un parámetro, una fecha está mal escrita o la página es "
             + "negativa")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "Las fechas no forman una estancia válida")
     public ResponseEntity<PaginaResponse<ApartamentoResponse>> consultarDisponibilidad(
             @PathVariable String canal,
@@ -69,6 +73,7 @@ public class CanalExternoController {
 
     /** CU-08, operación 2. POST /api/canales/{canal}/reservas */
     @PostMapping("/reservas")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Recibir una reserva del canal",
             description = "Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). "
                     + "Si ya están vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el "
@@ -76,6 +81,8 @@ public class CanalExternoController {
     @ApiResponse(responseCode = "201", description = "ACEPTADO: reserva creada PENDIENTE")
     @ApiResponse(responseCode = "200", description = "DUPLICADO_IGNORADO: el mensaje ya había llegado (RN-19)")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "409", description = "RECHAZADO_CONFLICTO: noches vendidas o bloqueadas (RN-18)")
     @ApiResponse(responseCode = "422", description = "RECHAZADO_INVALIDO: los datos no cumplen las reglas de la reserva")
     public ResponseEntity<EventoCanalResponse> recibirReserva(@PathVariable String canal,
@@ -93,10 +100,13 @@ public class CanalExternoController {
 
     /** CU-08, operación 3. PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar */
     @PutMapping("/reservas/{identificadorExterno}/cancelar")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR')")
     @Operation(summary = "Cancelar una reserva del canal",
             description = "Cancela la reserva que el mismo canal creó con ese identificador externo; una "
                     + "cancelación repetida responde DUPLICADO_IGNORADO (RN-19)")
     @ApiResponse(responseCode = "200", description = "ACEPTADO o DUPLICADO_IGNORADO (RN-19)")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "422", description = "RECHAZADO_INVALIDO: no hay una reserva del canal con ese identificador "
             + "o ya no se puede cancelar")
     public ResponseEntity<EventoCanalResponse> cancelarReserva(@PathVariable String canal,

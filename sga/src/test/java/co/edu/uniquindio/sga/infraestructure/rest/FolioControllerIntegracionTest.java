@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -29,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 1 el depósito y la 2 el primer cargo que se agregue.
  * Cada prueba crea su propia reserva en APT-102 lejos en el calendario para no chocar con las demás.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class FolioControllerIntegracionTest {
