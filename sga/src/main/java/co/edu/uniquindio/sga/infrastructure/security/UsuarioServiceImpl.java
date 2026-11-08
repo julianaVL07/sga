@@ -1,9 +1,12 @@
 package co.edu.uniquindio.sga.infrastructure.security;
 
+import co.edu.uniquindio.sga.application.dto.request.ActualizarPerfilRequest;
+import co.edu.uniquindio.sga.application.dto.request.CambioContrasenaRequest;
 import co.edu.uniquindio.sga.application.dto.request.CambioRolRequest;
 import co.edu.uniquindio.sga.application.dto.request.CrearUsuarioRequest;
 import co.edu.uniquindio.sga.application.dto.response.PaginaResponse;
 import co.edu.uniquindio.sga.application.dto.response.UsuarioResponse;
+import co.edu.uniquindio.sga.application.exception.ContrasenaActualIncorrectaException;
 import co.edu.uniquindio.sga.application.exception.UsuarioNoDesactivableException;
 import co.edu.uniquindio.sga.application.exception.UsuarioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.UsuarioYaRegistradoException;
@@ -107,6 +110,32 @@ public class UsuarioServiceImpl implements UsuarioService {
         return aResponse(usuario);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public UsuarioResponse consultarPerfil(String correo) {
+        return aResponse(buscarPorCorreo(correo));
+    }
+
+    @Override
+    @Transactional
+    public UsuarioResponse actualizarPerfil(String correo, ActualizarPerfilRequest request) {
+        UsuarioEntity usuario = buscarPorCorreo(correo);
+        usuario.setNombre(request.nombre());
+        usuario.setTelefono(request.telefono());
+        usuario.setFotoUrl(request.fotoUrl());
+        return aResponse(usuario);
+    }
+
+    @Override
+    @Transactional
+    public void cambiarContrasena(String correo, CambioContrasenaRequest request) {
+        UsuarioEntity usuario = buscarPorCorreo(correo);
+        if (!passwordEncoder.matches(request.contrasenaActual(), usuario.getContrasena())) {
+            throw new ContrasenaActualIncorrectaException();
+        }
+        usuario.setContrasena(passwordEncoder.encode(request.contrasenaNueva()));
+    }
+
     /** Lee el dominio por su puerto: la reserva no sabe que existen usuarios, solo conoce el documento (3.6) */
     private boolean esTitularDeReservasVigentes(String documento) {
         return ESTADOS_VIGENTES.stream()
@@ -116,6 +145,10 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     private UsuarioEntity buscar(Long id) {
         return usuarios.findById(id).orElseThrow(() -> new UsuarioNoEncontradoException(id));
+    }
+
+    private UsuarioEntity buscarPorCorreo(String correo) {
+        return usuarios.findByCorreo(correo).orElseThrow(() -> new UsuarioNoEncontradoException(correo));
     }
 
     private UsuarioResponse aResponse(UsuarioEntity usuario) {

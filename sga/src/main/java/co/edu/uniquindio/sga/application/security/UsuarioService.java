@@ -1,5 +1,7 @@
 package co.edu.uniquindio.sga.application.security;
 
+import co.edu.uniquindio.sga.application.dto.request.ActualizarPerfilRequest;
+import co.edu.uniquindio.sga.application.dto.request.CambioContrasenaRequest;
 import co.edu.uniquindio.sga.application.dto.request.CambioRolRequest;
 import co.edu.uniquindio.sga.application.dto.request.CrearUsuarioRequest;
 import co.edu.uniquindio.sga.application.dto.response.PaginaResponse;
@@ -27,4 +29,13 @@ public interface UsuarioService {
      * @param correoSolicitante sub del token del administrador: no puede desactivarse a sí mismo
      */
     UsuarioResponse desactivar(Long id, String correoSolicitante);
+
+    /** Perfil propio. El correo es el sub del token: nadie consulta ni edita el perfil de otro */
+    UsuarioResponse consultarPerfil(String correo);
+
+    /** Actualiza solo nombre, teléfono y foto; el correo no es editable */
+    UsuarioResponse actualizarPerfil(String correo, ActualizarPerfilRequest request);
+
+    /** 400 si la contraseña actual no coincide */
+    void cambiarContrasena(String correo, CambioContrasenaRequest request);
 }

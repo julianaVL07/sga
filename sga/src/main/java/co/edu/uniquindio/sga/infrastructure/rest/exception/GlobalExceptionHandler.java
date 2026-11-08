@@ -1,6 +1,7 @@
 package co.edu.uniquindio.sga.infrastructure.rest.exception;
 
 import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
+import co.edu.uniquindio.sga.application.exception.ContrasenaActualIncorrectaException;
 import co.edu.uniquindio.sga.application.exception.BloqueoNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.NovedadNoEncontradaException;
@@ -51,6 +52,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> formato(Exception ex, HttpServletRequest req) {
         return construir(HttpStatus.BAD_REQUEST,
                 "Formato inválido: revise el JSON, las fechas (AAAA-MM-DD) y los valores permitidos", req, null);
+    }
+
+    /** 400: la contraseña actual del cambio de contraseña no coincide (Guía 12, 7.2). */
+    @ExceptionHandler(ContrasenaActualIncorrectaException.class)
+    public ResponseEntity<ErrorResponse> contrasenaActualIncorrecta(ContrasenaActualIncorrectaException ex,
+                                                                    HttpServletRequest req) {
+        return construir(HttpStatus.BAD_REQUEST, ex.getMessage(), req, null);
     }
 
     /** 404: el identificador no existe (excepciones de aplicación). */
