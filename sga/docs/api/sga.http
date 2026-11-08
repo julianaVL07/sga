@@ -1192,7 +1192,9 @@ Content-Type: application/json
     });
 %}
 
-### 5.28 RN-19 Una reserva EXTERNO no entra por POST /api/reservas, sino por el canal (CU-08)
+### 5.28 RN-19 Una reserva EXTERNO no entra por POST /api/reservas, sino por el canal (CU-08): 403
+# Desde la Guía 12 el canal por rol (CanalPorRolVerificador) no deja crear por EXTERNO a ningún rol, así que la
+# petición se corta con 403 antes de llegar al dominio. RN-19 sigue en el dominio y en sus pruebas unitarias.
 POST {{host}}/api/reservas
 Authorization: Bearer {{tokenAdmin}}
 Content-Type: application/json
@@ -1208,9 +1210,9 @@ Content-Type: application/json
 }
 
 > {%
-    client.test("5.28 409 RN-19", function () {
-        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
-        client.assert(response.body.mensaje.startsWith("RN-19"), "Mensaje inesperado: " + response.body.mensaje);
+    client.test("5.28 403 EXTERNO no entra por POST /api/reservas", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
     });
 %}
 
@@ -2939,5 +2941,475 @@ Authorization: Bearer {{tokenServicio}}
     client.test("13.12 servicio confirma una reserva", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### 13.13 Sin token: 401 con el ErrorResponse del proyecto y WWW-Authenticate Bearer (7.5.6)
+GET {{host}}/api/reservas?estado=PENDIENTE
+
+> {%
+    client.test("13.13 401 sin token con ErrorResponse", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.status === 401, "status: " + response.body.status);
+        client.assert(response.body.error === "Unauthorized", "error: " + response.body.error);
+        client.assert(response.body.mensaje === "Debe iniciar sesión o el token no es válido", response.body.mensaje);
+        client.assert(response.body.path === "/api/reservas", "path: " + response.body.path);
+        var www = response.headers.valueOf("WWW-Authenticate");
+        client.assert(www != null && www.indexOf("Bearer") === 0, "WWW-Authenticate: " + www);
+    });
+%}
+
+### 13.14 Canal por rol: el huésped 1 crea una reserva DIRECTO (el huésped solo reserva por PORTAL): 403
+POST {{host}}/api/reservas
+Authorization: Bearer {{tokenHuesped1}}
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoyMas50}}",
+  "fechaSalida": "{{hoyMas52}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "DIRECTO",
+  "titular": { "nombre": "Laura Gomez", "tipoDocumento": "CC", "numeroDocumento": "1094777888", "email": "huesped1@sga.local", "telefono": "3135550404" },
+  "ocupantes": [ { "nombre": "Laura Gomez", "tipoDocumento": "CC", "numeroDocumento": "1094777888", "fechaNacimiento": "1995-01-30" } ]
+}
+
+> {%
+    client.test("13.14 403 huésped crea DIRECTO", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### 13.15 Canal por rol: el huésped 1 crea una reserva PORTAL a nombre de otro documento (el del huésped 2): 403
+POST {{host}}/api/reservas
+Authorization: Bearer {{tokenHuesped1}}
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoyMas50}}",
+  "fechaSalida": "{{hoyMas52}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Valentina Rios", "tipoDocumento": "CC", "numeroDocumento": "1094333444", "email": "huesped2@sga.local", "telefono": "3115550202" },
+  "ocupantes": [ { "nombre": "Valentina Rios", "tipoDocumento": "CC", "numeroDocumento": "1094333444", "fechaNacimiento": "1988-09-12" } ]
+}
+
+> {%
+    client.test("13.15 403 huésped crea a nombre de otro", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### 13.16 Canal por rol: recepción crea una reserva PORTAL (la recepción solo reserva por DIRECTO): 403
+POST {{host}}/api/reservas
+Authorization: Bearer {{tokenRecepcion}}
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{hoyMas50}}",
+  "fechaSalida": "{{hoyMas52}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "email": "ana.gomez@correo.co", "telefono": "3005550101" },
+  "ocupantes": [ { "nombre": "Ana Gómez", "tipoDocumento": "CC", "numeroDocumento": "1094200300", "fechaNacimiento": "1990-05-20" } ]
+}
+
+> {%
+    client.test("13.16 403 recepción crea PORTAL", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### Sección 14: USUARIOS, PERFIL, CAMBIO DE CONTRASEÑA E HISTORIAL DEL HUÉSPED (Guía 12, 7.1 y 7.2)
+
+# ====================================================================================================
+# 14. USUARIOS. El administrador crea un recepcionista nuevo (recepcion.noche@sga.local), le cambia el rol y lo
+#     desactiva al final; ese usuario edita su perfil y cambia su contraseña con su propio token.
+#     El huésped 1 crea una reserva PORTAL a su nombre (APT-301, de hoy+160 a hoy+162) para que tenga una
+#     reserva PENDIENTE: la del portal de los datos iniciales se canceló en 6.3.
+# ====================================================================================================
+
+### 14.0 Fechas de la sección
+GET {{host}}/api/apartamentos
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.0 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("cu14Entrada", fecha(160));
+    client.global.set("cu14Salida", fecha(162));
+%}
+
+### 14.1 El administrador crea un recepcionista: 201 + Location, sin la contraseña en la respuesta
+POST {{host}}/api/usuarios
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "nombre": "Recepcion Noche",
+  "correo": "recepcion.noche@sga.local",
+  "contrasena": "Noche2026",
+  "telefono": "3001000010",
+  "documento": "1000000010",
+  "fechaNacimiento": "1994-02-11",
+  "rol": "RECEPCIONISTA"
+}
+
+> {%
+    client.test("14.1 201 usuario creado", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.rol === "RECEPCIONISTA", "Rol: " + response.body.rol);
+        client.assert(response.body.activo === true, "Debía nacer activo");
+        client.assert(response.body.contrasena === undefined, "La respuesta no debe traer la contraseña");
+        var location = response.headers.valueOf("Location");
+        client.assert(location != null && location.endsWith("/api/usuarios/" + response.body.id), "Location: " + location);
+    });
+    client.global.set("usuarioNuevoId", response.body.id);
+    client.global.set("usuarioNuevoLocation", response.headers.valueOf("Location"));
+%}
+
+### 14.2 Consultar el usuario en la URL del Location
+GET {{usuarioNuevoLocation}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.2 200 usuario consultado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.correo === "recepcion.noche@sga.local", "Correo: " + response.body.correo);
+    });
+%}
+
+### 14.3 409 El correo ya está registrado
+POST {{host}}/api/usuarios
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "nombre": "Otra Recepcion",
+  "correo": "recepcion.noche@sga.local",
+  "contrasena": "Noche2026",
+  "telefono": "3001000011",
+  "documento": "1000000011",
+  "fechaNacimiento": "1994-02-11",
+  "rol": "RECEPCIONISTA"
+}
+
+> {%
+    client.test("14.3 409 correo repetido", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje === "Ya existe un usuario registrado con ese correo o documento", response.body.mensaje);
+    });
+%}
+
+### 14.4 403 Un huésped intenta crear un usuario (los roles internos solo los asigna el administrador)
+POST {{host}}/api/usuarios
+Authorization: Bearer {{tokenHuesped1}}
+Content-Type: application/json
+
+{
+  "nombre": "Administrador Falso",
+  "correo": "falso@sga.local",
+  "contrasena": "Falso2026",
+  "telefono": "3001000012",
+  "documento": "1000000012",
+  "fechaNacimiento": "1994-02-11",
+  "rol": "ADMINISTRADOR"
+}
+
+> {%
+    client.test("14.4 403 huésped crea usuario", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### 14.5 Listar recepcionistas activos (10 por página): aparece el nuevo
+GET {{host}}/api/usuarios?rol=RECEPCIONISTA&activo=true
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.5 200 recepcionistas activos", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.tamano === 10, "Tamaño: " + response.body.tamano);
+        client.assert(response.body.contenido.every(function (u) { return u.rol === "RECEPCIONISTA" && u.activo; }),
+            "Solo debían venir recepcionistas activos");
+        client.assert(response.body.contenido.map(function (u) { return u.correo; }).indexOf("recepcion.noche@sga.local") >= 0,
+            "Faltó el recepcionista nuevo");
+    });
+%}
+
+### 14.6 404 Usuario inexistente
+GET {{host}}/api/usuarios/999999
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.6 404 usuario inexistente", function () {
+        client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
+    });
+%}
+
+### 14.7 Cambiar el rol del usuario nuevo a PERSONAL_SERVICIO
+PUT {{host}}/api/usuarios/{{usuarioNuevoId}}/rol
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{ "rol": "PERSONAL_SERVICIO" }
+
+> {%
+    client.test("14.7 200 rol cambiado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.rol === "PERSONAL_SERVICIO", "Rol: " + response.body.rol);
+    });
+%}
+
+### 14.8 400 Rol inexistente
+PUT {{host}}/api/usuarios/{{usuarioNuevoId}}/rol
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{ "rol": "GERENTE" }
+
+> {%
+    client.test("14.8 400 rol inexistente", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+        client.assert(response.body.errores.rol, "Faltó el campo rol en errores");
+    });
+%}
+
+### 14.9 Login del usuario nuevo: su token ya trae el rol nuevo
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "recepcion.noche@sga.local", "contrasena": "Noche2026" }
+
+> {%
+    client.test("14.9 200 login del usuario nuevo", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.roles.join() === "PERSONAL_SERVICIO", "Roles: " + response.body.roles);
+    });
+    client.global.set("tokenNuevo", response.body.token);
+%}
+
+### 14.10 GET /api/usuarios/me: el usuario del token
+GET {{host}}/api/usuarios/me
+Authorization: Bearer {{tokenNuevo}}
+
+> {%
+    client.test("14.10 200 mi perfil", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === client.global.get("usuarioNuevoId"), "Id: " + response.body.id);
+        client.assert(response.body.correo === "recepcion.noche@sga.local", "Correo: " + response.body.correo);
+    });
+%}
+
+### 14.11 PUT /api/usuarios/me cambia nombre, teléfono y foto; el correo del cuerpo se ignora
+PUT {{host}}/api/usuarios/me
+Authorization: Bearer {{tokenNuevo}}
+Content-Type: application/json
+
+{
+  "nombre": "Recepcion Noche Coral",
+  "telefono": "3001000099",
+  "fotoUrl": "https://fotos.sga.local/recepcion-noche.png",
+  "correo": "otro.correo@sga.local"
+}
+
+> {%
+    client.test("14.11 200 perfil actualizado sin cambiar el correo", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.nombre === "Recepcion Noche Coral", "Nombre: " + response.body.nombre);
+        client.assert(response.body.telefono === "3001000099", "Teléfono: " + response.body.telefono);
+        client.assert(response.body.fotoUrl === "https://fotos.sga.local/recepcion-noche.png", "Foto: " + response.body.fotoUrl);
+        client.assert(response.body.correo === "recepcion.noche@sga.local", "El correo no es editable: " + response.body.correo);
+    });
+%}
+
+### 14.12 400 Cambio de contraseña con la actual errada
+PUT {{host}}/api/usuarios/me/contrasena
+Authorization: Bearer {{tokenNuevo}}
+Content-Type: application/json
+
+{ "contrasenaActual": "Errada2026", "contrasenaNueva": "Noche2027" }
+
+> {%
+    client.test("14.12 400 contraseña actual errada", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+        client.assert(response.body.mensaje === "La contraseña actual no es correcta", response.body.mensaje);
+    });
+%}
+
+### 14.13 Cambio de contraseña con la actual correcta: 204
+PUT {{host}}/api/usuarios/me/contrasena
+Authorization: Bearer {{tokenNuevo}}
+Content-Type: application/json
+
+{ "contrasenaActual": "Noche2026", "contrasenaNueva": "Noche2027" }
+
+> {%
+    client.test("14.13 204 contraseña cambiada", function () {
+        client.assert(response.status === 204, "Se esperaba 204 y llegó " + response.status);
+    });
+%}
+
+### 14.14 Login con la contraseña nueva: 200
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "recepcion.noche@sga.local", "contrasena": "Noche2027" }
+
+> {%
+    client.test("14.14 200 login con la contraseña nueva", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 14.15 Canal por rol: el huésped 1 crea una reserva PORTAL a su nombre: 201
+POST {{host}}/api/reservas
+Authorization: Bearer {{tokenHuesped1}}
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{cu14Entrada}}",
+  "fechaSalida": "{{cu14Salida}}",
+  "horaEstimadaLlegada": "16:00",
+  "canalOrigen": "PORTAL",
+  "titular": { "nombre": "Laura Gomez", "tipoDocumento": "CC", "numeroDocumento": "1094777888", "email": "huesped1@sga.local", "telefono": "3135550404" },
+  "ocupantes": [ { "nombre": "Laura Gomez", "tipoDocumento": "CC", "numeroDocumento": "1094777888", "fechaNacimiento": "1995-01-30" } ]
+}
+
+> {%
+    client.test("14.15 201 huésped crea PORTAL a su nombre", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.estado === "PENDIENTE", "La reserva nace PENDIENTE");
+    });
+    client.global.set("reservaHuesped1", response.body.codigo);
+%}
+
+### 14.16 Mis reservas del huésped 1: trae la de 14.15 y no la de Ana Gómez de 3.4
+GET {{host}}/api/reservas/mias
+Authorization: Bearer {{tokenHuesped1}}
+
+> {%
+    client.test("14.16 200 mis reservas del huésped 1", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var codigos = response.body.contenido.map(function (r) { return r.codigo; });
+        client.assert(codigos.indexOf(client.global.get("reservaHuesped1")) >= 0, "Faltó la reserva de 14.15");
+        client.assert(codigos.indexOf(client.global.get("codigo")) < 0, "Trajo una reserva ajena (3.4)");
+    });
+%}
+
+### 14.17 Mis reservas del huésped 2: no trae la reserva del huésped 1
+GET {{host}}/api/reservas/mias
+Authorization: Bearer {{tokenHuesped2}}
+
+> {%
+    client.test("14.17 200 mis reservas del huésped 2", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var codigos = response.body.contenido.map(function (r) { return r.codigo; });
+        client.assert(codigos.indexOf(client.global.get("reservaHuesped1")) < 0, "Trajo la reserva del huésped 1");
+    });
+%}
+
+### 14.18 Mis reservas con filtro de estado PENDIENTE
+GET {{host}}/api/reservas/mias?estado=PENDIENTE
+Authorization: Bearer {{tokenHuesped1}}
+
+> {%
+    client.test("14.18 200 mis reservas PENDIENTE", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.every(function (r) { return r.estado === "PENDIENTE"; }), "Solo PENDIENTE");
+    });
+%}
+
+### 14.19 403 Recepción en /api/reservas/mias (solo el huésped tiene historial propio)
+GET {{host}}/api/reservas/mias
+Authorization: Bearer {{tokenRecepcion}}
+
+> {%
+    client.test("14.19 403 recepción en mis reservas", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
+    });
+%}
+
+### 14.20 Mi perfil de administrador (para tener su id)
+GET {{host}}/api/usuarios/me
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.20 200 perfil del administrador", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.rol === "ADMINISTRADOR", "Rol: " + response.body.rol);
+    });
+    client.global.set("adminId", response.body.id);
+%}
+
+### 14.21 409 El administrador no puede desactivarse a sí mismo
+PUT {{host}}/api/usuarios/{{adminId}}/desactivar
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.21 409 desactivarse a sí mismo", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje === "No se puede desactivar a sí mismo", response.body.mensaje);
+    });
+%}
+
+### 14.22 Buscar el id del huésped 1 en el listado de huéspedes
+GET {{host}}/api/usuarios?rol=HUESPED
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.22 200 huéspedes", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var huesped1 = response.body.contenido.filter(function (u) { return u.correo === "huesped1@sga.local"; })[0];
+    client.global.set("huesped1Id", huesped1.id);
+%}
+
+### 14.23 409 No se desactiva al huésped 1: es titular de la reserva PENDIENTE de 14.15
+PUT {{host}}/api/usuarios/{{huesped1Id}}/desactivar
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.23 409 titular de reservas activas", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("titular de reservas") >= 0, response.body.mensaje);
+    });
+%}
+
+### 14.24 Desactivar al usuario nuevo (sin reservas): 200, eliminación lógica
+PUT {{host}}/api/usuarios/{{usuarioNuevoId}}/desactivar
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("14.24 200 usuario desactivado", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.activo === false, "Debía quedar inactivo");
+    });
+%}
+
+### 14.25 401 El usuario desactivado ya no inicia sesión
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "recepcion.noche@sga.local", "contrasena": "Noche2027" }
+
+> {%
+    client.test("14.25 401 login de un usuario inactivo", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.mensaje === "Credenciales inválidas", response.body.mensaje);
     });
 %}
