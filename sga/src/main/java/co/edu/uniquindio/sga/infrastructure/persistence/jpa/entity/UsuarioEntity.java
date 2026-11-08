@@ -42,6 +42,9 @@ public class UsuarioEntity {
     @Column(name = "rol", nullable = false, length = 20)
     private RolUsuario rol;
 
+    @Column(name = "foto_url", length = 500)
+    private String fotoUrl; // opcional: URL de la foto de perfil (7.2)
+
     @Column(name = "activo", nullable = false)
     private boolean activo = true; // eliminación lógica (7.2 y 12.4)
 }

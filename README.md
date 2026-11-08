@@ -104,7 +104,7 @@ La base es en memoria, así que cada vez que arranca la app se cargan solos esto
 
 ## Endpoints
 
-Son 52 operaciones: las 50 de esta lista y las 2 de autenticación (ver [Seguridad](#seguridad)). Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
+Son 61 operaciones: las 51 de esta lista y las 10 de autenticación y usuarios (ver [Seguridad](#seguridad)). Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
 
 **Reservas**
 - `POST /api/reservas` crear una reserva (201 con `Location`); acepta mascotas opcionales (`cantidadMascotas`, `pesoMascotaMasPesadaKg`)
@@ -115,6 +115,7 @@ Son 52 operaciones: las 50 de esta lista y las 2 de autenticación (ver [Segurid
 - `PUT /api/reservas/{codigo}/cancelar` cancelar con la retención de la política congelada
 - `PUT /api/reservas/{codigo}/no-show` declarar no-show
 - `GET /api/reservas/llegadas` y `GET /api/reservas/salidas` llegadas y salidas previstas de un día (hoy si no se manda `fecha`)
+- `GET /api/reservas/mias` historial del huésped: solo sus reservas, con filtro opcional de estado
 
 **Operación en recepción**
 - `PUT /api/reservas/{codigo}/registrar-llegada` registrar la llegada (el apartamento pasa a OCUPADO)
@@ -163,13 +164,13 @@ Son 52 operaciones: las 50 de esta lista y las 2 de autenticación (ver [Segurid
 - `GET /api/politica-cancelacion/versiones` versiones de la política
 - `PUT /api/politica-cancelacion` publicar una versión nueva
 
-El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger, que muestra las 52 operaciones, y en el `openapi.yaml`, que todavía describe las 50 sin autenticación.
+El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`. Los dos describen las 61 operaciones, y en cada operación protegida el `openapi.yaml` dice qué roles la pueden usar.
 
-Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
+Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **401** cuando falta el token o no es válido, **403** cuando el rol, el propietario o el canal no lo permiten, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección de 179 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404. Cada petición valida su respuesta con `client.test`.
+En `sga/docs/api/sga.http` dejamos una colección de 209 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404, los casos de seguridad (401, 403 por rol, por propietario y por canal) y la gestión de usuarios. Cada petición valida su respuesta con `client.test`.
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -189,19 +190,21 @@ En `sga/docs/api/sga.http` dejamos una colección de 179 peticiones que recorre 
     - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
     - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
     - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
-- **Verificación:** las 262 pruebas pasan (`./gradlew test --rerun`), las 179 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Verificación:** las 280 pruebas pasan (`./gradlew clean test`), las 209 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
 
 ## Seguridad
 
 Los endpoints exigen un token JWT, salvo el login, el registro y las herramientas de desarrollo (Swagger y consola H2). Cada endpoint define qué roles lo usan y, en reservas y folios, el huésped solo accede a lo suyo: **401** es que falta el token o no sirve, **403** que el rol no lo permite o la reserva no es suya.
 
-**Crear la clave.** La aplicación no arranca sin ella y nunca va al repositorio. En `sga/`:
+**Crear la clave.** La aplicación no arranca sin ella. En `sga/`:
 
 ```bash
 echo "sga.jwt.secret=$(openssl rand -base64 48)" > src/main/resources/application-secrets.properties
 ```
 
-La plantilla es `application-secrets.properties.example`. En despliegue se usa la variable de entorno `SGA_JWT_SECRET`.
+> **`application-secrets.properties` nunca se sube al repositorio.** Está en `.gitignore` y cada integrante genera su propia clave con el comando de arriba; no se comparte por chat ni por correo. Si una clave llega a GitHub se considera comprometida: hay que sacar el archivo (`git rm --cached`) y generar una nueva, porque borrar el commit no basta.
+
+La plantilla es `application-secrets.properties.example`. En despliegue y en GitHub Actions se usa la variable de entorno `SGA_JWT_SECRET`.
 
 **Usuarios iniciales.** Son datos de prueba de H2, no credenciales reales:
 
@@ -223,7 +226,29 @@ curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/
   -d '{"correo":"recepcion@sga.local","contrasena":"Recepcion2026"}'
 ```
 
-**Usar el token.** Envíelo en el encabezado `Authorization: Bearer <token>`. En Swagger UI, péguelo en el botón **Authorize**.
+**Usar el token.** Envíelo en el encabezado `Authorization: Bearer <token>`. En Swagger UI, péguelo en el botón **Authorize**. Sin token, o con un token mal firmado o vencido, la respuesta es 401 con el `ErrorResponse` y el encabezado `WWW-Authenticate: Bearer`.
+
+**Canal por rol al crear una reserva** (`POST /api/reservas`): el huésped solo reserva por `PORTAL` y a su nombre (el documento del titular debe ser el del token), la recepción solo por `DIRECTO` y el administrador por cualquiera de los dos. Si no se cumple, responde 403. Es una regla de acceso, no de negocio: la verifica `CanalPorRolVerificador`, fuera del dominio.
+
+**Usuarios** (solo el administrador). Aquí se asignan los roles internos; el registro público siempre crea huéspedes. No hay `DELETE`:
+
+- `POST /api/usuarios` crear un usuario de cualquier rol (201 con `Location`). Valida lo mismo que el registro y responde 409 si el correo o el documento ya existen.
+- `GET /api/usuarios` listar 10 por página, con filtros opcionales `rol` y `activo`.
+- `GET /api/usuarios/{id}` consultar un usuario (404 si no existe).
+- `PUT /api/usuarios/{id}/rol` cambiar el rol.
+- `PUT /api/usuarios/{id}/desactivar` eliminación lógica. Responde 409 si el usuario es titular de reservas PENDIENTE, CONFIRMADA o EN_CURSO, o si el administrador intenta desactivarse a sí mismo. No se borran el titular ni sus reservas, y un usuario inactivo ya no inicia sesión (401).
+
+**Mi perfil** (cualquier usuario autenticado, siempre sobre el usuario del token):
+
+- `GET /api/usuarios/me` consultar mi perfil.
+- `PUT /api/usuarios/me` actualizar nombre, teléfono y foto (`fotoUrl`). El correo no es editable.
+- `PUT /api/usuarios/me/contrasena` cambiar la contraseña con `contrasenaActual` y `contrasenaNueva` (204). Si la actual no coincide, responde 400.
+
+**Mis reservas** (solo el huésped): `GET /api/reservas/mias` lista las reservas cuyo titular tiene el documento del token. Un huésped nunca ve reservas de otros.
+
+Ninguna respuesta incluye la contraseña.
+
+**CORS.** El frontend puede llamar a la API desde los orígenes de `sga.cors.origenes-permitidos` en `application.properties` (por defecto `http://localhost:5173` y `http://localhost:3000`). Se permiten `GET`, `POST`, `PUT` y `OPTIONS`, los encabezados `Authorization` y `Content-Type`, y el navegador puede leer `Location`. Para otro origen, agréguelo a esa propiedad separado por comas.
 
 ## Forma de trabajo
 

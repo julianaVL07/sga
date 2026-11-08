@@ -1,11 +1,14 @@
 package co.edu.uniquindio.sga.infrastructure.rest.exception;
 
 import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
+import co.edu.uniquindio.sga.application.exception.ContrasenaActualIncorrectaException;
 import co.edu.uniquindio.sga.application.exception.BloqueoNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.NovedadNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.application.exception.TemporadaNoEncontradaException;
+import co.edu.uniquindio.sga.application.exception.UsuarioNoDesactivableException;
+import co.edu.uniquindio.sga.application.exception.UsuarioNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.UsuarioYaRegistradoException;
 import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -51,6 +54,13 @@ public class GlobalExceptionHandler {
                 "Formato inválido: revise el JSON, las fechas (AAAA-MM-DD) y los valores permitidos", req, null);
     }
 
+    /** 400: la contraseña actual del cambio de contraseña no coincide (Guía 12, 7.2). */
+    @ExceptionHandler(ContrasenaActualIncorrectaException.class)
+    public ResponseEntity<ErrorResponse> contrasenaActualIncorrecta(ContrasenaActualIncorrectaException ex,
+                                                                    HttpServletRequest req) {
+        return construir(HttpStatus.BAD_REQUEST, ex.getMessage(), req, null);
+    }
+
     /** 404: el identificador no existe (excepciones de aplicación). */
     @ExceptionHandler({ReservaNoEncontradaException.class, ApartamentoNoEncontradoException.class,
             FolioNoEncontradoException.class, TemporadaNoEncontradaException.class, BloqueoNoEncontradoException.class,
@@ -68,6 +78,19 @@ public class GlobalExceptionHandler {
     /** 409: el correo o el documento del registro ya pertenecen a otro usuario (Guía 12). */
     @ExceptionHandler(UsuarioYaRegistradoException.class)
     public ResponseEntity<ErrorResponse> usuarioYaRegistrado(UsuarioYaRegistradoException ex, HttpServletRequest req) {
+        return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    /** 404: el usuario pedido no existe (Guía 12, 7.2). */
+    @ExceptionHandler(UsuarioNoEncontradoException.class)
+    public ResponseEntity<ErrorResponse> usuarioNoEncontrado(UsuarioNoEncontradoException ex, HttpServletRequest req) {
+        return construir(HttpStatus.NOT_FOUND, ex.getMessage(), req, null);
+    }
+
+    /** 409: el usuario es titular de reservas vigentes o el administrador intenta desactivarse (Guía 12, 7.2). */
+    @ExceptionHandler(UsuarioNoDesactivableException.class)
+    public ResponseEntity<ErrorResponse> usuarioNoDesactivable(UsuarioNoDesactivableException ex,
+                                                               HttpServletRequest req) {
         return construir(HttpStatus.CONFLICT, ex.getMessage(), req, null);
     }
 
