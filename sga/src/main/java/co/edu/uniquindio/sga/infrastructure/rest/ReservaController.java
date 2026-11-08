@@ -33,7 +33,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -116,6 +119,30 @@ public class ReservaController {
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
         FiltroReservas filtro = new FiltroReservas(estado, mapper.aIdentificacion(apartamento), canal, titular,
                 desde, hasta);
+        Pagina<Reserva> reservas = listarReservasUseCase.ejecutar(filtro, pagina);
+        return ResponseEntity.ok(PaginaMapper.aResponse(reservas, mapper::aResumen));
+    }
+
+    /** 7.1. GET /api/reservas/mias?estado=&pagina=0: historial del huésped */
+    @GetMapping("/mias")
+    @PreAuthorize("hasAuthority('HUESPED')")
+    @Operation(summary = "Listar mis reservas",
+            description = "Historial del huésped: solo las reservas cuyo titular tiene el documento del token, 10 por "
+                    + "página (12.4). El estado es opcional. La numeración de páginas empieza en 0")
+    @ApiResponse(responseCode = "200", description = "Página de reservas del huésped (puede venir vacía)")
+    @ApiResponse(responseCode = "400", description = "Página negativa o estado mal escrito")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
+    public ResponseEntity<PaginaResponse<ReservaResumenResponse>> listarMias(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) EstadoReserva estado,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "La página no puede ser negativa") int pagina) {
+        String documento = jwt.getClaimAsString("documento");
+        // Sin documento, FiltroReservas no filtraría por titular y el huésped vería reservas ajenas
+        if (documento == null || documento.isBlank()) {
+            throw new AccessDeniedException("El token no trae el documento del usuario");
+        }
+        FiltroReservas filtro = new FiltroReservas(estado, null, null, documento, null, null);
         Pagina<Reserva> reservas = listarReservasUseCase.ejecutar(filtro, pagina);
         return ResponseEntity.ok(PaginaMapper.aResponse(reservas, mapper::aResumen));
     }
