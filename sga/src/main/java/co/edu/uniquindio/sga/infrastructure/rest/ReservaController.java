@@ -72,7 +72,10 @@ public class ReservaController {
 
     /** CU-03. POST /api/reservas */
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR')")
+    // El canal según el rol es regla de acceso, no de negocio: depende de quién inició sesión
+    // y el dominio no conoce usuarios (3.6)
+    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR') "
+            + "and @canalPorRol.puedeCrear(#request, authentication)")
     @Operation(summary = "Crear una reserva",
             description = "Crea la reserva en PENDIENTE, congela cotización y política (RN-22) y abre su folio con el "
                     + "depósito de garantía (RP-02), si la llegada es desde las 20:00, la recepción nocturna (RP-03) "
