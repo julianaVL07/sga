@@ -41,7 +41,7 @@ Convenciones:
 | RN-16 Los movimientos del folio son inmutables; una corrección es un movimiento inverso; un folio cerrado no admite movimientos | `Folio.validarAbierto`, `Folio.registrarMovimientoInverso`, `Folio.cargoEn`, `Cargo.inverso`; la lista de cargos y pagos se expone inmodificable | CU-06, CU-15, corrección de cargos (7.1) | `POST /api/reservas/{codigo}/folio/correcciones`, `/pagos`, `/cargos` | 201 (12.5); 409 (5.24, 12.6, 12.9, 12.10) | `FolioTest#registrarMovimientoInversoCorrigeElSaldo`, `FolioTest#cargosYPagosNoSeEditanNiSeBorran`, `FolioTest#rechazarCorreccionInvalida` | `FolioControllerIntegracionTest#registrarCorreccion`, `FolioControllerIntegracionTest#correccionResponde409`, `FolioControllerIntegracionTest#cargoDeServicioResponde409`, `FolioControllerIntegracionTest#pagarTodoYCerrar`, `ReservaControllerIntegracionTest#cicloCompletoDeUnaReserva` |
 | RN-17 El folio se cierra con saldo cero o con autorización del administrador | `Folio.cerrar`, `Folio.cerrarConAutorizacion`, `AutorizacionCierre.<constructor>`, `LiquidacionSalidaService.registrarSalida` | CU-05, CU-06, CU-07 | `PUT /api/reservas/{codigo}/folio/cerrar`, `POST .../folio/autorizacion-cierre`, `PUT /api/reservas/{codigo}/registrar-salida` | 200 (3.10, 6.1, 12.8); 409 (5.25, 5.26) | `FolioTest#rechazarCierreConSaldoPendienteSinAutorizacion` | `FolioControllerIntegracionTest#pagarTodoYCerrar`, `FolioControllerIntegracionTest#cierreAutorizadoConSaldo`, `ReservaControllerIntegracionTest#cicloCompletoDeUnaReserva` |
 | RN-18 Una reserva externa sobre noches ocupadas se rechaza y se registra como conflicto | `ConciliacionCanalExternoService.procesarMensajeExterno`, `ConflictoCanal.registrar` | CU-08 | `POST /api/canales/{canal}/reservas` | 409 con `EventoCanalResponse` `RECHAZADO_CONFLICTO` (5.27) | `ConciliacionCanalExternoServiceTest#reservaExternaSobreNochesOcupadas`, `ConciliacionCanalExternoServiceTest#reservaExternaSobreNochesLibres` | `CanalExternoControllerIntegracionTest#nochesVendidasResponden409`, `CanalExternoControllerIntegracionTest#cicloDeUnaReservaDelCanal` |
-| RN-19 Canal + identificador externo es único; las reservas externas entran solo por el canal | `ConciliacionCanalExternoService.procesarMensajeExterno`, `EventoCanal.auditar`, `CreacionReservaService.registrarNuevaReserva` (duplicado), `Reserva.validarIdentificadorExterno`; `CreacionReservaService.registrarReservaPropia` rechaza el canal `EXTERNO` en `POST /api/reservas` y pone `PORTAL` si no llega canal | CU-03, CU-08 | `POST /api/canales/{canal}/reservas` (duplicado), `POST /api/reservas` con canal `EXTERNO` | 200 `DUPLICADO_IGNORADO` (4.6); 409 (5.28) | `ConciliacionCanalExternoServiceTest#mensajeRepetidoSeIgnora`, `ConciliacionCanalExternoServiceTest#mensajeNuevoSeAcepta` | `CanalExternoControllerIntegracionTest#cicloDeUnaReservaDelCanal`, `DatosInicialesReservasIntegracionTest#hayReservasEnTodosLosCanales` |
+| RN-19 Canal + identificador externo es único; las reservas externas entran solo por el canal | `ConciliacionCanalExternoService.procesarMensajeExterno`, `EventoCanal.auditar`, `CreacionReservaService.registrarNuevaReserva` (duplicado), `Reserva.validarIdentificadorExterno`; `CreacionReservaService.registrarReservaPropia` rechaza el canal `EXTERNO` en `POST /api/reservas` y pone `PORTAL` si no llega canal | CU-03, CU-08 | `POST /api/canales/{canal}/reservas` (duplicado), `POST /api/reservas` con canal `EXTERNO` | 200 `DUPLICADO_IGNORADO` (4.6); 403 (5.28): desde la Guía 12 el canal por rol corta `EXTERNO` antes del dominio (sección 6) | `ConciliacionCanalExternoServiceTest#mensajeRepetidoSeIgnora`, `ConciliacionCanalExternoServiceTest#mensajeNuevoSeAcepta` | `CanalExternoControllerIntegracionTest#cicloDeUnaReservaDelCanal`, `DatosInicialesReservasIntegracionTest#hayReservasEnTodosLosCanales` |
 | RN-20 Tiempo de preparación entre una salida y una entrada el mismo día | `DisponibilidadApartamentoService.conflictoDeInventario`, `Alojamiento.permiteEntradaElMismoDiaDeUnaSalida`, `TiempoPreparacion.excedeHora` | CU-01, CU-03, CU-11 | `POST /api/reservas` | 409 solo si el tiempo de preparación supera la ventana salida→entrada. En Coral la ventana es de 4 h (11:00 a 15:00) y la preparación de 3 h, así que con los datos iniciales nunca se dispara y no está en `sga.http` | `DisponibilidadApartamentoServiceTest#permitirEntradaElMismoDiaDeUnaSalidaConParametrosDelCoral`, `DisponibilidadApartamentoServiceTest#rechazarEntradaElMismoDiaSiLaPreparacionExcedeLaVentana` | — |
 | RN-21 Una PENDIENTE que supera el plazo de confirmación se vence y no se confirma | `Reserva.confirmar`, `Reserva.estaVencida`, `Reserva.vencerPorPlazoDeConfirmacion`, `PlazoConfirmacion.estaVencida`, `VencimientoReservasService.cancelarReservasExpiradas` | CU-10, CU-14 (tarea programada `VencimientoReservasScheduler`) | `PUT /api/reservas/{codigo}/confirmar` | 409 cuando el plazo (12 h) ya venció; con la app recién arrancada no hay reservas vencidas, por eso no está en `sga.http` | `VencimientoReservasServiceTest#cancelarPendienteQueSuperoElPlazo`, `VencimientoReservasServiceTest#conservarPendienteDentroDelPlazo`, `ReservaTest#vencimientoLiberaLasNoches` | — |
 | RN-22 Cotización y política se congelan al crear la reserva; una versión nueva de la política no cambia las reservas existentes | `Reserva.crear` (guarda cotización y política), `Reserva.validarCondicionesDeCreacion` (la cotización es obligatoria y corresponde a la estancia). La política que se congela es la vigente del repositorio: `PoliticaCancelacionService.vigente`, llamada desde `CrearReservaUseCase.ejecutar` y `ConciliacionCanalExternoService.procesarMensajeExterno`. `PoliticaCancelacion.nuevaVersion` y `PoliticaCancelacionService.actualizar` crean la versión N+1 sin modificar la anterior | CU-03, CU-08, CU-11, CU-30 | `POST /api/reservas` (`versionPoliticaCancelacion` en la respuesta), `PUT /api/politica-cancelacion`, `GET /api/politica-cancelacion/versiones` | 201 (3.4, 11.15, 11.18), 200 (11.16, 11.17, 11.19); no tiene 409 propio | `ReservaTest#valorYPoliticaQuedanCongelados`, `ReservaTest#rechazarReservaSinCotizacion`, `PoliticaCancelacionServiceTest#reservasConservanSuVersion`, `PoliticaCancelacionServiceTest#actualizarCreaNuevaVersion` | `ConfiguracionAlojamientoIntegracionTest#actualizarPoliticaCreaVersion2` |
@@ -99,5 +99,96 @@ de reserva, todas las de 7.4 y todas las de 7.3 (retiro, capacidad, imágenes y 
 cotización frente a una tarifa nueva), RP-01, RP-02, RP-03, L-15 y L-16 dejaron de depender solo de `sga.http` en
 esta entrega. RN-04, RN-10, RN-14, RN-21, RP-01, RP-03, L-15 y L-16 se prueban con caso feliz y caso de falla.
 
-RN-19 tiene pruebas unitarias del identificador único, pero el rechazo del canal `EXTERNO` en `POST /api/reservas`
-solo se comprueba con `sga.http` (5.28).
+RN-19 tiene pruebas unitarias del identificador único. Desde la Guía 12, `POST /api/reservas` con canal `EXTERNO`
+responde 403 por el canal por rol (`CanalPorRolVerificador`, sección 6) antes de llegar a
+`CreacionReservaService.registrarReservaPropia`; `sga.http` lo comprueba en 5.28.
+
+## 6. Seguridad (7.2)
+
+Reglas de acceso de la Guía 12. No son reglas de negocio: dependen de quién inició sesión, y el dominio no conoce
+usuarios (3.6). Por eso se protegen en `infrastructure` (`SecurityConfig`, `@PreAuthorize` de los controladores y
+los verificadores de `infrastructure/security`) y no lanzan `ReglaDominioException`: responden **401** (no sé quién
+eres) o **403** (no tienes permiso), siempre con el `ErrorResponse`. Las peticiones de `sga.http` son las de las
+secciones 13 y 14.
+
+| Regla | Clase que la protege | Endpoint | Código HTTP (`sga.http`) | Pruebas de integración |
+|---|---|---|---|---|
+| Rol por endpoint: cada operación declara qué roles la usan (tabla 6.1); sin token o con un token mal firmado o vencido, 401 con `WWW-Authenticate: Bearer` | `SecurityConfig.securityFilterChain` (`anyRequest().authenticated()`, `authenticationEntryPoint`, `accessDeniedHandler`) y el `@PreAuthorize` de cada método de los controladores | Todos salvo `/api/auth/login` y `/api/auth/registro` | 401 (13.6, 13.13), 403 (13.7, 13.12), 200 (13.8) | `SeguridadFiltroIntegracionTest#sinTokenResponde401`, `SeguridadFiltroIntegracionTest#tokenMalFirmadoResponde401`, `AutorizacionIntegracionTest#huespedListaReservasResponde403`, `AutorizacionIntegracionTest#recepcionListaReservasResponde200`, `AutorizacionIntegracionTest#servicioConfirmaResponde403`, `AutorizacionIntegracionTest#servicioPoneFueraDeServicioResponde403` |
+| Propietario de la reserva y de su folio: el huésped solo consulta, cancela y ve el folio de las reservas cuyo titular tiene el documento del token; si la reserva no existe también se niega (403, no 404) | `PropietarioReservaVerificador.esTitular` (`@propietarioReserva`) | `GET /api/reservas/{codigo}`, `PUT /api/reservas/{codigo}/cancelar`, `GET /api/reservas/{codigo}/folio` | 200 (13.9), 403 (13.10) | `AutorizacionIntegracionTest#huespedVeSuReservaResponde200`, `AutorizacionIntegracionTest#huespedVeReservaAjenaResponde403`. El folio usa la misma verificación, pero no tiene una prueba propia |
+| Historial del huésped: solo sus reservas, por el claim `documento`; sin documento en el token se niega | `ReservaController.listarMias` (`FiltroReservas.documentoTitular` = claim `documento`) | `GET /api/reservas/mias` | 200 (14.16, 14.17, 14.18), 403 (14.19) | `AutorizacionIntegracionTest#huespedVeSoloSusReservasEnMias`, `AutorizacionIntegracionTest#recepcionEnMiasResponde403` |
+| Canal por rol al crear una reserva: HUESPED solo `PORTAL` y a su nombre, RECEPCIONISTA solo `DIRECTO`, ADMINISTRADOR `PORTAL` o `DIRECTO` | `CanalPorRolVerificador.puedeCrear` (`@canalPorRol`) | `POST /api/reservas` | 201 (14.15), 403 (13.14, 13.15, 13.16) | `SeguridadFiltroIntegracionTest#huespedCreaPortalPropiaResponde201`, `SeguridadFiltroIntegracionTest#huespedCreaDirectoResponde403`, `SeguridadFiltroIntegracionTest#huespedCreaPortalAjenaResponde403`, `SeguridadFiltroIntegracionTest#recepcionCreaPortalResponde403` |
+| El registro público siempre crea huéspedes, aunque el cuerpo pida otro rol; correo o documento repetido, 409 | `SecurityServiceImpl.registrar` (`RolUsuario.HUESPED` fijo) | `POST /api/auth/registro` | — | `AutenticacionIntegracionTest#registroResponde201ConRolHuesped`, `AutenticacionIntegracionTest#registroRepetidoResponde409` |
+| Los roles internos solo los asigna el administrador: crear usuarios de cualquier rol y cambiar el rol | `UsuarioController` (`hasAuthority('ADMINISTRADOR')`), `UsuarioServiceImpl.crear`, `UsuarioServiceImpl.cambiarRol` | `POST /api/usuarios`, `PUT /api/usuarios/{id}/rol`, `GET /api/usuarios`, `GET /api/usuarios/{id}` | 201 (14.1), 200 (14.2, 14.5, 14.7), 400 (14.8), 403 (14.4), 404 (14.6), 409 (14.3) | `UsuarioControllerIntegracionTest#adminCreaRecepcionistaResponde201`, `UsuarioControllerIntegracionTest#huespedCreaUsuarioResponde403`, `UsuarioControllerIntegracionTest#correoRepetidoResponde409`, `UsuarioControllerIntegracionTest#cambiarRolResponde200` |
+| Eliminación lógica: no se desactiva al titular de reservas PENDIENTE, CONFIRMADA o EN_CURSO, ni el administrador a sí mismo; no se borran el titular ni sus reservas, y el usuario inactivo no inicia sesión | `UsuarioServiceImpl.desactivar` (consulta `ReservaRepository.listar` con `FiltroReservas.documentoTitular`), `CustomUserDetails.isEnabled` | `PUT /api/usuarios/{id}/desactivar`, `POST /api/auth/login` | 200 (14.24), 409 (14.21, 14.23), 401 (14.25) | `UsuarioControllerIntegracionTest#desactivarTitularDeReservaPendienteResponde409`, `UsuarioControllerIntegracionTest#desactivarSinReservasYLoginResponde401`. Que el administrador no se desactive a sí mismo solo se comprueba con `sga.http` (14.21) |
+| El correo no es editable: el perfil propio solo cambia nombre, teléfono y foto, siempre sobre el usuario del token | `ActualizarPerfilRequest` (no trae correo), `UsuarioServiceImpl.actualizarPerfil`, `UsuarioController` (`isAuthenticated()` y `sub` del token) | `GET /api/usuarios/me`, `PUT /api/usuarios/me` | 200 (14.10, 14.11, 14.20) | `UsuarioControllerIntegracionTest#meDevuelveElUsuarioDelToken`, `UsuarioControllerIntegracionTest#actualizarPerfilNoCambiaElCorreo` |
+| Cambio de contraseña: exige la actual (si no coincide, 400) y la nueva sigue la regla del registro; se guarda con BCrypt | `UsuarioServiceImpl.cambiarContrasena` (`PasswordEncoder.matches`), `CambioContrasenaRequest`, `ContrasenaActualIncorrectaException` | `PUT /api/usuarios/me/contrasena` | 400 (14.12), 204 (14.13), 200 (14.14) | `UsuarioControllerIntegracionTest#cambiarContrasena` |
+| CORS: solo los orígenes de `sga.cors.origenes-permitidos` | `CorsConfig.corsConfigurationSource`, `SecurityConfig` (`http.cors`) | Todos (preflight `OPTIONS`) | — | `SeguridadFiltroIntegracionTest#preflightDesdeElFrontendPermiteElOrigen` |
+
+### 6.1 Roles por endpoint
+
+Salen del `@PreAuthorize` de cada método (61 operaciones). Son los mismos roles que el `openapi.yaml` pone en la
+descripción del 403 de cada operación.
+
+| Endpoint | Método del controlador | Roles |
+|---|---|---|
+| `GET /api/alojamiento` | `AlojamientoController.consultar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `PUT /api/alojamiento` | `AlojamientoController.actualizar` | ADMINISTRADOR |
+| `GET /api/apartamentos` | `ApartamentoController.listar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `POST /api/apartamentos` | `ApartamentoController.registrar` | ADMINISTRADOR |
+| `GET /api/apartamentos/disponibles` | `ApartamentoController.buscarDisponibles` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/apartamentos/pendientes-preparacion` | `ApartamentoController.pendientesDePreparacion` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `GET /api/apartamentos/{id}` | `ApartamentoController.detalle` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `PUT /api/apartamentos/{id}` | `ApartamentoController.actualizar` | ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/activar` | `ApartamentoController.activar` | ADMINISTRADOR |
+| `POST /api/apartamentos/{id}/bloqueos` | `ApartamentoController.registrarBloqueo` | ADMINISTRADOR |
+| `GET /api/apartamentos/{id}/bloqueos/{idBloqueo}` | `ApartamentoController.consultarBloqueo` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/iniciar-preparacion` | `ApartamentoController.iniciarPreparacion` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `GET /api/apartamentos/{id}/novedades` | `ApartamentoController.historialNovedades` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `POST /api/apartamentos/{id}/novedades` | `ApartamentoController.registrarNovedad` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `GET /api/apartamentos/{id}/novedades/{idNovedad}` | `ApartamentoController.consultarNovedad` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/poner-fuera-de-servicio` | `ApartamentoController.ponerFueraDeServicio` | ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/restablecer-servicio` | `ApartamentoController.restablecerServicio` | ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/retirar` | `ApartamentoController.retirar` | ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/tarifas` | `ApartamentoController.definirTarifas` | ADMINISTRADOR |
+| `GET /api/apartamentos/{id}/tarifas/historico` | `ApartamentoController.historicoTarifas` | ADMINISTRADOR |
+| `PUT /api/apartamentos/{id}/terminar-preparacion` | `ApartamentoController.terminarPreparacion` | PERSONAL_SERVICIO, ADMINISTRADOR |
+| `POST /api/auth/login` | `SecurityController.login` | Público (`permitAll` en `SecurityConfig`) |
+| `POST /api/auth/registro` | `SecurityController.registrar` | Público (`permitAll` en `SecurityConfig`) |
+| `GET /api/canales/{canal}/disponibilidad` | `CanalExternoController.consultarDisponibilidad` | ADMINISTRADOR |
+| `POST /api/canales/{canal}/reservas` | `CanalExternoController.recibirReserva` | ADMINISTRADOR |
+| `PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar` | `CanalExternoController.cancelarReserva` | ADMINISTRADOR |
+| `POST /api/cotizaciones` | `CotizacionController.cotizar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/politica-cancelacion` | `PoliticaCancelacionController.vigente` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `PUT /api/politica-cancelacion` | `PoliticaCancelacionController.actualizar` | ADMINISTRADOR |
+| `GET /api/politica-cancelacion/versiones` | `PoliticaCancelacionController.versiones` | ADMINISTRADOR |
+| `GET /api/reservas` | `ReservaController.listar` | RECEPCIONISTA, ADMINISTRADOR |
+| `POST /api/reservas` | `ReservaController.crear` | HUESPED, RECEPCIONISTA, ADMINISTRADOR + canal por rol (`@canalPorRol.puedeCrear`) |
+| `GET /api/reservas/calendario` | `OcupacionController.calendario` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/reservas/llegadas` | `ReservaController.llegadas` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/reservas/mias` | `ReservaController.listarMias` | HUESPED |
+| `GET /api/reservas/salidas` | `ReservaController.salidas` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/reservas/{codigo}` | `ReservaController.consultar` | RECEPCIONISTA, ADMINISTRADOR; HUESPED solo si es el titular (`@propietarioReserva.esTitular`) |
+| `PUT /api/reservas/{codigo}` | `ReservaController.modificar` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/cancelar` | `ReservaController.cancelar` | RECEPCIONISTA, ADMINISTRADOR; HUESPED solo si es el titular (`@propietarioReserva.esTitular`) |
+| `PUT /api/reservas/{codigo}/confirmar` | `ReservaController.confirmar` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/reservas/{codigo}/folio` | `FolioController.consultar` | RECEPCIONISTA, ADMINISTRADOR; HUESPED solo si es el titular (`@propietarioReserva.esTitular`) |
+| `POST /api/reservas/{codigo}/folio/autorizacion-cierre` | `FolioController.autorizarCierre` | ADMINISTRADOR |
+| `POST /api/reservas/{codigo}/folio/cargos` | `FolioController.registrarCargo` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/folio/cerrar` | `FolioController.cerrar` | RECEPCIONISTA, ADMINISTRADOR |
+| `POST /api/reservas/{codigo}/folio/correcciones` | `FolioController.registrarCorreccion` | RECEPCIONISTA, ADMINISTRADOR |
+| `POST /api/reservas/{codigo}/folio/pagos` | `FolioController.registrarPago` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/no-show` | `ReservaController.declararNoShow` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/registrar-llegada` | `OperacionReservaController.registrarLlegada` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/registrar-salida` | `OperacionReservaController.registrarSalida` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/temporadas` | `TemporadaController.listar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `POST /api/temporadas` | `TemporadaController.crear` | ADMINISTRADOR |
+| `GET /api/temporadas/{id}` | `TemporadaController.consultar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `POST /api/temporadas/{id}/rangos` | `TemporadaController.agregarRango` | ADMINISTRADOR |
+| `GET /api/usuarios` | `UsuarioController.listar` | ADMINISTRADOR |
+| `POST /api/usuarios` | `UsuarioController.crear` | ADMINISTRADOR |
+| `GET /api/usuarios/me` | `UsuarioController.consultarPerfil` | Cualquier usuario autenticado, sobre su propio usuario (`sub` del token) |
+| `PUT /api/usuarios/me` | `UsuarioController.actualizarPerfil` | Cualquier usuario autenticado, sobre su propio usuario (`sub` del token) |
+| `PUT /api/usuarios/me/contrasena` | `UsuarioController.cambiarContrasena` | Cualquier usuario autenticado, sobre su propio usuario (`sub` del token) |
+| `GET /api/usuarios/{id}` | `UsuarioController.consultar` | ADMINISTRADOR |
+| `PUT /api/usuarios/{id}/desactivar` | `UsuarioController.desactivar` | ADMINISTRADOR |
+| `PUT /api/usuarios/{id}/rol` | `UsuarioController.cambiarRol` | ADMINISTRADOR |
