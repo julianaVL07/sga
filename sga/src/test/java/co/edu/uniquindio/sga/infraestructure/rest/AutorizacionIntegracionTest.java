@@ -1,7 +1,9 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
+import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,10 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -96,6 +102,34 @@ class AutorizacionIntegracionTest {
     void servicioPoneFueraDeServicioResponde403() throws Exception {
         mvc.perform(MockMvcRequestBuilders.put("/api/apartamentos/APT-101/poner-fuera-de-servicio")
                         .with(usuario("PERSONAL_SERVICIO", DOCUMENTO_SERVICIO)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensaje").value(MENSAJE_403));
+    }
+
+    @Test
+    @DisplayName("Historial del huésped 1 en /api/reservas/mias: solo reservas con su documento")
+    void huespedVeSoloSusReservasEnMias() throws Exception {
+        long propias = reservas.listarTodas().stream()
+                .filter(reserva -> reserva.getTitular().documento().numero().equals(DOCUMENTO_HUESPED_1))
+                .count();
+
+        String cuerpo = mvc.perform(MockMvcRequestBuilders.get("/api/reservas/mias")
+                        .with(usuario("HUESPED", DOCUMENTO_HUESPED_1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(propias))
+                .andReturn().getResponse().getContentAsString();
+
+        List<String> codigos = JsonPath.read(cuerpo, "$.contenido[*].codigo");
+        assertFalse(codigos.isEmpty());
+        codigos.forEach(codigo -> assertEquals(DOCUMENTO_HUESPED_1, reservas.buscarPorCodigo(new CodigoReserva(codigo))
+                .orElseThrow().getTitular().documento().numero()));
+    }
+
+    @Test
+    @DisplayName("Recepción en /api/reservas/mias: 403")
+    void recepcionEnMiasResponde403() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get("/api/reservas/mias")
+                        .with(usuario("RECEPCIONISTA", DOCUMENTO_RECEPCION)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.mensaje").value(MENSAJE_403));
     }
