@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthen
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.web.cors.CorsConfigurationSource;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
@@ -38,11 +39,14 @@ public class SecurityConfig {
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
     // Mapper JSON que Spring Boot 4 ya configura para los controladores: el mismo formato del ErrorResponse
     private final JsonMapper jsonMapper;
+    private final CorsConfigurationSource corsConfigurationSource;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
+                // CORS antes de la autenticación: el preflight OPTIONS del navegador no lleva token
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // Permite que la consola de H2 se muestre en un iframe del mismo origen
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
