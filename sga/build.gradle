@@ -29,6 +29,10 @@ dependencies {
 	// --- OpenAPI / Swagger UI (Guía 08) ---
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
 
+	// --- Seguridad: Spring Security + validación de JWT (Guía 12) ---
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+
 	compileOnly 'org.projectlombok:lombok'
 
 	runtimeOnly 'com.h2database:h2'
@@ -38,6 +42,7 @@ dependencies {
 	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testCompileOnly 'org.projectlombok:lombok'
@@ -47,4 +52,5 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	environment 'SGA_JWT_SECRET', "${UUID.randomUUID()}${UUID.randomUUID()}"
 }

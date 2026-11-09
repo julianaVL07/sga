@@ -1,10 +1,12 @@
 package co.edu.uniquindio.sga.infraestructure.rest;
 
+import co.edu.uniquindio.sga.infraestructure.config.SeguridadPruebasConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -29,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Las pruebas comparten la base H2 con las demás clases, así que las de "hoy" no cuentan filas: verifican que
  * todo lo que llega tenga el estado y la fecha del día.
  */
+@Import(SeguridadPruebasConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class OcupacionControllerIntegracionTest {
