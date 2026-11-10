@@ -194,7 +194,7 @@ En `sga/docs/api/sga.http` dejamos una colección de 209 peticiones que recorre 
 
 ## Seguridad
 
-Los endpoints exigen un token JWT, salvo el login, el registro y las herramientas de desarrollo (Swagger y consola H2). Cada endpoint define qué roles lo usan y, en reservas y folios, el huésped solo accede a lo suyo: **401** es que falta el token o no sirve, **403** que el rol no lo permite o la reserva no es suya.
+Los endpoints exigen un token JWT, salvo el login, el registro, las consultas públicas del visitante y las herramientas de desarrollo (Swagger y consola H2). Cada endpoint define qué roles lo usan y, en reservas y folios, el huésped solo accede a lo suyo: **401** es que falta el token o no sirve, **403** que el rol no lo permite o la reserva no es suya.
 
 **Crear la clave.** La aplicación no arranca sin ella. En `sga/`:
 
@@ -225,6 +225,15 @@ La plantilla es `application-secrets.properties.example`. En despliegue y en Git
 curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" \
   -d '{"correo":"recepcion@sga.local","contrasena":"Recepcion2026"}'
 ```
+
+**Consultas públicas del visitante.** Responden sin token para que cualquiera pueda ver la oferta antes de iniciar sesión. Son solo lecturas y la cotización; los `PUT` y `POST` de esas mismas rutas siguen siendo del administrador:
+
+- `GET /api/apartamentos`, `GET /api/apartamentos/disponibles` y `GET /api/apartamentos/{id}`.
+- `GET /api/alojamiento` y `GET /api/politica-cancelacion`.
+- `GET /api/temporadas` y `GET /api/temporadas/{id}`.
+- `POST /api/cotizaciones` (calcula el valor, no crea la reserva).
+
+Reservar, consultar reservas y cualquier otra operación sí piden el token.
 
 **Usar el token.** Envíelo en el encabezado `Authorization: Bearer <token>`. En Swagger UI, péguelo en el botón **Authorize**. Sin token, o con un token mal firmado o vencido, la respuesta es 401 con el `ErrorResponse` y el encabezado `WWW-Authenticate: Bearer`.
 
