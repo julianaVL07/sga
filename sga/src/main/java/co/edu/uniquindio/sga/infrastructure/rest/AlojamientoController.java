@@ -33,13 +33,11 @@ public class AlojamientoController {
 
     /** CU-28. GET /api/alojamiento */
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
+    @PreAuthorize("permitAll()")
     @Operation(summary = "Consultar el alojamiento",
             description = "Datos, ubicación, horario, normas de convivencia, servicios adicionales y parámetros "
                     + "vigentes de la sección 6 (solo lectura: se configuran en application.properties)")
     @ApiResponse(responseCode = "200", description = "El alojamiento")
-    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
-    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<AlojamientoResponse> consultar() {
         return ResponseEntity.ok(mapper.aAlojamientoResponse(configuracionAlojamientoUseCase.consultar()));
     }
