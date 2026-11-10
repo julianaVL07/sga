@@ -3025,6 +3025,142 @@ Content-Type: application/json
     });
 %}
 
+# ----------------------------------------------------------------------------------------------------
+# Consultas públicas del visitante: responden sin token (permitAll). Las escrituras de esas mismas rutas
+# y el resto de cada módulo siguen pidiendo el JWT: 401 sin token.
+# ----------------------------------------------------------------------------------------------------
+
+### 13.17 Consulta pública sin token: listar apartamentos
+GET {{host}}/api/apartamentos?pagina=0
+
+> {%
+    client.test("13.17 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(Array.isArray(response.body.contenido), "Se esperaba la página de apartamentos");
+    });
+%}
+
+### 13.18 Consulta pública sin token: buscar apartamentos disponibles
+GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas50}}&salida={{hoyMas52}}&ocupantes=2
+
+> {%
+    client.test("13.18 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.19 Consulta pública sin token: detalle de un apartamento
+GET {{host}}/api/apartamentos/APT-101
+
+> {%
+    client.test("13.19 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.identificacion === "APT-101", "Se esperaba APT-101");
+    });
+%}
+
+### 13.20 Consulta pública sin token: datos del alojamiento
+GET {{host}}/api/alojamiento
+
+> {%
+    client.test("13.20 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.21 Consulta pública sin token: política de cancelación vigente
+GET {{host}}/api/politica-cancelacion
+
+> {%
+    client.test("13.21 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.22 Consulta pública sin token: listar temporadas
+GET {{host}}/api/temporadas?pagina=0
+
+> {%
+    client.test("13.22 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.23 Consulta pública sin token: detalle de una temporada
+GET {{host}}/api/temporadas/T-BASE
+
+> {%
+    client.test("13.23 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.24 Consulta pública sin token: cotizar una estancia
+POST {{host}}/api/cotizaciones
+Content-Type: application/json
+
+{
+  "identificacionApartamento": "APT-101",
+  "fechaEntrada": "{{hoyMas50}}",
+  "fechaSalida": "{{hoyMas52}}",
+  "ocupantes": [
+    { "nombre": "Ana Gómez", "fechaNacimiento": "1990-05-20" },
+    { "nombre": "Sofía Gómez", "fechaNacimiento": "2021-03-02" }
+  ]
+}
+
+> {%
+    client.test("13.24 200 sin token", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
+
+### 13.25 Ruta protegida sin token: Apartamentos, pendientes de preparación (mismo patrón que el detalle público)
+GET {{host}}/api/apartamentos/pendientes-preparacion
+
+> {%
+    client.test("13.25 401 sin token", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.path === "/api/apartamentos/pendientes-preparacion", "path: " + response.body.path);
+    });
+%}
+
+### 13.26 Ruta protegida sin token: Alojamiento, actualizar los datos
+PUT {{host}}/api/alojamiento
+Content-Type: application/json
+
+{ "nombre": "Apartahotel Coral" }
+
+> {%
+    client.test("13.26 401 sin token", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.path === "/api/alojamiento", "path: " + response.body.path);
+    });
+%}
+
+### 13.27 Ruta protegida sin token: Política de cancelación, versiones
+GET {{host}}/api/politica-cancelacion/versiones
+
+> {%
+    client.test("13.27 401 sin token", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.path === "/api/politica-cancelacion/versiones", "path: " + response.body.path);
+    });
+%}
+
+### 13.28 Ruta protegida sin token: Temporadas, crear una temporada
+POST {{host}}/api/temporadas
+Content-Type: application/json
+
+{ "id": "T-SIN-TOKEN", "nombre": "Sin token" }
+
+> {%
+    client.test("13.28 401 sin token", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.path === "/api/temporadas", "path: " + response.body.path);
+    });
+%}
+
 ### Sección 14: USUARIOS, PERFIL, CAMBIO DE CONTRASEÑA E HISTORIAL DEL HUÉSPED (Guía 12, 7.1 y 7.2)
 
 # ====================================================================================================

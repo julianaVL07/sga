@@ -38,12 +38,10 @@ public class PoliticaCancelacionController {
 
     /** CU-30. GET /api/politica-cancelacion */
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
+    @PreAuthorize("permitAll()")
     @Operation(summary = "Consultar la política de cancelación vigente",
             description = "La única versión vigente (7.4): la que se congela en cada reserva nueva (RN-22)")
     @ApiResponse(responseCode = "200", description = "La versión vigente")
-    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
-    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     public ResponseEntity<PoliticaCancelacionResponse> vigente() {
         return ResponseEntity.ok(mapper.aPoliticaResponse(politicaCancelacionUseCase.vigente()));
     }

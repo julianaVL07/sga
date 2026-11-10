@@ -35,14 +35,12 @@ public class CotizacionController {
 
     /** CU-02. POST /api/cotizaciones */
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('HUESPED', 'RECEPCIONISTA', 'ADMINISTRADOR', 'PERSONAL_SERVICIO')")
+    @PreAuthorize("permitAll()")
     @Operation(summary = "Cotizar una estancia",
             description = "Calcula noche a noche con la tarifa de cada temporada (RN-05, RP-01) y solo cobra a los "
                     + "ocupantes desde 6 años (RN-06). No crea la reserva")
     @ApiResponse(responseCode = "200", description = "Cotización con el detalle por noche")
     @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
-    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
-    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
     @ApiResponse(responseCode = "404", description = "No existe un apartamento con esa identificación")
     @ApiResponse(responseCode = "409", description = "Fechas inválidas, estancia mínima o apartamento sin tarifa")
     public ResponseEntity<CotizacionResponse> cotizar(@Valid @RequestBody CotizarEstanciaRequest request) {

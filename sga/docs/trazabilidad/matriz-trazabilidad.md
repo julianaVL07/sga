@@ -113,7 +113,8 @@ secciones 13 y 14.
 
 | Regla | Clase que la protege | Endpoint | Código HTTP (`sga.http`) | Pruebas de integración |
 |---|---|---|---|---|
-| Rol por endpoint: cada operación declara qué roles la usan (tabla 6.1); sin token o con un token mal firmado o vencido, 401 con `WWW-Authenticate: Bearer` | `SecurityConfig.securityFilterChain` (`anyRequest().authenticated()`, `authenticationEntryPoint`, `accessDeniedHandler`) y el `@PreAuthorize` de cada método de los controladores | Todos salvo `/api/auth/login` y `/api/auth/registro` | 401 (13.6, 13.13), 403 (13.7, 13.12), 200 (13.8) | `SeguridadFiltroIntegracionTest#sinTokenResponde401`, `SeguridadFiltroIntegracionTest#tokenMalFirmadoResponde401`, `AutorizacionIntegracionTest#huespedListaReservasResponde403`, `AutorizacionIntegracionTest#recepcionListaReservasResponde200`, `AutorizacionIntegracionTest#servicioConfirmaResponde403`, `AutorizacionIntegracionTest#servicioPoneFueraDeServicioResponde403` |
+| Rol por endpoint: cada operación declara qué roles la usan (tabla 6.1); sin token o con un token mal firmado o vencido, 401 con `WWW-Authenticate: Bearer` | `SecurityConfig.securityFilterChain` (`anyRequest().authenticated()`, `authenticationEntryPoint`, `accessDeniedHandler`) y el `@PreAuthorize` de cada método de los controladores | Todos salvo `/api/auth/login`, `/api/auth/registro` y las consultas públicas del visitante (fila siguiente) | 401 (13.6, 13.13, 13.25, 13.26, 13.27, 13.28), 403 (13.7, 13.12), 200 (13.8) | `SeguridadFiltroIntegracionTest#sinTokenResponde401`, `SeguridadFiltroIntegracionTest#tokenMalFirmadoResponde401`, `AutorizacionIntegracionTest#huespedListaReservasResponde403`, `AutorizacionIntegracionTest#recepcionListaReservasResponde200`, `AutorizacionIntegracionTest#servicioConfirmaResponde403`, `AutorizacionIntegracionTest#servicioPoneFueraDeServicioResponde403` |
+| Consultas públicas del visitante: ver la oferta y cotizar sin iniciar sesión; solo lecturas y la cotización, las escrituras de esas rutas siguen siendo del administrador | `SecurityConfig.securityFilterChain` (`requestMatchers(HttpMethod.GET, ...)` y `requestMatchers(HttpMethod.POST, "/api/cotizaciones")` con `permitAll()`; `GET /api/apartamentos/pendientes-preparacion` se declara antes como `authenticated()`) y `@PreAuthorize("permitAll()")` en esos métodos | `GET /api/apartamentos`, `GET /api/apartamentos/disponibles`, `GET /api/apartamentos/{id}`, `GET /api/alojamiento`, `GET /api/politica-cancelacion`, `GET /api/temporadas`, `GET /api/temporadas/{id}`, `POST /api/cotizaciones` | 200 sin token (13.17 a 13.24), 401 (13.25, 13.26, 13.28) | `RutasPublicasIntegracionTest` (las 8 consultas responden 200 sin token; `pendientesDePreparacionSinTokenResponde401`, `actualizarAlojamientoSinTokenResponde401`, `registrarApartamentoSinTokenResponde401`) |
 | Propietario de la reserva y de su folio: el huésped solo consulta, cancela y ve el folio de las reservas cuyo titular tiene el documento del token; si la reserva no existe también se niega (403, no 404) | `PropietarioReservaVerificador.esTitular` (`@propietarioReserva`) | `GET /api/reservas/{codigo}`, `PUT /api/reservas/{codigo}/cancelar`, `GET /api/reservas/{codigo}/folio` | 200 (13.9), 403 (13.10) | `AutorizacionIntegracionTest#huespedVeSuReservaResponde200`, `AutorizacionIntegracionTest#huespedVeReservaAjenaResponde403`. El folio usa la misma verificación, pero no tiene una prueba propia |
 | Historial del huésped: solo sus reservas, por el claim `documento`; sin documento en el token se niega | `ReservaController.listarMias` (`FiltroReservas.documentoTitular` = claim `documento`) | `GET /api/reservas/mias` | 200 (14.16, 14.17, 14.18), 403 (14.19) | `AutorizacionIntegracionTest#huespedVeSoloSusReservasEnMias`, `AutorizacionIntegracionTest#recepcionEnMiasResponde403` |
 | Canal por rol al crear una reserva: HUESPED solo `PORTAL` y a su nombre, RECEPCIONISTA solo `DIRECTO`, ADMINISTRADOR `PORTAL` o `DIRECTO` | `CanalPorRolVerificador.puedeCrear` (`@canalPorRol`) | `POST /api/reservas` | 201 (14.15), 403 (13.14, 13.15, 13.16) | `SeguridadFiltroIntegracionTest#huespedCreaPortalPropiaResponde201`, `SeguridadFiltroIntegracionTest#huespedCreaDirectoResponde403`, `SeguridadFiltroIntegracionTest#huespedCreaPortalAjenaResponde403`, `SeguridadFiltroIntegracionTest#recepcionCreaPortalResponde403` |
@@ -127,17 +128,17 @@ secciones 13 y 14.
 ### 6.1 Roles por endpoint
 
 Salen del `@PreAuthorize` de cada método (61 operaciones). Son los mismos roles que el `openapi.yaml` pone en la
-descripción del 403 de cada operación.
+descripción del 403 de cada operación; las consultas públicas no tienen 403 y declaran `security: []`.
 
 | Endpoint | Método del controlador | Roles |
 |---|---|---|
-| `GET /api/alojamiento` | `AlojamientoController.consultar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/alojamiento` | `AlojamientoController.consultar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `PUT /api/alojamiento` | `AlojamientoController.actualizar` | ADMINISTRADOR |
-| `GET /api/apartamentos` | `ApartamentoController.listar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/apartamentos` | `ApartamentoController.listar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `POST /api/apartamentos` | `ApartamentoController.registrar` | ADMINISTRADOR |
-| `GET /api/apartamentos/disponibles` | `ApartamentoController.buscarDisponibles` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/apartamentos/disponibles` | `ApartamentoController.buscarDisponibles` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `GET /api/apartamentos/pendientes-preparacion` | `ApartamentoController.pendientesDePreparacion` | PERSONAL_SERVICIO, ADMINISTRADOR |
-| `GET /api/apartamentos/{id}` | `ApartamentoController.detalle` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/apartamentos/{id}` | `ApartamentoController.detalle` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `PUT /api/apartamentos/{id}` | `ApartamentoController.actualizar` | ADMINISTRADOR |
 | `PUT /api/apartamentos/{id}/activar` | `ApartamentoController.activar` | ADMINISTRADOR |
 | `POST /api/apartamentos/{id}/bloqueos` | `ApartamentoController.registrarBloqueo` | ADMINISTRADOR |
@@ -157,8 +158,8 @@ descripción del 403 de cada operación.
 | `GET /api/canales/{canal}/disponibilidad` | `CanalExternoController.consultarDisponibilidad` | ADMINISTRADOR |
 | `POST /api/canales/{canal}/reservas` | `CanalExternoController.recibirReserva` | ADMINISTRADOR |
 | `PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar` | `CanalExternoController.cancelarReserva` | ADMINISTRADOR |
-| `POST /api/cotizaciones` | `CotizacionController.cotizar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
-| `GET /api/politica-cancelacion` | `PoliticaCancelacionController.vigente` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `POST /api/cotizaciones` | `CotizacionController.cotizar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
+| `GET /api/politica-cancelacion` | `PoliticaCancelacionController.vigente` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `PUT /api/politica-cancelacion` | `PoliticaCancelacionController.actualizar` | ADMINISTRADOR |
 | `GET /api/politica-cancelacion/versiones` | `PoliticaCancelacionController.versiones` | ADMINISTRADOR |
 | `GET /api/reservas` | `ReservaController.listar` | RECEPCIONISTA, ADMINISTRADOR |
@@ -180,9 +181,9 @@ descripción del 403 de cada operación.
 | `PUT /api/reservas/{codigo}/no-show` | `ReservaController.declararNoShow` | RECEPCIONISTA, ADMINISTRADOR |
 | `PUT /api/reservas/{codigo}/registrar-llegada` | `OperacionReservaController.registrarLlegada` | RECEPCIONISTA, ADMINISTRADOR |
 | `PUT /api/reservas/{codigo}/registrar-salida` | `OperacionReservaController.registrarSalida` | RECEPCIONISTA, ADMINISTRADOR |
-| `GET /api/temporadas` | `TemporadaController.listar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/temporadas` | `TemporadaController.listar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `POST /api/temporadas` | `TemporadaController.crear` | ADMINISTRADOR |
-| `GET /api/temporadas/{id}` | `TemporadaController.consultar` | HUESPED, RECEPCIONISTA, ADMINISTRADOR, PERSONAL_SERVICIO |
+| `GET /api/temporadas/{id}` | `TemporadaController.consultar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `POST /api/temporadas/{id}/rangos` | `TemporadaController.agregarRango` | ADMINISTRADOR |
 | `GET /api/usuarios` | `UsuarioController.listar` | ADMINISTRADOR |
 | `POST /api/usuarios` | `UsuarioController.crear` | ADMINISTRADOR |

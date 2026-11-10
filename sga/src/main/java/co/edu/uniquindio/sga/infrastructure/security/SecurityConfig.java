@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -59,6 +60,19 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/h2-console/**"
                         ).permitAll()
+                        // Mismo patrón que GET /api/apartamentos/{id}: se declara antes para que siga pidiendo token
+                        .requestMatchers(HttpMethod.GET, "/api/apartamentos/pendientes-preparacion").authenticated()
+                        // Consultas públicas del visitante: solo lectura y cotización, sin token
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/apartamentos",
+                                "/api/apartamentos/disponibles",
+                                "/api/apartamentos/{id}",
+                                "/api/alojamiento",
+                                "/api/politica-cancelacion",
+                                "/api/temporadas",
+                                "/api/temporadas/{id}"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/cotizaciones").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

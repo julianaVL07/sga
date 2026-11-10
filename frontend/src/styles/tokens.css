@@ -1,0 +1,156 @@
+/*
+ * Tokens de diseño de Coral.
+ * Las variables --coral-* son la paleta; las variables de shadcn (--background, --primary, ...) se
+ * conectan a ellas, y el bloque @theme las expone a Tailwind (bg-coral, text-texto-suave, rounded-tarjeta...).
+ * El modo oscuro se activa con la clase "dark" en <html>.
+ */
+
+:root {
+  /* Paleta clara */
+  --coral-fondo: #fffaf7;
+  --coral-tarjeta: #ffffff;
+  --coral-texto: #3d1f33;
+  --coral-texto-suave: #7a5a6b;
+  --coral-linea: #eee2e6;
+  --coral-primario: #8e3b6f;
+  --coral-primario-texto: #ffffff;
+  --coral-coral: #e75480; /* solo formas, íconos y precios grandes */
+  --coral-coral-texto: #c2365f; /* coral para texto */
+  --coral-durazno: #fbaa6b;
+  --coral-sol: #ffd96b;
+  --coral-crema: #f7e7e1;
+  --coral-error: #b3261e;
+  /* Superficies ciruela fijas (menú lateral, pie de página, encabezados) */
+  --coral-ciruela: #3d1f33;
+  --coral-ciruela-oscuro: #2a1a24;
+  --coral-ciruela-texto: #f7e7e1;
+  /* Superficie suave sobre el fondo (hover de filas, chips) */
+  --coral-suave: #f7e7e1;
+
+  /* Forma */
+  --radio-boton: 999px;
+  --radio-tarjeta: 20px;
+  --radio-campo: 14px;
+  --radio-tabla: 12px;
+  --sombra-tarjeta: 0 10px 30px rgba(142, 59, 111, 0.1);
+  --alto-control: 44px;
+  --duracion-hover: 150ms;
+
+  /* Conexión con shadcn/ui */
+  --background: var(--coral-fondo);
+  --foreground: var(--coral-texto);
+  --card: var(--coral-tarjeta);
+  --card-foreground: var(--coral-texto);
+  --popover: var(--coral-tarjeta);
+  --popover-foreground: var(--coral-texto);
+  --primary: var(--coral-primario);
+  --primary-foreground: var(--coral-primario-texto);
+  --secondary: var(--coral-crema);
+  --secondary-foreground: var(--coral-texto);
+  --muted: var(--coral-suave);
+  --muted-foreground: var(--coral-texto-suave);
+  --accent: var(--coral-suave);
+  --accent-foreground: var(--coral-texto);
+  --destructive: var(--coral-error);
+  --border: var(--coral-linea);
+  --input: var(--coral-linea);
+  --ring: var(--coral-primario);
+  --radius: var(--radio-campo);
+  --chart-1: var(--coral-coral);
+  --chart-2: var(--coral-durazno);
+  --chart-3: var(--coral-sol);
+  --chart-4: var(--coral-primario);
+  --chart-5: var(--coral-texto-suave);
+  --sidebar: var(--coral-ciruela);
+  --sidebar-foreground: var(--coral-ciruela-texto);
+  --sidebar-primary: var(--coral-coral);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(231, 84, 128, 0.18);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(247, 231, 225, 0.12);
+  --sidebar-ring: var(--coral-coral);
+}
+
+.dark {
+  --coral-fondo: #1e1219;
+  --coral-tarjeta: #271820;
+  --coral-texto: #f7e7e1;
+  --coral-texto-suave: #c9afbd;
+  --coral-linea: #3e2a36;
+  --coral-primario: #f28aaa;
+  --coral-primario-texto: #2a1a24;
+  --coral-coral-texto: #f28aaa;
+  --coral-crema: #33212b;
+  --coral-suave: #33212b;
+  --coral-error: #f2b8b5;
+  --sombra-tarjeta: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Paleta Coral como utilidades de Tailwind */
+  --color-fondo: var(--coral-fondo);
+  --color-tarjeta: var(--coral-tarjeta);
+  --color-texto: var(--coral-texto);
+  --color-texto-suave: var(--coral-texto-suave);
+  --color-linea: var(--coral-linea);
+  --color-coral: var(--coral-coral);
+  --color-coral-texto: var(--coral-coral-texto);
+  --color-durazno: var(--coral-durazno);
+  --color-sol: var(--coral-sol);
+  --color-crema: var(--coral-crema);
+  --color-error: var(--coral-error);
+  --color-ciruela: var(--coral-ciruela);
+  --color-ciruela-oscuro: var(--coral-ciruela-oscuro);
+  --color-ciruela-texto: var(--coral-ciruela-texto);
+
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-titulo: "Playfair Display", ui-serif, Georgia, serif;
+  --font-heading: "Playfair Display", ui-serif, Georgia, serif;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: var(--radio-campo);
+  --radius-xl: 16px;
+  --radius-boton: var(--radio-boton);
+  --radius-tarjeta: var(--radio-tarjeta);
+  --radius-campo: var(--radio-campo);
+  --radius-tabla: var(--radio-tabla);
+
+  --shadow-tarjeta: var(--sombra-tarjeta);
+
+  --spacing-control: var(--alto-control);
+
+  --default-transition-duration: var(--duracion-hover);
+}
