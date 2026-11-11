@@ -15,6 +15,7 @@ import co.edu.uniquindio.sga.domain.entity.Temporada;
 import co.edu.uniquindio.sga.domain.service.CreacionTemporadaService.TarifaApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.CargoAseoMascota;
 import co.edu.uniquindio.sga.domain.valueobject.Coordenada;
+import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
 import co.edu.uniquindio.sga.domain.valueobject.PoliticaCancelacion;
@@ -42,7 +43,11 @@ public interface ConfiguracionMapper {
                 r.horaSalida());
     }
 
-    default AlojamientoResponse aAlojamientoResponse(Alojamiento a) {
+    /**
+     * El depósito de garantía (RP-02) no es parte del agregado Alojamiento: llega del bean DepositoGarantia, el mismo
+     * que usa el folio, para no duplicar el valor configurado.
+     */
+    default AlojamientoResponse aAlojamientoResponse(Alojamiento a, DepositoGarantia deposito) {
         if (a == null) {
             return null;
         }
@@ -60,7 +65,8 @@ public interface ConfiguracionMapper {
                 mascotas.aplica(),
                 aPesos(mascotas.valor()),
                 mascotas.maximoMascotas(),
-                mascotas.pesoMaximoKg());
+                mascotas.pesoMaximoKg(),
+                deposito == null ? 0 : aPesos(deposito.monto()));
         return new AlojamientoResponse(a.getId(), a.getNombre(), a.getDescripcion(), a.getCiudad(),
                 a.getDireccion(), a.getUbicacion().latitud(), a.getUbicacion().longitud(), a.getHoraEntrada(),
                 a.getHoraSalida(), a.getNormaConvivencia(),
