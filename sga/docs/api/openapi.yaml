@@ -2962,6 +2962,7 @@ components:
         cargoAseoMascota: { type: integer, format: int64, example: 110000 }
         maximoMascotas: { type: integer, example: 2 }
         pesoMaximoMascotaKg: { type: integer, example: 10 }
+        depositoGarantia: { type: integer, format: int64, example: 250000, description: 'RP-02: depósito de garantía reembolsable, el mismo que se asienta en el folio de toda reserva nueva' }
 
     AlojamientoResponse:
       type: object

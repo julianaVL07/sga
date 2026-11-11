@@ -4,6 +4,7 @@ import co.edu.uniquindio.sga.application.dto.request.ActualizarAlojamientoReques
 import co.edu.uniquindio.sga.application.dto.response.AlojamientoResponse;
 import co.edu.uniquindio.sga.application.usecase.ConfiguracionAlojamientoUseCase;
 import co.edu.uniquindio.sga.domain.entity.Alojamiento;
+import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
 import co.edu.uniquindio.sga.infrastructure.rest.mapper.ConfiguracionMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,6 +31,8 @@ public class AlojamientoController {
 
     private final ConfiguracionAlojamientoUseCase configuracionAlojamientoUseCase;
     private final ConfiguracionMapper mapper;
+    /** RP-02: el mismo depósito que se asienta en el folio (bean de DomainServiceConfig) */
+    private final DepositoGarantia depositoGarantia;
 
     /** CU-28. GET /api/alojamiento */
     @GetMapping
@@ -39,7 +42,8 @@ public class AlojamientoController {
                     + "vigentes de la sección 6 (solo lectura: se configuran en application.properties)")
     @ApiResponse(responseCode = "200", description = "El alojamiento")
     public ResponseEntity<AlojamientoResponse> consultar() {
-        return ResponseEntity.ok(mapper.aAlojamientoResponse(configuracionAlojamientoUseCase.consultar()));
+        return ResponseEntity.ok(mapper.aAlojamientoResponse(configuracionAlojamientoUseCase.consultar(),
+                depositoGarantia));
     }
 
     /** CU-28. PUT /api/alojamiento */
@@ -57,6 +61,6 @@ public class AlojamientoController {
             + "del horario (L-12)")
     public ResponseEntity<AlojamientoResponse> actualizar(@Valid @RequestBody ActualizarAlojamientoRequest request) {
         Alojamiento alojamiento = configuracionAlojamientoUseCase.actualizar(mapper.aDatos(request));
-        return ResponseEntity.ok(mapper.aAlojamientoResponse(alojamiento));
+        return ResponseEntity.ok(mapper.aAlojamientoResponse(alojamiento, depositoGarantia));
     }
 }

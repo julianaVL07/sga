@@ -34,7 +34,10 @@ public record AlojamientoResponse(
     ) {
     }
 
-    /** Parámetros que rigen hoy (L-09, L-11, L-13 a L-16, RP-01, RP-03). Un null indica que no está configurado. */
+    /**
+     * Parámetros que rigen hoy (L-09, L-11, L-13 a L-16, RP-01, RP-02, RP-03). Un null indica que no está configurado.
+     * depositoGarantia es el mismo depósito (RP-02) que se asienta en el folio de toda reserva nueva.
+     */
     public record ParametrosResponse(
             Integer umbralEdadFacturable,
             Integer tiempoPreparacionHoras,
@@ -48,7 +51,8 @@ public record AlojamientoResponse(
             boolean aceptaMascotas,
             long cargoAseoMascota,
             int maximoMascotas,
-            int pesoMaximoMascotaKg
+            int pesoMaximoMascotaKg,
+            long depositoGarantia
     ) {
     }
 }

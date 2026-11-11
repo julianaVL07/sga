@@ -72,7 +72,9 @@ class ConfiguracionAlojamientoIntegracionTest {
                 .andExpect(jsonPath("$.parametros.horaLimiteNoShow", startsWith("22:00")))
                 .andExpect(jsonPath("$.parametros.estanciaMinimaNoches").value(2))
                 .andExpect(jsonPath("$.parametros.porcentajeAnticipo").value(50))
-                .andExpect(jsonPath("$.parametros.cargoAseoMascota").value(110000));
+                .andExpect(jsonPath("$.parametros.cargoAseoMascota").value(110000))
+                // RP-02: el mismo depósito que se asienta en el folio (sga.alojamiento.deposito-garantia)
+                .andExpect(jsonPath("$.parametros.depositoGarantia").value(250000));
     }
 
     @Test
