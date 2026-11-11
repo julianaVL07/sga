@@ -177,6 +177,8 @@ export interface ParametrosAlojamientoResponse {
   cargoAseoMascota: number
   maximoMascotas: number
   pesoMaximoMascotaKg: number
+  /** RP-02: depósito de garantía reembolsable, el mismo que se asienta en el folio */
+  depositoGarantia: number | null
 }
 
 export interface AlojamientoResponse {
