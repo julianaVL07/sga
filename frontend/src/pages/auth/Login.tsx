@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
@@ -29,8 +29,11 @@ export default function Login() {
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors },
   } = useForm<Datos>({ resolver: zodResolver(esquema), defaultValues: { correo: '', contrasena: '' } })
+  // El correo escrito pasa a la recuperación de contraseña para no tener que repetirlo
+  const correoEscrito = useWatch({ control, name: 'correo' })
 
   const inicio = useMutation({
     mutationFn: (datos: Datos) => login(datos.correo, datos.contrasena),
@@ -70,6 +73,13 @@ export default function Login() {
           <Campo id="contrasena" etiqueta="Contraseña" error={errors.contrasena?.message}>
             <Input type="password" autoComplete="current-password" {...register('contrasena')} />
           </Campo>
+          <Link
+            to="/recuperar"
+            state={{ correo: correoEscrito.trim() }}
+            className="-mt-2 w-fit self-end text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
 
           <Button type="submit" size="lg" className="mt-2 w-full" disabled={inicio.isPending}>
             {inicio.isPending && <Loader2 aria-hidden="true" className="animate-spin" />}
