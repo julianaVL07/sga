@@ -33,6 +33,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
 
+	// --- Correo SMTP para las notificaciones al titular (10.3.2) ---
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
+
 	compileOnly 'org.projectlombok:lombok'
 
 	runtimeOnly 'com.h2database:h2'
