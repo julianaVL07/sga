@@ -15,7 +15,10 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-/** Fila de la tabla conflicto_canal (RN-18): reserva externa rechazada, pendiente de revisión del administrador. */
+/**
+ * Fila de la tabla conflicto_canal (RN-18): reserva externa rechazada, pendiente hasta que el administrador la
+ * resuelve con un motivo.
+ */
 @Entity
 @Table(name = "conflicto_canal")
 @Getter
@@ -34,6 +37,9 @@ public class ConflictoCanalEntity {
     @Column(nullable = false)
     private CanalOrigen canalOrigen;
 
+    @Column(nullable = false, length = 60)
+    private String nombreCanal;
+
     @Column(nullable = false)
     private String identificadorExterno;
 
@@ -43,10 +49,12 @@ public class ConflictoCanalEntity {
     @Column(nullable = false)
     private LocalDate fecha;
 
-    private boolean revisado;
+    private boolean resuelto;
 
     @Column(length = 1000)
-    private String notasAdministrador;
+    private String motivoResolucion;
 
-    private LocalDate fechaRevision;
+    private String resueltoPor;
+
+    private LocalDate fechaResolucion;
 }
