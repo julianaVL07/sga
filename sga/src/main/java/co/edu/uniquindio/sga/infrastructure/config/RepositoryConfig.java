@@ -8,6 +8,7 @@ import co.edu.uniquindio.sga.domain.repository.EventoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.repository.NovedadRepository;
 import co.edu.uniquindio.sga.domain.repository.PoliticaCancelacionRepository;
+import co.edu.uniquindio.sga.domain.repository.RecordatorioRepository;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.repository.ServicioAdicionalRepository;
 import co.edu.uniquindio.sga.domain.repository.TemporadaRepository;
@@ -27,6 +28,8 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaDataReposi
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.NovedadJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.PoliticaCancelacionJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.PoliticaCancelacionJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.RecordatorioEnviadoJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.RecordatorioJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ReservaJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ServicioAdicionalJpaDataRepository;
@@ -101,6 +104,12 @@ public class RepositoryConfig {
     public PoliticaCancelacionRepository politicaCancelacionRepository(
             PoliticaCancelacionJpaDataRepository dataRepository, PoliticaCancelacionPersistenceMapper mapper) {
         return new PoliticaCancelacionJpaRepository(dataRepository, mapper);
+    }
+
+    /** 7.8: último recordatorio enviado por reserva y motivo. */
+    @Bean
+    public RecordatorioRepository recordatorioRepository(RecordatorioEnviadoJpaDataRepository dataRepository) {
+        return new RecordatorioJpaRepository(dataRepository);
     }
 
     @Bean
