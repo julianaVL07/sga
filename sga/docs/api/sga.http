@@ -530,99 +530,20 @@ Content-Type: application/json
     client.global.set("locationNovedad", response.headers.valueOf("Location"));
 %}
 
-### 4.4 CU-08 Consultar disponibilidad desde el canal externo (página 0, 10 por página, 12.4)
-GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2&pagina=0
+### 4.4 CU-08 El JWT del administrador no sirve en una ruta del canal externo: 401
+# Las tres operaciones del canal (disponibilidad, crear y cancelar) se autentican con la credencial del canal en el
+# encabezado X-Canal-Credencial, no con el JWT. El canal externo se prueba completo en canal-externo.http
+# (disponibilidad, reserva aceptada, mensaje repetido RN-19, conflicto RN-18, cancelación y 401). Por eso esta
+# sección salta de 4.4 a 4.9 y la sección 5 no tiene la 5.27: se conservan los números que citan otros documentos.
+GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{hoyMas33}}&ocupantes=2
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
-    client.test("4.4 200 disponibilidad canal paginada", function () {
-        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
-        client.assert(response.body.pagina === 0, "Se esperaba la página 0");
-        client.assert(response.body.tamano === 10, "Se esperaban 10 resultados por página (12.4)");
-        client.assert(response.body.contenido.length <= 10, "Una página trae máximo 10 apartamentos");
-        client.assert(response.body.totalElementos >= response.body.contenido.length, "Total inconsistente");
-    });
-%}
-
-### 4.5 CU-08 Recibir una reserva del canal: ACEPTADO (201)
-POST {{host}}/api/canales/booking/reservas
-Authorization: Bearer {{tokenAdmin}}
-Content-Type: application/json
-
-{
-  "identificadorExterno": "BK-HTTP-0001",
-  "identificacionApartamento": "APT-101",
-  "fechaEntrada": "{{hoyMas30}}",
-  "fechaSalida": "{{hoyMas33}}",
-  "horaEstimadaLlegada": "15:30",
-  "titular": {
-    "nombre": "John Smith",
-    "tipoDocumento": "PA",
-    "numeroDocumento": "PA7770001",
-    "email": "john.smith@mail.com",
-    "telefono": "+15555550808"
-  },
-  "ocupantes": [
-    { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "fechaNacimiento": "1985-02-14" }
-  ]
-}
-
-> {%
-    client.test("4.5 201 ACEPTADO", function () {
-        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
-        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
-    });
-%}
-
-### 4.6 RN-19 El mismo mensaje del canal llega dos veces: DUPLICADO_IGNORADO (200, no se crea otra reserva)
-POST {{host}}/api/canales/booking/reservas
-Authorization: Bearer {{tokenAdmin}}
-Content-Type: application/json
-
-{
-  "identificadorExterno": "BK-HTTP-0001",
-  "identificacionApartamento": "APT-101",
-  "fechaEntrada": "{{hoyMas30}}",
-  "fechaSalida": "{{hoyMas33}}",
-  "horaEstimadaLlegada": "15:30",
-  "titular": {
-    "nombre": "John Smith",
-    "tipoDocumento": "PA",
-    "numeroDocumento": "PA7770001",
-    "email": "john.smith@mail.com",
-    "telefono": "+15555550808"
-  },
-  "ocupantes": [
-    { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "fechaNacimiento": "1985-02-14" }
-  ]
-}
-
-> {%
-    client.test("4.6 200 DUPLICADO_IGNORADO", function () {
-        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
-        client.assert(response.body.resultado === "DUPLICADO_IGNORADO", "El canal debía recibir DUPLICADO_IGNORADO");
-    });
-%}
-
-### 4.7 CU-08 El canal cancela su reserva: ACEPTADO (200)
-PUT {{host}}/api/canales/booking/reservas/BK-HTTP-0001/cancelar
-Authorization: Bearer {{tokenAdmin}}
-
-> {%
-    client.test("4.7 200 cancelación del canal", function () {
-        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
-        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
-    });
-%}
-
-### 4.8 CU-08 El canal cancela una reserva que no existe: RECHAZADO_INVALIDO (422)
-PUT {{host}}/api/canales/booking/reservas/BK-NO-EXISTE/cancelar
-Authorization: Bearer {{tokenAdmin}}
-
-> {%
-    client.test("4.8 422 RECHAZADO_INVALIDO", function () {
-        client.assert(response.status === 422, "Se esperaba 422 y llegó " + response.status);
-        client.assert(response.body.resultado === "RECHAZADO_INVALIDO", "El canal debía recibir RECHAZADO_INVALIDO");
+    client.test("4.4 401 el JWT no autentica al canal externo", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.status === 401, "El cuerpo debía ser un ErrorResponse con status 401");
+        client.assert(response.body.mensaje.indexOf("X-Canal-Credencial") >= 0,
+            "Mensaje inesperado: " + response.body.mensaje);
     });
 %}
 
@@ -1168,27 +1089,6 @@ Authorization: Bearer {{tokenAdmin}}
     client.test("5.26 409 RN-17 salida", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-17"), "Mensaje inesperado: " + response.body.mensaje);
-    });
-%}
-
-### 5.27 RN-18 El canal externo envía una reserva sobre noches ya vendidas: RECHAZADO_CONFLICTO
-POST {{host}}/api/canales/booking/reservas
-Authorization: Bearer {{tokenAdmin}}
-Content-Type: application/json
-
-{
-  "identificadorExterno": "BK-HTTP-0002",
-  "identificacionApartamento": "APT-102",
-  "fechaEntrada": "{{hoyMas12}}",
-  "fechaSalida": "{{hoyMas15}}",
-  "titular": { "nombre": "John Smith", "tipoDocumento": "PA", "numeroDocumento": "PA7770001", "email": "john.smith@mail.com", "telefono": "+15555550808" },
-  "ocupantes": [ { "nombre": "John Smith", "fechaNacimiento": "1985-02-14" } ]
-}
-
-> {%
-    client.test("5.27 409 RN-18", function () {
-        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
-        client.assert(response.body.resultado === "RECHAZADO_CONFLICTO", "El canal debía recibir RECHAZADO_CONFLICTO");
     });
 %}
 
