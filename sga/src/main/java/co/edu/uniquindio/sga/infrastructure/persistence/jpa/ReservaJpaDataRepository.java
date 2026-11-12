@@ -22,7 +22,9 @@ public interface ReservaJpaDataRepository extends JpaRepository<ReservaEntity, L
 
     Optional<ReservaEntity> findByCodigo(String codigo);
 
-    Optional<ReservaEntity> findByCanalOrigenAndIdentificadorCanalExterno(CanalOrigen canal, String identificadorExterno);
+    /** RN-19: nombre del canal externo + identificador externo. */
+    Optional<ReservaEntity> findByNombreCanalExternoAndIdentificadorCanalExterno(String nombreCanal,
+                                                                                 String identificadorExterno);
 
     /** RN-01: comparten al menos una noche (3.1). La noche de salida no se ocupa. */
     @Query("""

@@ -45,6 +45,7 @@ public class ReservaPersistenceMapper {
         e.setTitular(aEmbedable(r.getTitular()));
         e.setOcupantes(new ArrayList<>(r.getOcupantes().stream().map(this::aEmbedable).toList()));
         e.setCanalOrigen(r.getCanalOrigen());
+        e.setNombreCanalExterno(r.getNombreCanalExterno());
         e.setIdentificadorCanalExterno(r.getIdentificadorCanalExterno());
         e.setHoraEstimadaLlegada(r.getHoraEstimadaLlegada());
 
@@ -100,7 +101,8 @@ public class ReservaPersistenceMapper {
                 new Estancia(e.getEstancia().fechaEntrada(), e.getEstancia().fechaSalida()),
                 aTitular(e.getTitular()),
                 e.getOcupantes().stream().map(this::aOcupante).toList(),
-                e.getCanalOrigen(), e.getIdentificadorCanalExterno(), e.getHoraEstimadaLlegada(),
+                e.getCanalOrigen(), e.getNombreCanalExterno(), e.getIdentificadorCanalExterno(),
+                e.getHoraEstimadaLlegada(),
                 aCotizacion(e), aMascotas(e.getMascotas()), aPolitica(e),
                 e.getEstado(), e.getFechaCreacion(), e.getFechaConfirmacion(), e.getFechaRegistro(),
                 e.getFechaSalidaEfectiva(), e.getFechaCancelacion(), e.getMotivoCancelacion());

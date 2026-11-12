@@ -8,6 +8,7 @@ import {
   ConciergeBell,
   FilePlus2,
   ListTodo,
+  Network,
   ScrollText,
   UserRound,
   Users,
@@ -42,6 +43,7 @@ const OPCIONES_ADMINISTRACION: OpcionMenu[] = [
   { etiqueta: 'Política', ruta: '/panel/politica', icono: ScrollText },
   { etiqueta: 'Alojamiento', ruta: '/panel/alojamiento', icono: Building2 },
   { etiqueta: 'Usuarios', ruta: '/panel/usuarios', icono: Users },
+  { etiqueta: 'Canales de venta', ruta: '/panel/canales', icono: Network },
   { etiqueta: 'Reportes', ruta: '/panel/reportes', icono: ChartBar },
 ]
 

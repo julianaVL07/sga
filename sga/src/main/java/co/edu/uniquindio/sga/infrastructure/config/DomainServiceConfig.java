@@ -2,7 +2,10 @@ package co.edu.uniquindio.sga.infrastructure.config;
 
 import co.edu.uniquindio.sga.domain.repository.AlojamientoRepository;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
+import co.edu.uniquindio.sga.domain.port.CredencialesCanal;
 import co.edu.uniquindio.sga.domain.repository.BloqueoRepository;
+import co.edu.uniquindio.sga.domain.repository.CanalVentaRepository;
+import co.edu.uniquindio.sga.domain.service.CanalVentaService;
 import co.edu.uniquindio.sga.domain.repository.ConflictoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.EventoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
@@ -38,7 +41,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 /**
- * Construye los 18 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 19 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -192,5 +195,12 @@ public class DomainServiceConfig {
             CancelarReservaService cancelacion, PoliticaCancelacionService politicas) {
         return new ConciliacionCanalExternoService(reservas, apartamentos, eventos, conflictos,
                 disponibilidad, creacion, cancelacion, politicas);
+    }
+
+    /** 10.3.1: canales de venta y su credencial; los intentos rechazados van a la bitácora (7.8). */
+    @Bean
+    public CanalVentaService canalVentaService(CanalVentaRepository canales, EventoCanalRepository eventos,
+                                               CredencialesCanal credenciales) {
+        return new CanalVentaService(canales, eventos, credenciales);
     }
 }

@@ -3,6 +3,7 @@ package co.edu.uniquindio.sga.infrastructure.config;
 import co.edu.uniquindio.sga.domain.repository.AlojamientoRepository;
 import co.edu.uniquindio.sga.domain.repository.ApartamentoRepository;
 import co.edu.uniquindio.sga.domain.repository.BloqueoRepository;
+import co.edu.uniquindio.sga.domain.repository.CanalVentaRepository;
 import co.edu.uniquindio.sga.domain.repository.ConflictoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.EventoCanalRepository;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
@@ -18,6 +19,8 @@ import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ApartamentoJpaDataRe
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ApartamentoJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.BloqueoJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.BloqueoJpaRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.CanalVentaJpaDataRepository;
+import co.edu.uniquindio.sga.infrastructure.persistence.jpa.CanalVentaJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ConflictoCanalJpaDataRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.ConflictoCanalJpaRepository;
 import co.edu.uniquindio.sga.infrastructure.persistence.jpa.EventoCanalJpaDataRepository;
@@ -74,6 +77,13 @@ public class RepositoryConfig {
     public BloqueoRepository bloqueoRepository(BloqueoJpaDataRepository dataRepository,
                                                ApartamentoPersistenceMapper mapper) {
         return new BloqueoJpaRepository(dataRepository, mapper);
+    }
+
+    /** 10.3.1: canales de venta externos y el hash de su credencial. */
+    @Bean
+    public CanalVentaRepository canalVentaRepository(CanalVentaJpaDataRepository dataRepository,
+                                                     CanalPersistenceMapper mapper) {
+        return new CanalVentaJpaRepository(dataRepository, mapper);
     }
 
     @Bean

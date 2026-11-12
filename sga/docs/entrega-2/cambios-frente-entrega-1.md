@@ -421,7 +421,7 @@ definen el Anexo A, el glosario y 7.7. Así quedó:
 `GET /api/canales/{canal}/disponibilidad` devolvía una lista sin límite. Ahora recibe `pagina` (desde 0, 400 si es
 negativa) y responde `PaginaResponse<ApartamentoResponse>` de 10 en 10, como los demás listados. Las reglas de
 disponibilidad no cambian: se decide la disponibilidad primero y después se pagina. Lo prueba
-`CanalExternoControllerIntegracionTest#disponibilidadPaginada`, y en `sga.http` la petición 4.4.
+`CanalExternoControllerIntegracionTest#disponibilidadPaginada`, y en `canal-externo.http` el paso 1.
 
 ## 13. No incluido en esta entrega
 

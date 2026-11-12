@@ -54,7 +54,7 @@ class DatosInicialesReservasIntegracionTest {
             assertTrue(reservaRepository.listar(filtro, 0, 10).totalElementos() > 0,
                     "No hay reservas del canal " + canal);
         }
-        assertTrue(reservaRepository.buscarPorCanalEIdentificadorExterno(CanalOrigen.EXTERNO, "BK-DEMO-000123")
+        assertTrue(reservaRepository.buscarPorCanalEIdentificadorExterno("booking", "BK-DEMO-000123")
                 .isPresent());
     }
 

@@ -104,7 +104,7 @@ La base es en memoria, así que cada vez que arranca la app se cargan solos esto
 
 ## Endpoints
 
-Son 61 operaciones: las 51 de esta lista y las 10 de autenticación y usuarios (ver [Seguridad](#seguridad)). Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
+Son 74 operaciones: las 58 de esta lista, las 12 de autenticación y usuarios (ver [Seguridad](#seguridad)), la sugerencia de gravedad (ver [Modelo de IA](#modelo-de-ia)) y los 3 reportes del administrador (`GET /api/reportes/ocupacion`, `/ingresos` y `/reservas-por-canal`). Todos los listados devuelven 10 resultados por página y las páginas empiezan en 0 (`?pagina=`).
 
 **Reservas**
 - `POST /api/reservas` crear una reserva (201 con `Location`); acepta mascotas opcionales (`cantidadMascotas`, `pesoMascotaMasPesadaKg`)
@@ -151,10 +151,16 @@ Son 61 operaciones: las 51 de esta lista y las 10 de autenticación y usuarios (
 - `PUT /api/reservas/{codigo}/folio/cerrar` cerrar con saldo cero
 - `POST /api/reservas/{codigo}/folio/autorizacion-cierre` el administrador autoriza cerrar con saldo
 
-**Canal externo**
+**Canal externo** (con la credencial del canal en `X-Canal-Credencial`, sin JWT; ver [Canal externo](#canal-externo))
 - `GET /api/canales/{canal}/disponibilidad` disponibilidad paginada para el canal
 - `POST /api/canales/{canal}/reservas` recibir una reserva del canal
 - `PUT /api/canales/{canal}/reservas/{identificadorExterno}/cancelar` cancelar una reserva del canal
+
+**Canales de venta** (solo el administrador)
+- `POST /api/canales` crear un canal (201 con la credencial en claro, una sola vez) y `GET /api/canales` listarlos sin credenciales
+- `PUT /api/canales/{nombre}/regenerar-credencial` emitir una credencial nueva y `PUT /api/canales/{nombre}/desactivar` eliminación lógica
+- `GET /api/canales/conflictos?estado=` conflictos de canal (RN-18) y `PUT /api/canales/conflictos/{id}/resolver` resolver uno con su motivo
+- `GET /api/canales/eventos?canal=&desde=&hasta=` bitácora de mensajes con los canales (7.8)
 
 **Configuración del alojamiento**
 - `GET /api/alojamiento` y `PUT /api/alojamiento` consultar y actualizar los datos del alojamiento (los parámetros son de solo lectura)
@@ -164,13 +170,13 @@ Son 61 operaciones: las 51 de esta lista y las 10 de autenticación y usuarios (
 - `GET /api/politica-cancelacion/versiones` versiones de la política
 - `PUT /api/politica-cancelacion` publicar una versión nueva
 
-El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`. Los dos describen las 61 operaciones, y en cada operación protegida el `openapi.yaml` dice qué roles la pueden usar.
+El detalle de cada endpoint (parámetros, respuestas y errores) está en Swagger y en el `openapi.yaml`. Los dos describen las 74 operaciones, y en cada operación protegida el `openapi.yaml` dice qué roles la pueden usar.
 
 Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuando el mensaje está mal escrito, **401** cuando falta el token o no es válido, **403** cuando el rol, el propietario o el canal no lo permiten, **404** cuando el recurso no existe y **409** cuando una regla del negocio no lo permite.
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección de 209 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404, los casos de seguridad (401, 403 por rol, por propietario y por canal) y la gestión de usuarios. Cada petición valida su respuesta con `client.test`.
+En `sga/docs/api/sga.http` dejamos una colección de 233 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404, los casos de seguridad (401, 403 por rol, por propietario y por canal) y la gestión de usuarios. Cada petición valida su respuesta con `client.test`.
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -190,7 +196,7 @@ En `sga/docs/api/sga.http` dejamos una colección de 209 peticiones que recorre 
     - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
     - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
     - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
-- **Verificación:** las 280 pruebas pasan (`./gradlew clean test`), las 209 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Verificación:** las 399 pruebas pasan (`./gradlew clean test`), las 233 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
 
 ## Seguridad
 
@@ -330,6 +336,46 @@ sga.recordatorios.activo=true
 # segundo minuto hora día mes día-de-la-semana
 sga.recordatorios.cron=0 0 9 * * *
 ```
+
+## Canal externo
+
+Las plataformas de terceros (por ejemplo Booking) venden el mismo inventario por las tres operaciones de `/api/canales/{canal}/...`. No usan el JWT: cada canal se autentica con **su propia credencial** en el encabezado `X-Canal-Credencial`.
+
+| Caso | Respuesta |
+|---|---|
+| Sin credencial, credencial incorrecta, de otro canal o canal que no existe | **401** con `ErrorResponse` |
+| Credencial correcta pero canal desactivado | **403** con `ErrorResponse` |
+| Reserva aceptada / el mismo identificador externo repetido por el mismo canal (RN-19) | 201 `ACEPTADO` / 200 `DUPLICADO_IGNORADO` |
+| Noches ya vendidas o bloqueadas (RN-18) | 409 `RECHAZADO_CONFLICTO`, y el conflicto queda registrado |
+
+La idempotencia es por canal: el mismo identificador externo enviado por dos canales distintos son dos reservas, y cada canal solo puede cancelar las reservas que él creó. Todo mensaje, también los rechazados por credencial, queda en la bitácora. El administrador gestiona los canales, los conflictos y la bitácora en el panel, en **Administración → Canales de venta** (`/panel/canales`): al crear un canal o regenerar su credencial la ve **una sola vez**, con un botón para copiarla; el SGA solo guarda su hash (BCrypt).
+
+**Credencial del canal de prueba.** Los datos iniciales crean el canal `booking`, el de la reserva externa `BK-DEMO-000123`. Su credencial va en `src/main/resources/application-secrets.properties`, junto a la clave del JWT:
+
+```bash
+echo "sga.canales.credencial-demo=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')" >> src/main/resources/application-secrets.properties
+```
+
+Si no la configuras, la app genera una al arrancar y la escribe en el log:
+
+```
+WARN ... DatosInicialesCanalesConfig : Falta sga.canales.credencial-demo en application-secrets.properties. Credencial generada para el canal externo 'booking' (encabezado X-Canal-Credencial): ...
+```
+
+**Correr el simulador.** `sga/docs/api/canal-externo.http` hace de plataforma externa y es independiente de `sga.http`:
+
+1. Arranca la app desde cero (`./gradlew bootRun`).
+2. Abre `canal-externo.http` y pon en `@credencial` el valor de `sga.canales.credencial-demo` (o el del log). `@canal` ya es `booking`.
+3. En IntelliJ dale a **Run All Requests in File**. Corre en orden y cada petición dice arriba qué debe responder:
+   1. consultar disponibilidad (200);
+   2. reserva externa aceptada (201 `ACEPTADO`);
+   3. el mismo mensaje repetido, con el mismo identificador externo (200 `DUPLICADO_IGNORADO`, no se crea otra reserva);
+   4. una reserva sobre las noches de la reserva CONFIRMADA de APT-102 (409 `RECHAZADO_CONFLICTO`, queda el conflicto);
+   5. cancelar la reserva externa (200 `ACEPTADO`);
+   6. una consulta sin credencial (401).
+4. Para ver el resultado como administrador, entra a **Canales de venta**: en **Bitácora** salen los seis mensajes y en **Conflictos** el del paso 4, listo para resolverlo con un motivo (la reserva vigente no cambia).
+
+Si lo corres dos veces sin reiniciar, el paso 2 responde `DUPLICADO_IGNORADO` y el 5 `RECHAZADO_INVALIDO`, porque esa reserva ya se aceptó y se canceló.
 
 ## Forma de trabajo
 

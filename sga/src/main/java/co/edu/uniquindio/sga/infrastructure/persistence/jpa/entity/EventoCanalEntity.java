@@ -46,6 +46,10 @@ public class EventoCanalEntity {
     @Column(name = "canal_origen", nullable = false)
     private CanalOrigen canalOrigen;
 
+    /** Plataforma que envió el mensaje (por ejemplo "booking"); la bitácora se filtra por este campo (7.8). */
+    @Column(nullable = false, length = 60)
+    private String nombreCanal;
+
     @Column(name = "identificador_externo")
     private String identificadorExterno;
 

@@ -112,6 +112,20 @@ public class CreacionReservaService {
                                          List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
                                          PoliticaCancelacion politica, CanalOrigen canal,
                                          String identificadorExterno, Mascotas mascotas, LocalDateTime ahora) {
+        return registrarNuevaReserva(aptoId, estancia, titular, ocupantes, horaLlegada, cotizacion, politica, canal,
+                null, identificadorExterno, mascotas, ahora);
+    }
+
+    /**
+     * Reserva que llega de un canal externo (CU-08, datos iniciales).
+     *
+     * @param nombreCanalExterno canal que la envió (por ejemplo "booking"); obligatorio solo para EXTERNO. RN-19:
+     *                           el nombre del canal + el identificador externo no se repiten.
+     */
+    public Reserva registrarNuevaReserva(IdentificacionApartamento aptoId, Estancia estancia, Titular titular,
+                                         List<Ocupante> ocupantes, LocalTime horaLlegada, Cotizacion cotizacion,
+                                         PoliticaCancelacion politica, CanalOrigen canal, String nombreCanalExterno,
+                                         String identificadorExterno, Mascotas mascotas, LocalDateTime ahora) {
         requerido(aptoId, "El apartamento es obligatorio");
         requerido(ahora, "La fecha actual es obligatoria");
         Alojamiento alojamiento = alojamientoRepository.obtener()
@@ -119,10 +133,11 @@ public class CreacionReservaService {
         Apartamento apartamento = apartamentoRepository.buscarPorIdentificacion(aptoId)
                 .orElseThrow(() -> new ReglaDominioException("No existe el apartamento " + aptoId.codigo()));
 
-        if (canal == CanalOrigen.EXTERNO && identificadorExterno != null
-                && reservaRepository.buscarPorCanalEIdentificadorExterno(canal, identificadorExterno.trim()).isPresent()) {
-            throw new ReglaDominioException("RN-19: Ya existe una reserva del canal externo con el identificador "
-                    + identificadorExterno);
+        if (canal == CanalOrigen.EXTERNO && nombreCanalExterno != null && identificadorExterno != null
+                && reservaRepository.buscarPorCanalEIdentificadorExterno(nombreCanalExterno.trim(),
+                        identificadorExterno.trim()).isPresent()) {
+            throw new ReglaDominioException("RN-19: Ya existe una reserva del canal " + nombreCanalExterno.trim()
+                    + " con el identificador " + identificadorExterno);
         }
 
         // L-16: la política del alojamiento debe admitir la cantidad y el peso de las mascotas.
@@ -140,7 +155,7 @@ public class CreacionReservaService {
         }
 
         Reserva reserva = Reserva.crear(siguienteCodigo(ahora.getYear()), apartamento, estancia, titular, ocupantes, canal,
-                identificadorExterno, horaLlegada, vigente, mascotasDelGrupo, politica,
+                nombreCanalExterno, identificadorExterno, horaLlegada, vigente, mascotasDelGrupo, politica,
                 alojamiento.getUmbralEdadFacturable(), ahora);
 
         LocalDate hoy = ahora.toLocalDate();

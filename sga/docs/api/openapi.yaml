@@ -19,6 +19,12 @@ info:
     visitante (`security: []`): `GET /api/apartamentos`, `GET /api/apartamentos/disponibles`,
     `GET /api/apartamentos/{id}`, `GET /api/alojamiento`, `GET /api/politica-cancelacion`, `GET /api/temporadas`,
     `GET /api/temporadas/{id}` y `POST /api/cotizaciones`.
+
+    Canal externo (10.3.1): las tres operaciones `/api/canales/{canal}/disponibilidad`, `/api/canales/{canal}/reservas`
+    y `/api/canales/{canal}/reservas/{identificadorExterno}/cancelar` no usan el JWT. El canal se autentica con su
+    propia credencial en el encabezado `X-Canal-Credencial` (`credencialCanal`): sin ella o con una que no es la de
+    ese canal responde `401`, y si el canal está inactivo `403`, siempre con `ErrorResponse`. Cada intento rechazado
+    queda en la bitácora (7.8). El administrador crea los canales y recibe la credencial una sola vez.
   version: 1.0.0
 
 servers:
@@ -37,7 +43,9 @@ tags:
   - name: Folio
     description: 'Cuenta de la reserva: cargos, pagos, saldo y cierre'
   - name: Canal externo
-    description: Integración con plataformas de terceros (CU-08)
+    description: Integración con plataformas de terceros (CU-08), autenticada con la credencial del canal
+  - name: Canales de venta
+    description: Canales externos, su credencial, conflictos (RN-18) y bitácora (7.8). Solo ADMINISTRADOR
   - name: Autenticación
     description: Inicio de sesión, registro público, recuperación de contraseña y emisión del JWT (Guía 12, 7.2)
   - name: Usuarios
@@ -1276,6 +1284,8 @@ paths:
         Apartamentos libres para la estancia y el grupo, con las mismas reglas que CU-01, 10 por página
         (12.4). La consulta queda en la bitácora (7.8). Mapea a `RecibirReservaExternaUseCase.consultarDisponibilidad`.
       operationId: consultarDisponibilidadCanal
+      security:
+        - credencialCanal: []
       parameters:
         - { name: entrada, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-20' }
         - { name: salida, in: query, required: true, schema: { type: string, format: date }, example: '2026-11-22' }
@@ -1291,13 +1301,9 @@ paths:
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '401':
-          $ref: '#/components/responses/NoAutenticado'
+          $ref: '#/components/responses/CredencialCanalInvalida'
         '403':
-          description: 'Sin permiso. Solo ADMINISTRADOR'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/CanalInactivo'
         '409':
           $ref: '#/components/responses/ReglaDeNegocio'
 
@@ -1309,10 +1315,13 @@ paths:
       summary: Recibir una reserva del canal (CU-08)
       description: |
         Si las noches están libres crea la reserva PENDIENTE con su folio (incluye CU-03). Si ya están
-        vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si el identificador externo ya llegó,
-        DUPLICADO_IGNORADO (RN-19). Todo mensaje queda en la bitácora (7.8), también los rechazados.
+        vendidas o bloqueadas responde RECHAZADO_CONFLICTO (RN-18); si ese mismo canal ya envió el identificador
+        externo, DUPLICADO_IGNORADO (RN-19). El mismo identificador desde otro canal es otra reserva. Todo mensaje
+        queda en la bitácora (7.8), también los rechazados.
         Mapea a `RecibirReservaExternaUseCase.ejecutar`.
       operationId: recibirReservaExterna
+      security:
+        - credencialCanal: []
       requestBody:
         required: true
         content:
@@ -1351,13 +1360,9 @@ paths:
         '400':
           $ref: '#/components/responses/DatosInvalidos'
         '401':
-          $ref: '#/components/responses/NoAutenticado'
+          $ref: '#/components/responses/CredencialCanalInvalida'
         '403':
-          description: 'Sin permiso. Solo ADMINISTRADOR'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/CanalInactivo'
         '409':
           description: RECHAZADO_CONFLICTO, las noches ya están vendidas o bloqueadas (RN-18)
           content:
@@ -1386,9 +1391,11 @@ paths:
       tags: [ Canal externo ]
       summary: Cancelar una reserva del canal (CU-08)
       description: |
-        Cancela la reserva que el mismo canal creó con ese identificador; una cancelación repetida responde
-        DUPLICADO_IGNORADO (RN-19). Mapea a `RecibirReservaExternaUseCase.cancelar`.
+        Cancela la reserva que el mismo canal creó con ese identificador (un canal no cancela las de otro); una
+        cancelación repetida responde DUPLICADO_IGNORADO (RN-19). Mapea a `RecibirReservaExternaUseCase.cancelar`.
       operationId: cancelarReservaExterna
+      security:
+        - credencialCanal: []
       responses:
         '200':
           description: ACEPTADO o DUPLICADO_IGNORADO (RN-19)
@@ -1397,6 +1404,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/EventoCanalResponse'
         '401':
+          $ref: '#/components/responses/CredencialCanalInvalida'
+        '403':
+          $ref: '#/components/responses/CanalInactivo'
+        '422':
+          description: RECHAZADO_INVALIDO, no hay una reserva del canal con ese identificador o ya no se puede cancelar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventoCanalResponse'
+
+  # ==================== CANALES DE VENTA: ADMINISTRACIÓN (10.3.1, 7.8) ====================
+
+  /api/canales:
+    post:
+      tags: [ Canales de venta ]
+      summary: Crear un canal de venta
+      description: |
+        Registra una plataforma externa (tipo EXTERNO, activa) y genera su credencial al azar (256 bits). La
+        credencial en claro solo viene en esta respuesta: el SGA guarda su hash BCrypt y no la puede volver a
+        mostrar. El nombre es único y va en la ruta de las operaciones del canal. Mapea a `CanalesVentaUseCase.crear`.
+      operationId: crearCanalVenta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearCanalVentaRequest'
+            example:
+              nombre: expedia
+      responses:
+        '201':
+          description: Canal creado, con la credencial en claro una sola vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredencialCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
           description: 'Sin permiso. Solo ADMINISTRADOR'
@@ -1404,12 +1450,223 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: RECHAZADO_INVALIDO, no hay una reserva del canal con ese identificador o ya no se puede cancelar
+        '409':
+          description: Ya existe un canal con ese nombre, o el nombre está reservado (conflictos, eventos)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EventoCanalResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [ Canales de venta ]
+      summary: Listar canales de venta
+      description: |
+        Activos e inactivos, ordenados por nombre, 10 por página (12.4). Nunca trae la credencial ni su hash.
+        Mapea a `CanalesVentaUseCase.listar`.
+      operationId: listarCanalesVenta
+      parameters:
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de canales (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaCanalVentaResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/canales/{nombre}/regenerar-credencial:
+    parameters:
+      - $ref: '#/components/parameters/NombreCanal'
+    put:
+      tags: [ Canales de venta ]
+      summary: Regenerar la credencial de un canal
+      description: |
+        Emite una credencial nueva; la anterior responde 401 desde ese momento. La nueva solo viene en esta
+        respuesta. Un canal inactivo no recibe credencial nueva. Mapea a `CanalesVentaUseCase.regenerarCredencial`.
+      operationId: regenerarCredencialCanal
+      responses:
+        '200':
+          description: Credencial nueva en claro, una sola vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredencialCanalResponse'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El canal está inactivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/canales/{nombre}/desactivar:
+    parameters:
+      - $ref: '#/components/parameters/NombreCanal'
+    put:
+      tags: [ Canales de venta ]
+      summary: Desactivar un canal
+      description: |
+        Eliminación lógica: el canal, sus reservas, sus conflictos y su bitácora se conservan, pero sus peticiones
+        responden 403 desde ese momento. No hay DELETE. Mapea a `CanalesVentaUseCase.desactivar`.
+      operationId: desactivarCanal
+      responses:
+        '200':
+          description: Canal desactivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanalVentaResponse'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El canal ya estaba inactivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/canales/conflictos:
+    get:
+      tags: [ Canales de venta ]
+      summary: Listar conflictos de canal (RN-18)
+      description: |
+        Reservas externas rechazadas por chocar con una reserva vigente, de la más reciente a la más antigua,
+        10 por página (12.4). Sin estado trae todos. Mapea a `ConflictosCanalUseCase.listar`.
+      operationId: listarConflictosCanal
+      parameters:
+        - { name: estado, in: query, required: false, schema: { $ref: '#/components/schemas/EstadoConflictoCanal' } }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de conflictos (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaConflictoCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/canales/conflictos/{id}/resolver:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del conflicto
+        schema:
+          type: string
+          example: CNF-3f0c2a9e-6d1b-4c3e-9a51-0b7c2d4e8f10
+    put:
+      tags: [ Canales de venta ]
+      summary: Resolver un conflicto de canal (RN-18)
+      description: |
+        Marca el conflicto como RESUELTO con el motivo, el administrador del token (sub) y la fecha. Un conflicto
+        se resuelve una sola vez y nunca se toca la reserva vigente. Mapea a `ConflictosCanalUseCase.resolver`.
+      operationId: resolverConflictoCanal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolverConflictoCanalRequest'
+            example:
+              motivo: Se avisó al canal; el huésped eligió otras fechas
+      responses:
+        '200':
+          description: Conflicto resuelto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictoCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El conflicto ya estaba resuelto (RN-18)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/canales/eventos:
+    get:
+      tags: [ Canales de venta ]
+      summary: Consultar la bitácora de los canales (7.8)
+      description: |
+        Todos los mensajes de los canales: aceptados, duplicados, rechazados y los intentos sin credencial válida o
+        de un canal inactivo. Del más reciente al más antiguo, 10 por página (12.4). Filtros opcionales por canal
+        (sin distinguir mayúsculas) y por fechas (incluidas). Mapea a `BitacoraCanalUseCase.listar`.
+      operationId: listarBitacoraCanales
+      parameters:
+        - { name: canal, in: query, required: false, schema: { type: string }, example: booking }
+        - { name: desde, in: query, required: false, schema: { type: string, format: date } }
+        - { name: hasta, in: query, required: false, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/PaginaApartamentos'
+      responses:
+        '200':
+          description: Página de eventos (el contenido puede venir vacío)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaEventoBitacoraResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La fecha desde es posterior a la fecha hasta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ==================== CU-22 a CU-25: ADMINISTRACIÓN Y TARIFAS (7.3, 7.4) ====================
   # POST /api/apartamentos (CU-22) y PUT /api/apartamentos/{id} (CU-23) están en sus rutas de arriba.
@@ -2510,6 +2767,13 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Token de POST /api/auth/login. Firmado con HS256, emisor sga, vence en 30 minutos.
+    credencialCanal:
+      type: apiKey
+      in: header
+      name: X-Canal-Credencial
+      description: |
+        Credencial del canal externo (10.3.1). La devuelven POST /api/canales y PUT
+        /api/canales/{nombre}/regenerar-credencial una sola vez; debe ser la del canal de la ruta.
 
   parameters:
     CodigoReserva:
@@ -2551,6 +2815,15 @@ components:
       description: Nombre de la plataforma externa que llama; para el dominio es el canal EXTERNO
       schema:
         type: string
+        example: booking
+    NombreCanal:
+      name: nombre
+      in: path
+      required: true
+      description: Nombre del canal de venta
+      schema:
+        type: string
+        pattern: '^[a-z0-9][a-z0-9-]{1,39}$'
         example: booking
     DesdeReporte:
       name: desde
@@ -2615,6 +2888,36 @@ components:
             error: Unauthorized
             mensaje: Debe iniciar sesión o el token no es válido
             path: /api/reservas
+
+    CredencialCanalInvalida:
+      description: |
+        Sin credencial del canal (encabezado X-Canal-Credencial), credencial incorrecta, de otro canal o canal que no
+        existe. El intento queda en la bitácora como RECHAZADO_CREDENCIAL (7.8)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-11-12T14:00:00Z'
+            status: 401
+            error: Unauthorized
+            mensaje: Falta la credencial del canal en el encabezado X-Canal-Credencial
+            path: /api/canales/booking/reservas
+
+    CanalInactivo:
+      description: |
+        La credencial es la del canal, pero el administrador lo desactivó. El intento queda en la bitácora como
+        RECHAZADO_CANAL_INACTIVO (7.8)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-11-12T14:00:00Z'
+            status: 403
+            error: Forbidden
+            mensaje: El canal booking está inactivo
+            path: /api/canales/booking/disponibilidad
 
   schemas:
     # ---------- Apartamentos y operación ----------
@@ -2985,7 +3288,15 @@ components:
 
     ResultadoEventoCanal:
       type: string
-      enum: [ ACEPTADO, RECHAZADO_CONFLICTO, RECHAZADO_INVALIDO, DUPLICADO_IGNORADO ]
+      description: |
+        RECHAZADO_CREDENCIAL y RECHAZADO_CANAL_INACTIVO solo aparecen en la bitácora: son los intentos que no se
+        autenticaron (10.3.1); al canal se le responde 401 o 403 con ErrorResponse.
+      enum: [ ACEPTADO, RECHAZADO_CONFLICTO, RECHAZADO_INVALIDO, DUPLICADO_IGNORADO, RECHAZADO_CREDENCIAL,
+              RECHAZADO_CANAL_INACTIVO ]
+
+    EstadoConflictoCanal:
+      type: string
+      enum: [ PENDIENTE, RESUELTO ]
 
     RegistrarPagoRequest:
       type: object
@@ -3057,6 +3368,108 @@ components:
         identificadorExterno: { type: string }
         tipoEvento: { $ref: '#/components/schemas/TipoEventoCanal' }
         resultado: { $ref: '#/components/schemas/ResultadoEventoCanal' }
+
+    # ---------- Canales de venta (10.3.1, 7.8) ----------
+
+    CrearCanalVentaRequest:
+      type: object
+      required: [ nombre ]
+      properties:
+        nombre:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,39}$'
+          description: Minúsculas, números y guiones; no puede ser conflictos ni eventos
+          example: expedia
+
+    ResolverConflictoCanalRequest:
+      type: object
+      required: [ motivo ]
+      properties:
+        motivo: { type: string, maxLength: 1000 }
+
+    CanalVentaResponse:
+      type: object
+      description: Nunca incluye la credencial ni su hash
+      properties:
+        nombre: { type: string, example: booking }
+        tipo: { type: string, enum: [ EXTERNO ] }
+        activo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time, example: '2026-11-12T10:30:00' }
+
+    CredencialCanalResponse:
+      type: object
+      description: Solo al crear el canal o regenerar su credencial. La credencial no se vuelve a mostrar
+      properties:
+        nombre: { type: string, example: expedia }
+        tipo: { type: string, enum: [ EXTERNO ] }
+        activo: { type: boolean }
+        fechaCreacion: { type: string, format: date-time }
+        credencial:
+          type: string
+          description: Valor del encabezado X-Canal-Credencial (43 caracteres, Base64 para URL)
+          example: q3Vb1tZ8yN0cXv2mJ5rL7aK9sD4fG6hW1eR3tY5uI8o
+
+    ConflictoCanalResponse:
+      type: object
+      properties:
+        id: { type: string }
+        canal: { type: string, example: booking }
+        identificadorExterno: { type: string, example: BK-889202 }
+        detalle: { type: string, description: Con qué reserva o bloqueo chocó }
+        fecha: { type: string, format: date }
+        estado: { $ref: '#/components/schemas/EstadoConflictoCanal' }
+        motivoResolucion: { type: string, nullable: true }
+        resueltoPor: { type: string, nullable: true, description: Correo del administrador que lo resolvió }
+        fechaResolucion: { type: string, format: date, nullable: true }
+
+    EventoBitacoraResponse:
+      type: object
+      properties:
+        id: { type: string }
+        fecha: { type: string, format: date-time }
+        canal: { type: string, example: booking }
+        tipoEvento: { $ref: '#/components/schemas/TipoEventoCanal' }
+        identificadorExterno:
+          type: string
+          nullable: true
+          description: Null en las consultas y en los intentos rechazados antes de leer el mensaje
+        resultado: { $ref: '#/components/schemas/ResultadoEventoCanal' }
+
+    PaginaCanalVentaResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/CanalVentaResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    PaginaConflictoCanalResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ConflictoCanalResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
+
+    PaginaEventoBitacoraResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/EventoBitacoraResponse' }
+        pagina: { type: integer, description: Empieza en 0 }
+        tamano: { type: integer, example: 10 }
+        totalElementos: { type: integer, format: int64 }
+        totalPaginas: { type: integer }
 
     # ---------- CU-22 a CU-25: administración y tarifas (7.3, 7.4) ----------
 

@@ -1,0 +1,184 @@
+# ====================================================================================================
+# SGA - Apartahotel Coral. Simulador del canal externo (CU-08, 10.3.1)
+#
+# Hace de plataforma de terceros: consulta disponibilidad, envía una reserva, la reenvía, envía otra que choca con
+# una reserva vigente, cancela la suya e intenta entrar sin credencial. No usa el JWT: el canal se autentica con su
+# propia credencial en el encabezado X-Canal-Credencial. Es independiente de sga.http.
+#
+# Cómo ejecutarlo:
+#   1. Ponga la credencial del canal en @credencial (abajo). Es el valor de sga.canales.credencial-demo de
+#      src/main/resources/application-secrets.properties. Si no la configuró, la app genera una al arrancar y la
+#      escribe en el log: busque "Credencial generada para el canal externo 'booking'".
+#   2. Arranque la app desde cero (./gradlew bootRun; H2 en memoria carga los datos iniciales).
+#   3. En IntelliJ use "Run All Requests in File". Corre COMPLETO y en orden; cada petición valida su respuesta
+#      con client.test y lleva arriba el resultado esperado.
+# Si lo ejecuta dos veces sin reiniciar, el paso 2 responde DUPLICADO_IGNORADO y el 5 RECHAZADO_INVALIDO (la
+# reserva ya se aceptó y ya se canceló).
+#
+# Datos iniciales que usa (DatosInicialesReservasConfig):
+#   APT-102  CONFIRMADA hoy+12 → hoy+15 (reserva vigente con la que choca el paso 4)
+# La reserva del canal va en APT-301 de hoy+70 a hoy+73, noches libres al arrancar.
+# Todo lo que pasa aquí queda en la bitácora: el administrador la ve en GET /api/canales/eventos y el conflicto
+# del paso 4 en GET /api/canales/conflictos (panel: Administración → Canales de venta).
+# ====================================================================================================
+
+@host = http://localhost:8080
+@canal = booking
+@credencial = pegue-aqui-la-credencial-del-canal
+
+### 1. Consultar disponibilidad
+# Esperado: 200 con la página 0 de apartamentos libres (10 por página, 12.4); APT-301 está entre ellos.
+# La consulta queda en la bitácora como CONSULTA_DISPONIBILIDAD ACEPTADO.
+< {%
+    // Hoy en Colombia (America/Bogota, UTC-5 sin horario de verano), la misma zona del reloj del SGA.
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("simEntrada", fecha(70));
+    client.global.set("simSalida", fecha(73));
+    client.global.set("simConflictoEntrada", fecha(13));
+    client.global.set("simConflictoSalida", fecha(15));
+%}
+GET {{host}}/api/canales/{{canal}}/disponibilidad?entrada={{simEntrada}}&salida={{simSalida}}&ocupantes=2&pagina=0
+X-Canal-Credencial: {{credencial}}
+
+> {%
+    client.test("1. 200 disponibilidad del canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status
+            + ". Si es 401, revise @credencial");
+        client.assert(response.body.pagina === 0, "Se esperaba la página 0");
+        client.assert(response.body.tamano === 10, "Se esperaban 10 resultados por página (12.4)");
+        var ids = response.body.contenido.map(function (a) { return a.identificacion; });
+        client.assert(ids.indexOf("APT-301") >= 0, "APT-301 debía estar disponible: " + ids);
+    });
+%}
+
+### 2. Reserva externa aceptada
+# Esperado: 201 con resultado ACEPTADO. La reserva nace PENDIENTE con su folio (CU-03) y canal EXTERNO.
+POST {{host}}/api/canales/{{canal}}/reservas
+X-Canal-Credencial: {{credencial}}
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-SIM-0001",
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{simEntrada}}",
+  "fechaSalida": "{{simSalida}}",
+  "horaEstimadaLlegada": "15:30",
+  "titular": {
+    "nombre": "Sophie Martin",
+    "tipoDocumento": "PA",
+    "numeroDocumento": "PA8880001",
+    "email": "sophie.martin@mail.com",
+    "telefono": "+33612345678"
+  },
+  "ocupantes": [
+    { "nombre": "Sophie Martin", "tipoDocumento": "PA", "numeroDocumento": "PA8880001", "fechaNacimiento": "1987-04-09" },
+    { "nombre": "Luc Martin", "tipoDocumento": "PA", "numeroDocumento": "PA8880002", "fechaNacimiento": "1985-10-21" }
+  ]
+}
+
+> {%
+    client.test("2. 201 ACEPTADO", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
+        client.assert(response.body.identificadorExterno === "BK-SIM-0001", "Identificador inesperado");
+        client.assert(response.body.tipoEvento === "CREACION_RESERVA", "Tipo de evento inesperado");
+    });
+%}
+
+### 3. RN-19 El MISMO mensaje repetido (mismo identificador externo)
+# Esperado: 200 con resultado DUPLICADO_IGNORADO. No se crea una segunda reserva: el canal reintentó un mensaje
+# que ya había llegado.
+POST {{host}}/api/canales/{{canal}}/reservas
+X-Canal-Credencial: {{credencial}}
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-SIM-0001",
+  "identificacionApartamento": "APT-301",
+  "fechaEntrada": "{{simEntrada}}",
+  "fechaSalida": "{{simSalida}}",
+  "horaEstimadaLlegada": "15:30",
+  "titular": {
+    "nombre": "Sophie Martin",
+    "tipoDocumento": "PA",
+    "numeroDocumento": "PA8880001",
+    "email": "sophie.martin@mail.com",
+    "telefono": "+33612345678"
+  },
+  "ocupantes": [
+    { "nombre": "Sophie Martin", "tipoDocumento": "PA", "numeroDocumento": "PA8880001", "fechaNacimiento": "1987-04-09" },
+    { "nombre": "Luc Martin", "tipoDocumento": "PA", "numeroDocumento": "PA8880002", "fechaNacimiento": "1985-10-21" }
+  ]
+}
+
+> {%
+    client.test("3. 200 DUPLICADO_IGNORADO (RN-19)", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.resultado === "DUPLICADO_IGNORADO", "El canal debía recibir DUPLICADO_IGNORADO");
+    });
+%}
+
+### 4. RN-18 Reserva externa en conflicto (mismas noches que una reserva vigente)
+# Esperado: 409 con resultado RECHAZADO_CONFLICTO. APT-102 ya está vendido de hoy+12 a hoy+15 (CONFIRMADA): la
+# reserva del canal se rechaza, la vigente no cambia y el conflicto queda registrado PENDIENTE para el
+# administrador.
+POST {{host}}/api/canales/{{canal}}/reservas
+X-Canal-Credencial: {{credencial}}
+Content-Type: application/json
+
+{
+  "identificadorExterno": "BK-SIM-0002",
+  "identificacionApartamento": "APT-102",
+  "fechaEntrada": "{{simConflictoEntrada}}",
+  "fechaSalida": "{{simConflictoSalida}}",
+  "titular": {
+    "nombre": "Hans Weber",
+    "tipoDocumento": "PA",
+    "numeroDocumento": "PA9990001",
+    "email": "hans.weber@mail.com",
+    "telefono": "+4915123456789"
+  },
+  "ocupantes": [
+    { "nombre": "Hans Weber", "tipoDocumento": "PA", "numeroDocumento": "PA9990001", "fechaNacimiento": "1979-12-02" }
+  ]
+}
+
+> {%
+    client.test("4. 409 RECHAZADO_CONFLICTO (RN-18)", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.resultado === "RECHAZADO_CONFLICTO", "El canal debía recibir RECHAZADO_CONFLICTO");
+        client.assert(response.body.identificadorExterno === "BK-SIM-0002", "Identificador inesperado");
+    });
+%}
+
+### 5. Cancelar la reserva externa
+# Esperado: 200 con resultado ACEPTADO. Se cancela la reserva BK-SIM-0001 que creó el mismo canal y sus noches
+# vuelven a la venta (RN-12).
+PUT {{host}}/api/canales/{{canal}}/reservas/BK-SIM-0001/cancelar
+X-Canal-Credencial: {{credencial}}
+
+> {%
+    client.test("5. 200 cancelación del canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.resultado === "ACEPTADO", "El canal debía recibir ACEPTADO");
+        client.assert(response.body.tipoEvento === "CANCELACION_RESERVA", "Tipo de evento inesperado");
+    });
+%}
+
+### 6. Sin credencial
+# Esperado: 401 con ErrorResponse ("Falta la credencial del canal en el encabezado X-Canal-Credencial"). El intento
+# queda en la bitácora como RECHAZADO_CREDENCIAL.
+GET {{host}}/api/canales/{{canal}}/disponibilidad?entrada={{simEntrada}}&salida={{simSalida}}&ocupantes=2
+
+> {%
+    client.test("6. 401 sin credencial", function () {
+        client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
+        client.assert(response.body.status === 401, "El cuerpo debía ser un ErrorResponse con status 401");
+        client.assert(response.body.mensaje.indexOf("X-Canal-Credencial") >= 0,
+            "Mensaje inesperado: " + response.body.mensaje);
+    });
+%}

@@ -5,7 +5,6 @@ import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.FiltroReservas;
 import co.edu.uniquindio.sga.domain.repository.Pagina;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
-import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
@@ -52,12 +51,13 @@ public class ReservaJpaRepository implements ReservaRepository {
             throw new IllegalArgumentException("La reserva a guardar es obligatoria");
         }
         if (reserva.getIdentificadorCanalExterno() != null) {
-            dataRepository.findByCanalOrigenAndIdentificadorCanalExterno(reserva.getCanalOrigen(),
+            dataRepository.findByNombreCanalExternoAndIdentificadorCanalExterno(reserva.getNombreCanalExterno(),
                             reserva.getIdentificadorCanalExterno())
                     .filter(existente -> !existente.getCodigo().equals(reserva.getCodigo().valor()))
                     .ifPresent(existente -> {
                         throw new ReglaDominioException("RN-19: ya existe la reserva " + existente.getCodigo()
-                                + " para " + reserva.getCanalOrigen() + " / " + reserva.getIdentificadorCanalExterno());
+                                + " para " + reserva.getNombreCanalExterno() + " / "
+                                + reserva.getIdentificadorCanalExterno());
                     });
         }
         ReservaEntity entidad = mapper.aEntidad(reserva);
@@ -77,11 +77,12 @@ public class ReservaJpaRepository implements ReservaRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<Reserva> buscarPorCanalEIdentificadorExterno(CanalOrigen canal, String identificadorExterno) {
-        if (canal == null || identificadorExterno == null) {
+    public Optional<Reserva> buscarPorCanalEIdentificadorExterno(String nombreCanal, String identificadorExterno) {
+        if (nombreCanal == null || identificadorExterno == null) {
             return Optional.empty();
         }
-        return dataRepository.findByCanalOrigenAndIdentificadorCanalExterno(canal, identificadorExterno.trim())
+        return dataRepository.findByNombreCanalExternoAndIdentificadorCanalExterno(nombreCanal.trim(),
+                        identificadorExterno.trim())
                 .map(mapper::aDominio);
     }
 

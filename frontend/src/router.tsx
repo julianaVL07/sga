@@ -27,6 +27,7 @@ import FormularioApartamento from '@/pages/panel/apartamentos/FormularioApartame
 import ListadoApartamentos from '@/pages/panel/apartamentos/ListadoApartamentos'
 import NovedadesApartamento from '@/pages/panel/apartamentos/NovedadesApartamento'
 import Calendario from '@/pages/panel/calendario/Calendario'
+import Canales from '@/pages/panel/canales/Canales'
 import Alojamiento from '@/pages/panel/configuracion/Alojamiento'
 import Politica from '@/pages/panel/configuracion/Politica'
 import Temporadas from '@/pages/panel/configuracion/Temporadas'
@@ -99,6 +100,7 @@ export const router = createBrowserRouter([
               { path: 'politica', element: <Politica /> },
               { path: 'alojamiento', element: <Alojamiento /> },
               { path: 'usuarios', element: <Usuarios /> },
+              { path: 'canales', element: <Canales /> },
               { path: 'reportes', element: <Reportes /> },
             ],
           },

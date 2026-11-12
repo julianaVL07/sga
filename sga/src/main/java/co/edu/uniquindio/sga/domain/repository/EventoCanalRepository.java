@@ -18,6 +18,6 @@ public interface EventoCanalRepository {
 
     List<EventoCanal> listarPorCanalEIdentificador(CanalOrigen canal, String identificadorExterno);
 
-    /** RN-19: ¿ya se aceptó un mensaje con el mismo canal, identificador externo y tipo? */
-    boolean existeDuplicado(CanalOrigen canal, String identificadorExterno, TipoEventoCanal tipo);
+    /** RN-19: ¿ya se aceptó un mensaje con el mismo nombre de canal, identificador externo y tipo? */
+    boolean existeDuplicado(String nombreCanal, String identificadorExterno, TipoEventoCanal tipo);
 }
