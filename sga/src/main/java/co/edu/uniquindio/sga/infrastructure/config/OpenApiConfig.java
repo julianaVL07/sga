@@ -25,6 +25,7 @@ import java.util.Set;
  * Fija el título, la versión y el orden de los tags del contrato, y declara ErrorResponse (4.6) como cuerpo de
  * los errores: sin esto springdoc pinta los 400, 404 y 409 con el esquema de la respuesta exitosa.
  * Declara además el esquema bearerAuth y lo exige por defecto: es lo que muestra el botón Authorize (Guía 12).
+ * Las operaciones del canal externo piden en cambio credencialCanal (encabezado X-Canal-Credencial, 10.3.1).
  */
 @Configuration
 public class OpenApiConfig {
@@ -35,6 +36,9 @@ public class OpenApiConfig {
 
     private static final String ESQUEMA_BEARER = "bearerAuth";
 
+    /** 10.3.1: las tres operaciones del canal externo usan su credencial en este encabezado, no el JWT. */
+    private static final String ESQUEMA_CREDENCIAL_CANAL = "credencialCanal";
+
     /** Tags en el orden del contrato; springdoc los publica en el orden en que encuentra los controllers. */
     private static final List<Tag> TAGS = List.of(
             new Tag().name("Reservas").description("Ciclo de vida del agregado Reserva en el Apartahotel Coral"),
@@ -43,7 +47,9 @@ public class OpenApiConfig {
                     .description("Disponibilidad y operación de los apartamentos del Apartahotel Coral"),
             new Tag().name("Cotizaciones").description("Valor de una estancia en el Apartahotel Coral antes de reservar"),
             new Tag().name("Folio").description("Cuenta de la reserva: cargos, pagos, saldo y cierre"),
-            new Tag().name("Canal externo").description("Integración con plataformas de terceros (CU-08)"));
+            new Tag().name("Canal externo").description("Integración con plataformas de terceros (CU-08)"),
+            new Tag().name("Canales de venta")
+                    .description("Canales externos, su credencial, conflictos y bitácora (10.3.1, 7.8)"));
 
     @Bean
     public OpenAPI sgaOpenApi() {
@@ -51,7 +57,13 @@ public class OpenApiConfig {
                 .components(new Components().addSecuritySchemes(ESQUEMA_BEARER, new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
-                        .bearerFormat("JWT")))
+                        .bearerFormat("JWT"))
+                        .addSecuritySchemes(ESQUEMA_CREDENCIAL_CANAL, new SecurityScheme()
+                                .type(SecurityScheme.Type.APIKEY)
+                                .in(SecurityScheme.In.HEADER)
+                                .name("X-Canal-Credencial")
+                                .description("Credencial del canal externo; la devuelve POST /api/canales una sola "
+                                        + "vez")))
                 .addSecurityItem(new SecurityRequirement().addList(ESQUEMA_BEARER))
                 .info(new Info()
                         .title("API SGA - Apartahotel Coral")

@@ -1,14 +1,12 @@
 package co.edu.uniquindio.sga.infrastructure.security;
 
-import co.edu.uniquindio.sga.infrastructure.rest.exception.ErrorResponse;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import co.edu.uniquindio.sga.application.usecase.AutenticarCanalUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -23,14 +21,17 @@ import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthen
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
-import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-
-/** Cadena de filtros de seguridad del SGA (Guía 12) */
+/**
+ * Cadenas de filtros de seguridad del SGA (Guía 12). Son dos:
+ * <ol>
+ *   <li>La del canal externo (10.3.1): solo las tres operaciones /api/canales/{canal}/..., autenticadas con la
+ *   credencial del canal (CanalCredencialFilter), sin JWT. Va primero para que la otra no las atienda.</li>
+ *   <li>La del JWT: todas las demás rutas, incluida la administración de los canales.</li>
+ * </ol>
+ */
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor
@@ -38,11 +39,31 @@ public class SecurityConfig {
 
     private final JwtDecoder jwtDecoder;
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
-    // Mapper JSON que Spring Boot 4 ya configura para los controladores: el mismo formato del ErrorResponse
-    private final JsonMapper jsonMapper;
+    private final RespuestaErrorSeguridad respuestaError;
     private final CorsConfigurationSource corsConfigurationSource;
 
+    /** 10.3.1: las tres operaciones del canal externo se autentican con la credencial del canal, no con el JWT. */
     @Bean
+    @Order(1)
+    public SecurityFilterChain canalExternoFilterChain(HttpSecurity http, AutenticarCanalUseCase autenticarCanal)
+            throws Exception {
+        return http
+                .securityMatcher(CanalCredencialFilter.RUTAS)
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new CanalCredencialFilter(autenticarCanal, respuestaError), AuthorizationFilter.class)
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasAuthority(CanalCredencialFilter.AUTORIDAD_CANAL))
+                .exceptionHandling(errores -> errores
+                        .authenticationEntryPoint((request, response, ex) -> respuestaError.escribir(request,
+                                response, HttpStatus.UNAUTHORIZED, "Falta la credencial del canal en el encabezado "
+                                        + CanalCredencialFilter.ENCABEZADO))
+                        .accessDeniedHandler(accessDeniedHandler()))
+                .build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -97,24 +118,16 @@ public class SecurityConfig {
         BearerTokenAuthenticationEntryPoint bearer = new BearerTokenAuthenticationEntryPoint();
         return (request, response, ex) -> {
             bearer.commence(request, response, ex);
-            escribirError(request, response, HttpStatus.UNAUTHORIZED, "Debe iniciar sesión o el token no es válido");
+            respuestaError.escribir(request, response, HttpStatus.UNAUTHORIZED,
+                    "Debe iniciar sesión o el token no es válido");
         };
     }
 
     /** 403: autenticado, pero sin permiso para la ruta */
     @Bean
     public AccessDeniedHandler accessDeniedHandler() {
-        return (request, response, ex) ->
-                escribirError(request, response, HttpStatus.FORBIDDEN, "No tiene permiso para realizar esta operación");
-    }
-
-    private void escribirError(HttpServletRequest request, HttpServletResponse response,
-                               HttpStatus status, String mensaje) throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        jsonMapper.writeValue(response.getOutputStream(), new ErrorResponse(Instant.now(), status.value(),
-                status.getReasonPhrase(), mensaje, request.getRequestURI(), null));
+        return (request, response, ex) -> respuestaError.escribir(request, response, HttpStatus.FORBIDDEN,
+                "No tiene permiso para realizar esta operación");
     }
 
     @Bean
