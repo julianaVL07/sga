@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
+  ChartBar,
   ClipboardList,
   ConciergeBell,
   FilePlus2,
@@ -41,6 +42,7 @@ const OPCIONES_ADMINISTRACION: OpcionMenu[] = [
   { etiqueta: 'Política', ruta: '/panel/politica', icono: ScrollText },
   { etiqueta: 'Alojamiento', ruta: '/panel/alojamiento', icono: Building2 },
   { etiqueta: 'Usuarios', ruta: '/panel/usuarios', icono: Users },
+  { etiqueta: 'Reportes', ruta: '/panel/reportes', icono: ChartBar },
 ]
 
 export const OPCION_PERFIL_PANEL: OpcionMenu = { etiqueta: 'Mi perfil', ruta: '/panel/perfil', icono: UserRound }
