@@ -259,6 +259,34 @@ Ninguna respuesta incluye la contraseña.
 
 **CORS.** El frontend puede llamar a la API desde los orígenes de `sga.cors.origenes-permitidos` en `application.properties` (por defecto `http://localhost:5173` y `http://localhost:3000`). Se permiten `GET`, `POST`, `PUT` y `OPTIONS`, los encabezados `Authorization` y `Content-Type`, y el navegador puede leer `Location`. Para otro origen, agréguelo a esa propiedad separado por comas.
 
+## Modelo de IA
+
+Al registrar una novedad, el SGA sugiere su gravedad (BAJA, MEDIA o ALTA) con una explicación corta (`POST /api/apartamentos/novedades/sugerir-gravedad`, para personal de servicio y administración). Es solo una ayuda: la gravedad que se guarda la elige siempre la persona, y si la IA falla, tarda más de 4 segundos o está apagada, el formulario funciona igual y el error queda en el log.
+
+El proveedor se elige con `sga.ia.proveedor` en `application.properties`:
+
+| Valor | Qué hace |
+|---|---|
+| `local` (por defecto) | Reglas por palabras clave, sin internet ni clave. Por ejemplo, gas, fuga, eléctrico o inundación → ALTA. Es el que usan las pruebas. |
+| `gemini` | Le pregunta a Gemini por la API REST de Google AI Studio. Necesita la clave. |
+| `deshabilitado` | Nunca sugiere nada; en el formulario sale "Sugerencia no disponible". |
+
+**Sacar la clave gratis de Google AI Studio:**
+
+1. Entra a https://aistudio.google.com/apikey con una cuenta de Google.
+2. Pulsa **Create API key** (Crear clave de API) y cópiala. El plan gratuito no pide tarjeta; tiene un límite de peticiones por minuto y por día, de sobra para probar.
+3. Pégala en `src/main/resources/application-secrets.properties` (el mismo archivo de la clave del JWT, que nunca se sube al repositorio):
+
+   ```properties
+   sga.ia.gemini.clave=la-clave-que-copiaste
+   ```
+
+4. Arranca con Gemini: cambia `sga.ia.proveedor=gemini` en `application.properties` o, sin tocar el archivo, `./gradlew bootRun --args='--sga.ia.proveedor=gemini'`.
+
+El modelo (`sga.ia.gemini.modelo`, por defecto `gemini-2.5-flash`), la URL de la API y el tiempo de espera (`sga.ia.gemini.tiempo-espera=PT4S`) también están en `application.properties`. La clave solo va en `application-secrets.properties`; en despliegue se puede pasar con la variable de entorno `SGA_IA_GEMINI_CLAVE`.
+
+**Apagar la IA:** pon `sga.ia.proveedor=deshabilitado` en `application.properties` (o arranca con `--sga.ia.proveedor=deshabilitado`). No hace falta borrar la clave.
+
 ## Forma de trabajo
 
 Trabajamos sobre `develop` con una rama por integrante (`feature/sara-reservas`, `feature/laura-apartamentos` y `feature/juliana-folio`) y Pull Requests para integrar los cambios. `master` guarda las versiones entregadas.

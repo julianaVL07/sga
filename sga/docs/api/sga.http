@@ -3549,3 +3549,167 @@ Content-Type: application/json
         client.assert(response.body.mensaje === "Credenciales inválidas", response.body.mensaje);
     });
 %}
+
+### Sección 15: SUGERENCIA DE GRAVEDAD CON IA (10.2) Y REPORTES DEL ADMINISTRADOR (7.9)
+
+# ====================================================================================================
+# 15. IA Y REPORTES. La sugerencia de gravedad usa el proveedor de sga.ia.proveedor (local por defecto, sin red).
+#     No es bloqueante: si no hay sugerencia responde 200 con disponible=false, y la novedad se registra igual
+#     con la gravedad que elige la persona. Los reportes cubren de hoy-30 a hoy+30 (ambas fechas incluidas);
+#     como las secciones anteriores cambian reservas y folios, aquí se valida la forma y no los valores exactos.
+# ====================================================================================================
+
+### 15.0 Fechas de la sección
+GET {{host}}/api/apartamentos
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.0 la app responde", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+    var DIA = 86400000;
+    var hoy = new Date(Date.now() - 5 * 3600000);
+    function fecha(dias) {
+        return new Date(hoy.getTime() + dias * DIA).toISOString().substring(0, 10);
+    }
+    client.global.set("reporteDesde", fecha(-30));
+    client.global.set("reporteHasta", fecha(30));
+%}
+
+### 15.1 10.2 Sugerir la gravedad de una novedad (personal de servicio): con el proveedor local, ALTA
+POST {{host}}/api/apartamentos/novedades/sugerir-gravedad
+Authorization: Bearer {{tokenServicio}}
+Content-Type: application/json
+
+{ "descripcion": "Huele a gas en la cocina" }
+
+> {%
+    client.test("15.1 200 sugerencia de gravedad", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(typeof response.body.disponible === "boolean", "Falta disponible");
+        if (response.body.disponible) {
+            client.assert(["BAJA", "MEDIA", "ALTA"].indexOf(response.body.gravedad) >= 0, "Gravedad inválida");
+            client.assert(response.body.explicacion.length > 0, "Falta la explicación");
+        }
+    });
+%}
+
+### 15.2 10.2 La gravedad final la elige la persona: la novedad se registra con la que eligió, no con la sugerida
+POST {{host}}/api/apartamentos/APT-301/novedades
+Authorization: Bearer {{tokenServicio}}
+Content-Type: application/json
+
+{
+  "autor": "Personal de servicio",
+  "descripcion": "Huele a gas en la cocina",
+  "gravedad": "MEDIA"
+}
+
+> {%
+    client.test("15.2 201 novedad con la gravedad elegida", function () {
+        client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.gravedad === "MEDIA", "Gravedad inesperada: " + response.body.gravedad);
+    });
+%}
+
+### 15.3 10.2 400 Sugerencia sin descripción
+POST {{host}}/api/apartamentos/novedades/sugerir-gravedad
+Authorization: Bearer {{tokenServicio}}
+Content-Type: application/json
+
+{ "descripcion": "" }
+
+> {%
+    client.test("15.3 400 falta la descripción", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 15.4 10.2 403 Recepción no pide sugerencias (solo PERSONAL_SERVICIO y ADMINISTRADOR)
+POST {{host}}/api/apartamentos/novedades/sugerir-gravedad
+Authorization: Bearer {{tokenRecepcion}}
+Content-Type: application/json
+
+{ "descripcion": "Huele a gas en la cocina" }
+
+> {%
+    client.test("15.4 403 rol sin permiso", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+    });
+%}
+
+### 15.5 7.9 Reporte de ocupación: porcentaje = noches vendidas / (apartamentos activos × noches del periodo)
+GET {{host}}/api/reportes/ocupacion?desde={{reporteDesde}}&hasta={{reporteHasta}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.5 200 reporte de ocupación", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var r = response.body;
+        client.assert(r.nochesPeriodo === 61, "Se esperaban 61 noches y llegaron " + r.nochesPeriodo);
+        client.assert(r.nochesDisponibles === r.apartamentosActivos * r.nochesPeriodo, "Noches disponibles mal calculadas");
+        var esperado = r.nochesDisponibles === 0 ? 0 : Math.round(r.nochesVendidas * 10000 / r.nochesDisponibles) / 100;
+        client.assert(Math.abs(r.porcentajeOcupacion - esperado) < 0.01, "Porcentaje inesperado: " + r.porcentajeOcupacion);
+    });
+%}
+
+### 15.6 7.9 Reporte de ingresos: suma de los pagos por medio de pago (los cargos no cuentan)
+GET {{host}}/api/reportes/ingresos?desde={{reporteDesde}}&hasta={{reporteHasta}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.6 200 reporte de ingresos", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var suma = response.body.medios.reduce(function (s, m) { return s + m.total; }, 0);
+        client.assert(response.body.medios.length === 2, "Se esperaba una fila por medio de pago");
+        client.assert(suma === response.body.total, "El total no es la suma de los medios");
+        client.assert(response.body.total > 0, "Se esperaban pagos en el periodo");
+    });
+%}
+
+### 15.7 7.9 Reporte de reservas por canal: incluye canceladas y no-show
+GET {{host}}/api/reportes/reservas-por-canal?desde={{reporteDesde}}&hasta={{reporteHasta}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.7 200 reservas por canal", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var canales = response.body.canales.map(function (c) { return c.canal; }).join();
+        client.assert(canales === "PORTAL,DIRECTO,EXTERNO", "Canales inesperados: " + canales);
+        var suma = response.body.canales.reduce(function (s, c) { return s + c.total; }, 0);
+        client.assert(suma === response.body.totalReservas, "El total no es la suma de los canales");
+        var noShow = response.body.canales.reduce(function (s, c) { return s + c.noShow; }, 0);
+        client.assert(noShow >= 1, "Debía contar el no-show de los datos iniciales");
+    });
+%}
+
+### 15.8 7.9 409 desde posterior a hasta
+GET {{host}}/api/reportes/ocupacion?desde={{reporteHasta}}&hasta={{reporteDesde}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.8 409 periodo invertido", function () {
+        client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
+        client.assert(response.body.mensaje.indexOf("7.9") === 0, response.body.mensaje);
+    });
+%}
+
+### 15.9 7.9 400 Falta la fecha hasta
+GET {{host}}/api/reportes/ingresos?desde={{reporteDesde}}
+Authorization: Bearer {{tokenAdmin}}
+
+> {%
+    client.test("15.9 400 falta un parámetro", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+    });
+%}
+
+### 15.10 7.9 403 Los reportes son solo del administrador
+GET {{host}}/api/reportes/ocupacion?desde={{reporteDesde}}&hasta={{reporteHasta}}
+Authorization: Bearer {{tokenRecepcion}}
+
+> {%
+    client.test("15.10 403 recepción no ve reportes", function () {
+        client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
+    });
+%}
