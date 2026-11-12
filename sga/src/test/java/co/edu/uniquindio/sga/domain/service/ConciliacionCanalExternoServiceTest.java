@@ -34,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConciliacionCanalExternoServiceTest {
 
     private static final Estancia OCUPADA = new Estancia(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 10, 22));
-    private static final Estancia LIBRE = new Estancia(LocalDate.of(2026, 10, 26), LocalDate.of(2026, 10, 28));
+    private static final String BOOKING = "booking";
+    private static final String AIRBNB = "airbnb";
+    private static final Estancia LIBRE =new Estancia(LocalDate.of(2026, 10, 26), LocalDate.of(2026, 10, 28));
 
     private final EscenarioCoral escenario = new EscenarioCoral();
     private final EventoCanalRepositoryInMemory eventos = new EventoCanalRepositoryInMemory();
@@ -76,7 +78,7 @@ class ConciliacionCanalExternoServiceTest {
         Reserva despues = escenario.reservas.buscarPorCodigo(existente.getCodigo()).orElseThrow();
         assertEquals(EstadoReserva.PENDIENTE, despues.getEstado());
         assertEquals(OCUPADA, despues.getEstancia());
-        assertTrue(escenario.reservas.buscarPorCanalEIdentificadorExterno(CanalOrigen.EXTERNO, "BK-100").isEmpty());
+        assertTrue(escenario.reservas.buscarPorCanalEIdentificadorExterno(BOOKING, "BK-100").isEmpty());
         assertEquals(List.of(ResultadoEventoCanal.RECHAZADO_CONFLICTO), resultadosEnBitacora("BK-100"));
     }
 
@@ -89,7 +91,7 @@ class ConciliacionCanalExternoServiceTest {
 
         assertEquals(ResultadoEventoCanal.ACEPTADO, resultado);
         assertTrue(conflictos.listarTodos().isEmpty());
-        Reserva creada = escenario.reservas.buscarPorCanalEIdentificadorExterno(CanalOrigen.EXTERNO, "BK-200")
+        Reserva creada = escenario.reservas.buscarPorCanalEIdentificadorExterno(BOOKING, "BK-200")
                 .orElseThrow();
         assertEquals(EstadoReserva.PENDIENTE, creada.getEstado());
         assertEquals(CanalOrigen.EXTERNO, creada.getCanalOrigen());
@@ -124,14 +126,50 @@ class ConciliacionCanalExternoServiceTest {
 
         assertEquals(ResultadoEventoCanal.ACEPTADO, resultado);
         assertEquals(2, escenario.reservas.listarTodas().size());
-        assertTrue(escenario.reservas.buscarPorCanalEIdentificadorExterno(CanalOrigen.EXTERNO, "BK-301").isPresent());
+        assertTrue(escenario.reservas.buscarPorCanalEIdentificadorExterno(BOOKING, "BK-301").isPresent());
         assertEquals(List.of(ResultadoEventoCanal.ACEPTADO), resultadosEnBitacora("BK-301"));
     }
 
+    @Test
+    @DisplayName("RN-19: el mismo identificador desde dos canales distintos crea dos reservas; desde el mismo canal no "
+            + "duplica")
+    void mismoIdentificadorEnDosCanales() {
+        Estancia otra = new Estancia(LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 4));
+
+        assertEquals(ResultadoEventoCanal.ACEPTADO, recibir(BOOKING, "BK-400", LIBRE));
+        assertEquals(ResultadoEventoCanal.ACEPTADO, recibir(AIRBNB, "BK-400", otra));
+        assertEquals(ResultadoEventoCanal.DUPLICADO_IGNORADO, recibir(BOOKING, "BK-400", LIBRE));
+
+        assertEquals(2, escenario.reservas.listarTodas().size());
+        Reserva deBooking = escenario.reservas.buscarPorCanalEIdentificadorExterno(BOOKING, "BK-400").orElseThrow();
+        Reserva deAirbnb = escenario.reservas.buscarPorCanalEIdentificadorExterno(AIRBNB, "BK-400").orElseThrow();
+        assertEquals(BOOKING, deBooking.getNombreCanalExterno());
+        assertEquals(AIRBNB, deAirbnb.getNombreCanalExterno());
+        assertEquals(LIBRE, deBooking.getEstancia());
+        assertEquals(otra, deAirbnb.getEstancia());
+    }
+
+    @Test
+    @DisplayName("RN-19: un canal solo cancela las reservas que él mismo creó, aunque otro use el mismo identificador")
+    void cadaCanalCancelaLaSuya() {
+        recibir(BOOKING, "BK-500", LIBRE);
+
+        ResultadoEventoCanal resultado = conciliacion.procesarMensajeExterno(CanalOrigen.EXTERNO, AIRBNB, "BK-500",
+                TipoEventoCanal.CANCELACION_RESERVA, null, EscenarioCoral.AHORA);
+
+        assertEquals(ResultadoEventoCanal.RECHAZADO_INVALIDO, resultado);
+        assertEquals(EstadoReserva.PENDIENTE,
+                escenario.reservas.buscarPorCanalEIdentificadorExterno(BOOKING, "BK-500").orElseThrow().getEstado());
+    }
+
     private ResultadoEventoCanal recibir(String identificadorExterno, Estancia estancia) {
+        return recibir(BOOKING, identificadorExterno, estancia);
+    }
+
+    private ResultadoEventoCanal recibir(String canal, String identificadorExterno, Estancia estancia) {
         DatosReservaExterna datos = new DatosReservaExterna(EscenarioCoral.APT_101, estancia, escenario.titular,
                 List.of(escenario.ana), LocalTime.of(16, 0));
-        return conciliacion.procesarMensajeExterno(CanalOrigen.EXTERNO, identificadorExterno,
+        return conciliacion.procesarMensajeExterno(CanalOrigen.EXTERNO, canal, identificadorExterno,
                 TipoEventoCanal.CREACION_RESERVA, datos, EscenarioCoral.AHORA);
     }
 
