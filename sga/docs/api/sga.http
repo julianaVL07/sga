@@ -3713,3 +3713,92 @@ Authorization: Bearer {{tokenRecepcion}}
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
     });
 %}
+
+### Sección 16: NOTIFICACIONES AL TITULAR (10.3.2, 7.8) Y RECUPERACIÓN DE CONTRASEÑA (7.2)
+
+# ====================================================================================================
+# 16. NOTIFICACIONES Y RECUPERACIÓN. Con sga.notificaciones.proveedor=local (por defecto) ningún correo sale por la
+#     red: cada mensaje se escribe en el log de la app ("Notificaciones (local): correo a ..."). Las secciones
+#     anteriores ya dejaron ahí los correos de reserva creada, confirmada y cancelada, con el código, el apartamento,
+#     las fechas y el valor. Los correos salen después de guardar la operación y un fallo nunca cambia la respuesta.
+#     Las rutas de recuperación son públicas: estas peticiones no llevan token. El código real de 6 dígitos solo se
+#     ve en el log, así que aquí se prueban las respuestas sin él. Para restablecer de verdad, al terminar el
+#     recorrido pida otro código (16.1), cópielo del log y envíelo como en la 16.3 en lugar de 000000: responde 204.
+# ====================================================================================================
+
+### 16.1 7.2 Pedir el código para huesped1: 202 (el código queda en el log con el proveedor local)
+POST {{host}}/api/auth/recuperacion/solicitar
+Content-Type: application/json
+
+{ "correo": "huesped1@sga.local" }
+
+> {%
+    client.test("16.1 202 solicitud de recuperación", function () {
+        client.assert(response.status === 202, "Se esperaba 202 y llegó " + response.status);
+    });
+%}
+
+### 16.2 7.2 Un correo sin cuenta responde lo mismo (202): no se revela qué cuentas existen
+POST {{host}}/api/auth/recuperacion/solicitar
+Content-Type: application/json
+
+{ "correo": "nadie@correo.co" }
+
+> {%
+    client.test("16.2 202 también sin cuenta", function () {
+        client.assert(response.status === 202, "Se esperaba 202 y llegó " + response.status);
+    });
+%}
+
+### 16.3 7.2 400 Código incorrecto (mismo mensaje si venció o ya se usó)
+POST {{host}}/api/auth/recuperacion/restablecer
+Content-Type: application/json
+
+{ "correo": "huesped1@sga.local", "codigo": "000000", "nuevaContrasena": "Huesped2027" }
+
+> {%
+    client.test("16.3 400 código que no sirve", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+        client.assert(response.body.mensaje === "El código no es válido o ya venció. Solicita uno nuevo.",
+            response.body.mensaje);
+    });
+%}
+
+### 16.4 7.2 400 La contraseña nueva sigue la regla del registro y el código tiene 6 dígitos
+POST {{host}}/api/auth/recuperacion/restablecer
+Content-Type: application/json
+
+{ "correo": "huesped1@sga.local", "codigo": "12ab", "nuevaContrasena": "corta" }
+
+> {%
+    client.test("16.4 400 datos inválidos", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+        client.assert(response.body.errores.codigo !== undefined, "Falta el error del código");
+        client.assert(response.body.errores.nuevaContrasena !== undefined, "Falta el error de la contraseña");
+    });
+%}
+
+### 16.5 7.2 400 Correo mal escrito al pedir el código
+POST {{host}}/api/auth/recuperacion/solicitar
+Content-Type: application/json
+
+{ "correo": "no-es-un-correo" }
+
+> {%
+    client.test("16.5 400 correo inválido", function () {
+        client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
+        client.assert(response.body.errores.correo !== undefined, "Falta el error del correo");
+    });
+%}
+
+### 16.6 7.2 La contraseña de huesped1 no cambió: el login con la de siempre sigue funcionando
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "huesped1@sga.local", "contrasena": "Huesped2026" }
+
+> {%
+    client.test("16.6 200 la contraseña sigue igual", function () {
+        client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+    });
+%}
