@@ -5,6 +5,8 @@ import co.edu.uniquindio.sga.domain.exception.ReglaDominioException;
 import co.edu.uniquindio.sga.domain.repository.FolioRepository;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,5 +42,16 @@ public class FolioRepositoryInMemory implements FolioRepository {
     @Override
     public Optional<Folio> buscarPorReserva(CodigoReserva codigoReserva) {
         return Optional.ofNullable(codigoReserva).map(idPorReserva::get).map(porId::get);
+    }
+
+    @Override
+    public List<Folio> listarConPagosEntre(LocalDate desde, LocalDate hasta) {
+        if (desde == null || hasta == null) {
+            return List.of();
+        }
+        return porId.values().stream()
+                .filter(folio -> folio.getPagos().stream()
+                        .anyMatch(p -> !p.fecha().isBefore(desde) && !p.fecha().isAfter(hasta)))
+                .toList();
     }
 }
