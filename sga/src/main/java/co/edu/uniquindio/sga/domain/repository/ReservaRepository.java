@@ -1,7 +1,6 @@
 package co.edu.uniquindio.sga.domain.repository;
 
 import co.edu.uniquindio.sga.domain.entity.Reserva;
-import co.edu.uniquindio.sga.domain.valueobject.CanalOrigen;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
@@ -18,8 +17,11 @@ public interface ReservaRepository {
 
     Optional<Reserva> buscarPorCodigo(CodigoReserva codigo);
 
-    /** RN-19: la combinación canal + identificador externo es única. */
-    Optional<Reserva> buscarPorCanalEIdentificadorExterno(CanalOrigen canal, String identificadorExterno);
+    /**
+     * RN-19: el nombre del canal externo (por ejemplo "booking") + su identificador externo es único. El mismo
+     * identificador en dos canales distintos son dos reservas.
+     */
+    Optional<Reserva> buscarPorCanalEIdentificadorExterno(String nombreCanal, String identificadorExterno);
 
     /** RN-01: reservas activas del apartamento que comparten al menos una noche con la estancia. */
     List<Reserva> listarActivasQueSeSolapan(IdentificacionApartamento apartamento, Estancia estancia);

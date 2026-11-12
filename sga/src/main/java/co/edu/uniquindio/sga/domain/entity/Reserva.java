@@ -51,6 +51,7 @@ public class Reserva {
     private final List<Ocupante> ocupantes;
     private final CanalOrigen canalOrigen;
     private final String identificadorCanalExterno;
+    private final String nombreCanalExterno;             // RN-19: plataforma que la envió (solo EXTERNO)
     private RegistroLlegadaNocturna registroLlegada;
     private Cotizacion cotizacion;
     private Mascotas mascotas;                           // L-16
@@ -64,7 +65,8 @@ public class Reserva {
     private String motivoCancelacion;
 
     private Reserva(CodigoReserva codigo, IdentificacionApartamento apartamento, Estancia estancia, Titular titular,
-                    List<Ocupante> ocupantes, CanalOrigen canalOrigen, String identificadorCanalExterno,
+                    List<Ocupante> ocupantes, CanalOrigen canalOrigen, String nombreCanalExterno,
+                    String identificadorCanalExterno,
                     LocalTime horaEstimadaLlegada, Cotizacion cotizacion, Mascotas mascotas,
                     PoliticaCancelacion politicaCancelacion, EstadoReserva estado, LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
                     LocalDate fechaRegistro, LocalDate fechaSalidaEfectiva, LocalDate fechaCancelacion,
@@ -75,6 +77,7 @@ public class Reserva {
         this.titular = titular;
         this.ocupantes = new ArrayList<>(ocupantes);
         this.canalOrigen = canalOrigen;
+        this.nombreCanalExterno = nombreCanalExterno;
         this.identificadorCanalExterno = identificadorCanalExterno;
         this.registroLlegada = horaEstimadaLlegada == null ? null : new RegistroLlegadaNocturna(horaEstimadaLlegada);
         this.cotizacion = cotizacion;
@@ -116,6 +119,19 @@ public class Reserva {
                                 LocalTime horaEstimadaLlegada, Cotizacion cotizacion, Mascotas mascotas,
                                 PoliticaCancelacion politicaVigente, UmbralEdadFacturable umbral,
                                 LocalDateTime ahora) {
+        return crear(codigo, apartamento, estancia, titular, ocupantes, canalOrigen, null, identificadorCanalExterno,
+                horaEstimadaLlegada, cotizacion, mascotas, politicaVigente, umbral, ahora);
+    }
+
+    /**
+     * Igual que el anterior, con el nombre del canal externo que envió la reserva (por ejemplo "booking").
+     * RN-19: una reserva EXTERNO trae el nombre del canal y su identificador; las demás no traen ninguno.
+     */
+    public static Reserva crear(CodigoReserva codigo, Apartamento apartamento, Estancia estancia, Titular titular,
+                                List<Ocupante> ocupantes, CanalOrigen canalOrigen, String nombreCanalExterno,
+                                String identificadorCanalExterno, LocalTime horaEstimadaLlegada,
+                                Cotizacion cotizacion, Mascotas mascotas, PoliticaCancelacion politicaVigente,
+                                UmbralEdadFacturable umbral, LocalDateTime ahora) {
         requerido(codigo, "El código de la reserva es obligatorio");
         requerido(titular, "La reserva debe tener un titular");
         requerido(canalOrigen, "El canal de origen es obligatorio");
@@ -123,10 +139,11 @@ public class Reserva {
         requerido(ahora, "La fecha actual es obligatoria");
         validarCondicionesDeCreacion(apartamento, estancia, titular, ocupantes, cotizacion, umbral, ahora.toLocalDate());
         String idExterno = validarIdentificadorExterno(canalOrigen, identificadorCanalExterno);
+        String nombreCanal = validarNombreCanalExterno(canalOrigen, nombreCanalExterno);
 
-        return new Reserva(codigo, apartamento.getIdentificacion(), estancia, titular, ocupantes, canalOrigen, idExterno,
-                horaEstimadaLlegada, cotizacion, mascotas, politicaVigente, EstadoReserva.PENDIENTE, ahora,
-                null, null, null, null, null);
+        return new Reserva(codigo, apartamento.getIdentificacion(), estancia, titular, ocupantes, canalOrigen,
+                nombreCanal, idExterno, horaEstimadaLlegada, cotizacion, mascotas, politicaVigente,
+                EstadoReserva.PENDIENTE, ahora, null, null, null, null, null);
     }
 
     public static Reserva reconstruir(CodigoReserva codigo, IdentificacionApartamento apartamento, Estancia estancia,
@@ -151,9 +168,24 @@ public class Reserva {
                                       LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
                                       LocalDate fechaRegistro, LocalDate fechaSalidaEfectiva,
                                       LocalDate fechaCancelacion, String motivoCancelacion) {
+        return reconstruir(codigo, apartamento, estancia, titular, ocupantes, canalOrigen, null,
+                identificadorCanalExterno, horaEstimadaLlegada, cotizacion, mascotas, politicaCancelacion, estado,
+                fechaCreacion, fechaConfirmacion, fechaRegistro, fechaSalidaEfectiva, fechaCancelacion,
+                motivoCancelacion);
+    }
+
+    /** Reconstrucción completa, con el nombre del canal externo guardado (RN-19); null si no es EXTERNO. */
+    public static Reserva reconstruir(CodigoReserva codigo, IdentificacionApartamento apartamento, Estancia estancia,
+                                      Titular titular, List<Ocupante> ocupantes, CanalOrigen canalOrigen,
+                                      String nombreCanalExterno, String identificadorCanalExterno,
+                                      LocalTime horaEstimadaLlegada, Cotizacion cotizacion, Mascotas mascotas,
+                                      PoliticaCancelacion politicaCancelacion, EstadoReserva estado,
+                                      LocalDateTime fechaCreacion, LocalDateTime fechaConfirmacion,
+                                      LocalDate fechaRegistro, LocalDate fechaSalidaEfectiva,
+                                      LocalDate fechaCancelacion, String motivoCancelacion) {
         return new Reserva(codigo, apartamento, estancia, titular, ocupantes == null ? List.of() : ocupantes,
-                canalOrigen, identificadorCanalExterno, horaEstimadaLlegada, cotizacion, mascotas, politicaCancelacion,
-                estado,
+                canalOrigen, nombreCanalExterno, identificadorCanalExterno, horaEstimadaLlegada, cotizacion, mascotas,
+                politicaCancelacion, estado,
                 fechaCreacion, fechaConfirmacion, fechaRegistro, fechaSalidaEfectiva, fechaCancelacion,
                 motivoCancelacion);
     }
@@ -336,9 +368,13 @@ public class Reserva {
         return apartamento.equals(identificacion);
     }
 
-    /** RN-19: la combinación canal + identificador externo identifica un mismo mensaje. */
-    public boolean correspondeA(CanalOrigen canal, String identificadorExterno) {
-        return canalOrigen == canal && identificadorCanalExterno != null
+    /**
+     * RN-19: el nombre del canal externo + su identificador identifican un mismo mensaje. El mismo identificador
+     * enviado por dos canales distintos son dos reservas distintas.
+     */
+    public boolean correspondeA(String nombreCanal, String identificadorExterno) {
+        return nombreCanalExterno != null && identificadorCanalExterno != null
+                && nombreCanalExterno.equals(nombreCanal)
                 && identificadorCanalExterno.equals(identificadorExterno);
     }
 
@@ -438,6 +474,19 @@ public class Reserva {
         return tieneIdentificador ? identificadorExterno.trim() : null;
     }
 
+    /** RN-19: una reserva externa registra el canal que la envió; las demás no llevan nombre de canal. */
+    private static String validarNombreCanalExterno(CanalOrigen canal, String nombreCanal) {
+        boolean tieneNombre = nombreCanal != null && !nombreCanal.isBlank();
+        if (canal.exigeIdentificadorExterno() && !tieneNombre) {
+            throw new ReglaDominioException("RN-19: Una reserva del canal " + canal
+                    + " debe traer el nombre del canal que la envió");
+        }
+        if (!canal.exigeIdentificadorExterno() && tieneNombre) {
+            throw new ReglaDominioException("Solo las reservas externas llevan nombre de canal");
+        }
+        return tieneNombre ? nombreCanal.trim() : null;
+    }
+
     // ---------------------------------------------------------------- Getters
 
     public CodigoReserva getCodigo() { return codigo; }
@@ -447,6 +496,7 @@ public class Reserva {
     public List<Ocupante> getOcupantes() { return Collections.unmodifiableList(ocupantes); }
     public CanalOrigen getCanalOrigen() { return canalOrigen; }
     public String getIdentificadorCanalExterno() { return identificadorCanalExterno; }
+    public String getNombreCanalExterno() { return nombreCanalExterno; }
     public RegistroLlegadaNocturna getRegistroLlegada() { return registroLlegada; }
     public LocalTime getHoraEstimadaLlegada() { return registroLlegada == null ? null : registroLlegada.horaEstimada(); }
     public Cotizacion getCotizacion() { return cotizacion; }

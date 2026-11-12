@@ -55,8 +55,12 @@ public class EventoCanalJpaRepository implements EventoCanalRepository {
     /** RN-19: qué cuenta como duplicado lo decide el dominio (EventoCanal.esDuplicado). */
     @Override
     @Transactional(readOnly = true)
-    public boolean existeDuplicado(CanalOrigen canal, String identificadorExterno, TipoEventoCanal tipo) {
-        return listarPorCanalEIdentificador(canal, identificadorExterno).stream()
-                .anyMatch(e -> e.esDuplicado(canal, identificadorExterno, tipo));
+    public boolean existeDuplicado(String nombreCanal, String identificadorExterno, TipoEventoCanal tipo) {
+        if (nombreCanal == null || identificadorExterno == null) {
+            return false;
+        }
+        return dataRepository.findByNombreCanalAndIdentificadorExterno(nombreCanal, identificadorExterno.trim())
+                .stream().map(mapper::aDominio)
+                .anyMatch(e -> e.esDuplicado(nombreCanal, identificadorExterno, tipo));
     }
 }

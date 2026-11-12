@@ -47,7 +47,7 @@ public class EventoCanalRepositoryInMemory implements EventoCanalRepository {
     }
 
     @Override
-    public boolean existeDuplicado(CanalOrigen canal, String identificadorExterno, TipoEventoCanal tipo) {
-        return almacen.values().stream().anyMatch(e -> e.esDuplicado(canal, identificadorExterno, tipo));
+    public boolean existeDuplicado(String nombreCanal, String identificadorExterno, TipoEventoCanal tipo) {
+        return almacen.values().stream().anyMatch(e -> e.esDuplicado(nombreCanal, identificadorExterno, tipo));
     }
 }

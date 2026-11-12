@@ -36,7 +36,9 @@ import java.util.List;
 @Entity
 @Table(name = "reserva", uniqueConstraints = {
         @UniqueConstraint(name = "uk_reserva_codigo", columnNames = "codigo"),
-        @UniqueConstraint(name = "uk_reserva_canal_externo", columnNames = {"canal_origen", "identificador_canal_externo"})
+        // RN-19: el nombre del canal externo + su identificador no se repiten (en PORTAL y DIRECTO los dos son null)
+        @UniqueConstraint(name = "uk_reserva_canal_externo",
+                columnNames = {"nombre_canal_externo", "identificador_canal_externo"})
 })
 @Getter
 @Setter
@@ -67,6 +69,9 @@ public class ReservaEntity {
     @Enumerated(EnumType.STRING)                         // guarda "PORTAL", no 0
     @Column(name = "canal_origen", nullable = false)
     private CanalOrigen canalOrigen;
+
+    @Column(name = "nombre_canal_externo", length = 40)
+    private String nombreCanalExterno;                   // RN-19: canal externo que la envió
 
     @Column(name = "identificador_canal_externo")
     private String identificadorCanalExterno;            // RN-19

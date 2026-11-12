@@ -15,4 +15,7 @@ public interface EventoCanalJpaDataRepository extends JpaRepository<EventoCanalE
 
     List<EventoCanalEntity> findByCanalOrigenAndIdentificadorExternoOrderByFechaDescIdDesc(CanalOrigen canalOrigen,
                                                                                            String identificadorExterno);
+
+    /** RN-19: eventos del mismo canal (por nombre) con ese identificador externo. */
+    List<EventoCanalEntity> findByNombreCanalAndIdentificadorExterno(String nombreCanal, String identificadorExterno);
 }

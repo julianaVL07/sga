@@ -25,6 +25,7 @@ import co.edu.uniquindio.sga.domain.valueobject.EstadoOperativo;
 import co.edu.uniquindio.sga.domain.valueobject.EstadoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Estancia;
 import co.edu.uniquindio.sga.domain.valueobject.IdentificacionApartamento;
+import co.edu.uniquindio.sga.domain.valueobject.Mascotas;
 import co.edu.uniquindio.sga.domain.valueobject.MedioPago;
 import co.edu.uniquindio.sga.domain.valueobject.Ocupante;
 import co.edu.uniquindio.sga.domain.valueobject.Pago;
@@ -195,9 +196,11 @@ public class DatosInicialesReservasConfig {
 
         private Reserva nueva(String apartamento, LocalDate entrada, LocalDate salida, Titular titular,
                               CanalOrigen canal, LocalTime horaLlegada, String identificadorExterno) {
+            // RN-19: la reserva externa guarda el canal que la envió, el mismo de DatosInicialesCanalesConfig.
+            String nombreCanal = canal == CanalOrigen.EXTERNO ? DatosInicialesCanalesConfig.CANAL_DEMO : null;
             return creacion.registrarNuevaReserva(new IdentificacionApartamento(apartamento),
                     new Estancia(entrada, salida), titular, List.of(ocupante(titular)), horaLlegada, null,
-                    politicaVigente, canal, identificadorExterno, ahora);
+                    politicaVigente, canal, nombreCanal, identificadorExterno, Mascotas.ninguna(), ahora);
         }
 
         /**
