@@ -36,6 +36,16 @@ export interface RegistrarNovedadRequest {
   gravedad: GravedadNovedad
 }
 
+/** Sugerencia de gravedad de la IA; si disponible es false, gravedad y explicacion vienen en null */
+export interface SugerenciaGravedadResponse {
+  disponible: boolean
+  gravedad: GravedadNovedad | null
+  explicacion: string | null
+}
+
+/** El backend acepta descripciones de hasta 1000 caracteres para la sugerencia */
+export const LARGO_MAXIMO_DESCRIPCION_SUGERENCIA = 1000
+
 export interface ImagenRequest {
   url: string
   principal: boolean
@@ -183,6 +193,16 @@ export async function restablecerServicio(id: string): Promise<ApartamentoRespon
 
 export async function registrarNovedad(id: string, datos: RegistrarNovedadRequest): Promise<NovedadResponse> {
   const { data } = await cliente.post<NovedadResponse>(`${ruta(id)}/novedades`, datos)
+  return data
+}
+
+/** Solo sugiere: no guarda nada. La gravedad final la elige la persona al registrar la novedad */
+export async function sugerirGravedad(descripcion: string, signal?: AbortSignal): Promise<SugerenciaGravedadResponse> {
+  const { data } = await cliente.post<SugerenciaGravedadResponse>(
+    '/api/apartamentos/novedades/sugerir-gravedad',
+    { descripcion: descripcion.slice(0, LARGO_MAXIMO_DESCRIPCION_SUGERENCIA) },
+    { signal },
+  )
   return data
 }
 

@@ -41,6 +41,8 @@ tags:
     description: Inicio de sesión, registro público y emisión del JWT (Guía 12)
   - name: Usuarios
     description: Usuarios y roles internos, perfil propio y cambio de contraseña (Guía 12, 7.2)
+  - name: Reportes
+    description: Ocupación, ingresos y reservas por canal de un periodo (7.9)
 
 # Todas las operaciones exigen el JWT, salvo las que declaran security: []
 security:
@@ -1016,6 +1018,59 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No existe el apartamento, no existe la novedad o la novedad es de otro apartamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/apartamentos/novedades/sugerir-gravedad:
+    post:
+      tags: [Apartamentos]
+      summary: Sugerir la gravedad de una novedad con IA (10.2)
+      description: |
+        El modelo de IA configurado en `sga.ia.proveedor` sugiere BAJA, MEDIA o ALTA con una explicación corta a
+        partir de la descripción: `gemini` (API de Google AI Studio, tiempo de espera de 4 s), `local` (reglas por
+        palabras clave, el de por defecto) o `deshabilitado` (nunca sugiere).
+
+        No es bloqueante: si el modelo falla, tarda, devuelve algo inválido o está apagado, responde `200` con
+        `disponible: false` y lo registra en el log. Solo sugiere: no guarda nada y la gravedad final la elige la
+        persona al registrar la novedad (CU-17). Mapea a `SugerirGravedadNovedadUseCase` y al puerto
+        `SugeridorGravedad`.
+      operationId: sugerirGravedadNovedad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SugerirGravedadRequest'
+            example:
+              descripcion: Huele a gas en la cocina
+      responses:
+        '200':
+          description: Sugerencia, o `disponible = false` si no hay ninguna
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SugerenciaGravedadResponse'
+              examples:
+                disponible:
+                  summary: Con sugerencia
+                  value:
+                    disponible: true
+                    gravedad: ALTA
+                    explicacion: Menciona "gas", un posible riesgo para las personas o el apartamento
+                noDisponible:
+                  summary: Sin sugerencia (IA apagada, caída o lenta)
+                  value:
+                    disponible: false
+                    gravedad: null
+                    explicacion: null
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Roles: PERSONAL_SERVICIO o ADMINISTRADOR'
           content:
             application/json:
               schema:
@@ -2282,6 +2337,109 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # ==================== REPORTES (administrador, 7.9) ====================
+
+  /api/reportes/ocupacion:
+    get:
+      tags: [Reportes]
+      summary: Reporte de ocupación (7.9)
+      description: |
+        Noches vendidas en el periodo y porcentaje = noches vendidas / (apartamentos activos × noches del periodo),
+        con el detalle por apartamento. desde y hasta van incluidas: cada fecha es una noche.
+
+        Una noche está vendida si pertenece a una reserva CONFIRMADA, EN_CURSO o FINALIZADA; de una estancia que
+        empieza antes o termina después del periodo solo cuentan las noches de adentro. Los apartamentos activos
+        son los que hoy están a la venta; uno retirado que vendió noches sale en el detalle con `activo: false`.
+        Mapea a `ConsultarReportesUseCase.ocupacion` y `ReportesService`.
+      operationId: reporteOcupacion
+      parameters:
+        - $ref: '#/components/parameters/DesdeReporte'
+        - $ref: '#/components/parameters/HastaReporte'
+      responses:
+        '200':
+          description: Reporte de ocupación del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteOcupacionResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/PeriodoInvertido'
+
+  /api/reportes/ingresos:
+    get:
+      tags: [Reportes]
+      summary: Reporte de ingresos (7.9)
+      description: |
+        Suma de los pagos registrados en los folios con fecha entre desde y hasta (incluidas), por medio de pago.
+        Los cargos no cuentan: son lo que se cobra, no lo que entró. Trae una fila por cada medio de pago, aunque
+        esté en cero. Mapea a `ConsultarReportesUseCase.ingresos` y `ReportesService`; los folios se leen con
+        `FolioRepository.listarConPagosEntre`.
+      operationId: reporteIngresos
+      parameters:
+        - $ref: '#/components/parameters/DesdeReporte'
+        - $ref: '#/components/parameters/HastaReporte'
+      responses:
+        '200':
+          description: Reporte de ingresos del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteIngresosResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/PeriodoInvertido'
+
+  /api/reportes/reservas-por-canal:
+    get:
+      tags: [Reportes]
+      summary: Reporte de reservas por canal (7.9)
+      description: |
+        Reservas con fecha de entrada entre desde y hasta (incluidas) por canal de origen, en cualquier estado:
+        incluye las canceladas y los no-show. Trae una fila por cada canal (PORTAL, DIRECTO, EXTERNO), aunque
+        esté en cero. Mapea a `ConsultarReportesUseCase.reservasPorCanal` y `ReportesService`.
+      operationId: reporteReservasPorCanal
+      parameters:
+        - $ref: '#/components/parameters/DesdeReporte'
+        - $ref: '#/components/parameters/HastaReporte'
+      responses:
+        '200':
+          description: Reporte de reservas por canal del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteReservasPorCanalResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'Sin permiso. Solo ADMINISTRADOR'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/PeriodoInvertido'
+
 components:
 
   securitySchemes:
@@ -2332,6 +2490,20 @@ components:
       schema:
         type: string
         example: booking
+    DesdeReporte:
+      name: desde
+      in: query
+      required: true
+      description: Primer día del periodo (incluido)
+      schema: { type: string, format: date }
+      example: '2026-11-01'
+    HastaReporte:
+      name: hasta
+      in: query
+      required: true
+      description: Último día del periodo (incluido); no puede ser anterior a desde
+      schema: { type: string, format: date }
+      example: '2026-11-30'
 
   responses:
     DatosInvalidos:
@@ -2352,6 +2524,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    PeriodoInvertido:
+      description: La fecha desde es posterior a la fecha hasta (7.9)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-11-08T14:00:00Z'
+            status: 409
+            error: Conflict
+            mensaje: '7.9: la fecha desde (2026-11-30) no puede ser posterior a la fecha hasta (2026-11-01)'
+            path: /api/reportes/ocupacion
 
     NoAutenticado:
       description: Sin token, token mal firmado o vencido. Trae el encabezado WWW-Authenticate Bearer
@@ -2542,6 +2726,23 @@ components:
         descripcion: { type: string }
         gravedad: { $ref: '#/components/schemas/GravedadNovedad' }
         fechaAtencion: { type: string, format: date, nullable: true }
+
+    SugerirGravedadRequest:
+      type: object
+      required: [ descripcion ]
+      properties:
+        descripcion: { type: string, maxLength: 1000, example: Huele a gas en la cocina }
+
+    SugerenciaGravedadResponse:
+      type: object
+      description: Sugerencia de la IA (10.2). Si disponible es false, gravedad y explicacion vienen en null
+      properties:
+        disponible: { type: boolean }
+        gravedad:
+          oneOf:
+            - $ref: '#/components/schemas/GravedadNovedad'
+            - type: 'null'
+        explicacion: { type: [ string, 'null' ], maxLength: 200 }
 
     ErrorResponse:
       type: object
@@ -3212,3 +3413,64 @@ components:
         tamano: { type: integer, example: 10 }
         totalElementos: { type: integer, format: int64 }
         totalPaginas: { type: integer }
+
+    # ---------- Reportes (7.9) ----------
+
+    ReporteOcupacionResponse:
+      type: object
+      properties:
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date, description: Incluida }
+        nochesPeriodo: { type: integer, example: 30 }
+        apartamentosActivos: { type: integer, example: 5 }
+        nochesDisponibles: { type: integer, description: apartamentosActivos × nochesPeriodo, example: 150 }
+        nochesVendidas: { type: integer, example: 9 }
+        porcentajeOcupacion: { type: number, description: 'nochesVendidas / nochesDisponibles × 100, dos decimales', example: 6.0 }
+        apartamentos:
+          type: array
+          description: Ordenados por identificación
+          items:
+            type: object
+            properties:
+              apartamento: { type: string, example: APT-101 }
+              nochesVendidas: { type: integer, example: 3 }
+              porcentajeOcupacion: { type: number, description: 'nochesVendidas / nochesPeriodo × 100', example: 10.0 }
+              activo: { type: boolean, description: false si hoy no está a la venta }
+
+    ReporteIngresosResponse:
+      type: object
+      properties:
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date, description: Incluida }
+        total: { type: integer, format: int64, description: Pesos colombianos, example: 1950000 }
+        cantidadPagos: { type: integer, example: 3 }
+        medios:
+          type: array
+          description: Una fila por cada medio de pago, aunque esté en cero
+          items:
+            type: object
+            properties:
+              medio: { $ref: '#/components/schemas/MedioPago' }
+              cantidadPagos: { type: integer }
+              total: { type: integer, format: int64 }
+              porcentaje: { type: number, description: Participación en el total, dos decimales }
+
+    ReporteReservasPorCanalResponse:
+      type: object
+      properties:
+        desde: { type: string, format: date }
+        hasta: { type: string, format: date, description: Incluida }
+        totalReservas: { type: integer, example: 7 }
+        canales:
+          type: array
+          description: Una fila por canal (PORTAL, DIRECTO, EXTERNO), aunque esté en cero
+          items:
+            type: object
+            properties:
+              canal: { $ref: '#/components/schemas/CanalOrigen' }
+              total: { type: integer }
+              activas: { type: integer, description: PENDIENTE, CONFIRMADA o EN_CURSO }
+              finalizadas: { type: integer }
+              canceladas: { type: integer }
+              noShow: { type: integer }
+              porcentaje: { type: number, description: Participación del canal, dos decimales }

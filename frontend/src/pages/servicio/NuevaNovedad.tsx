@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, Send } from 'lucide-react'
+import { Loader2, Send, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRegistrarNovedad, useTodosLosApartamentos, type GravedadNovedad } from '@/api/apartamentos'
 import { esErrorApi } from '@/api/cliente'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { claseSelect, claseTextarea } from '@/pages/panel/calendario/estilos'
 import { GRAVEDADES } from './gravedades'
+import { useSugerenciaGravedad } from './useSugerenciaGravedad'
 
 export default function NuevaNovedad() {
   const [parametros] = useSearchParams()
@@ -22,6 +23,12 @@ export default function NuevaNovedad() {
   const [descripcion, setDescripcion] = useState('')
   const [gravedad, setGravedad] = useState<GravedadNovedad | null>(null)
   const [errores, setErrores] = useState<Record<string, string>>({})
+  const { sugerencia, pedirSugerencia } = useSugerenciaGravedad()
+
+  const cambiarDescripcion = (texto: string) => {
+    setDescripcion(texto)
+    pedirSugerencia(texto)
+  }
 
   const enviar = (evento: FormEvent) => {
     evento.preventDefault()
@@ -76,17 +83,37 @@ export default function NuevaNovedad() {
       <Campo id="novedad-descripcion" etiqueta="¿Qué pasó?" error={errores.descripcion}>
         <textarea
           value={descripcion}
-          onChange={(e) => setDescripcion(e.target.value)}
+          onChange={(e) => cambiarDescripcion(e.target.value)}
           placeholder="Copa de cristal rota en la cocina"
           className={cn(claseTextarea, 'min-h-36 text-base')}
         />
       </Campo>
 
-      {/*
-        Aquí irá la sugerencia de gravedad de la IA, a partir de la descripción.
-        Por ahora no llama a nada y no muestra texto; el contenedor queda listo y anunciará el cambio.
-      */}
-      <div id="sugerencia-gravedad-ia" data-sugerencia-ia aria-live="polite" className="empty:hidden" />
+      {/* Sugerencia de gravedad de la IA: solo ayuda, la gravedad la elige siempre la persona */}
+      <div id="sugerencia-gravedad-ia" data-sugerencia-ia aria-live="polite" className="empty:hidden">
+        {sugerencia.estado === 'disponible' && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-campo border border-border bg-muted/60 px-4 py-3">
+            <p className="flex min-w-0 flex-1 items-start gap-2 text-sm">
+              <Sparkles aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-coral" />
+              <span>
+                Sugerencia de la IA: <strong>{sugerencia.gravedad}</strong> · {sugerencia.explicacion}
+              </span>
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={gravedad === sugerencia.gravedad}
+              onClick={() => setGravedad(sugerencia.gravedad)}
+            >
+              {gravedad === sugerencia.gravedad ? 'Sugerencia usada' : 'Usar sugerencia'}
+            </Button>
+          </div>
+        )}
+        {sugerencia.estado === 'no-disponible' && (
+          <p className="text-xs text-muted-foreground">Sugerencia no disponible</p>
+        )}
+      </div>
 
       <fieldset aria-describedby={errores.gravedad ? 'gravedad-error' : undefined}>
         <legend className="mb-1.5 text-sm font-medium">Gravedad</legend>

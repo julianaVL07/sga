@@ -33,6 +33,7 @@ import InicioRecepcion from '@/pages/panel/recepcion/InicioRecepcion'
 import DetalleReserva from '@/pages/panel/reservas/DetalleReserva'
 import ListadoReservas from '@/pages/panel/reservas/ListadoReservas'
 import NuevaReserva from '@/pages/panel/reservas/NuevaReserva'
+import Reportes from '@/pages/panel/reportes/Reportes'
 import Usuarios from '@/pages/panel/usuarios/Usuarios'
 
 import HistorialNovedades from '@/pages/servicio/HistorialNovedades'
@@ -94,6 +95,7 @@ export const router = createBrowserRouter([
               { path: 'politica', element: <Politica /> },
               { path: 'alojamiento', element: <Alojamiento /> },
               { path: 'usuarios', element: <Usuarios /> },
+              { path: 'reportes', element: <Reportes /> },
             ],
           },
           { path: '*', element: <NoEncontrada /> },

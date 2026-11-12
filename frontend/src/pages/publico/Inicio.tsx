@@ -5,6 +5,7 @@ import { useDetallesApartamentos, useTodosLosApartamentos } from '@/api/apartame
 import { usePoliticaVigente } from '@/api/publico'
 import { AvisoError, Dinero, FotoApartamento, Onda, Vacio } from '@/components/coral'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IMAGEN_PORTADA_INICIO } from '@/lib/imagenes'
 import { cn } from '@/lib/utils'
 import { BuscadorEstancia } from './comun/BuscadorEstancia'
 import { useReglasAlojamiento, useTemporadasAlojamiento } from './comun/consultas'
@@ -17,16 +18,14 @@ import { TextoCargo } from './comun/TextoCargo'
 export default function Inicio() {
   const navigate = useNavigate()
   const { alojamiento, reglas } = useReglasAlojamiento()
-  const apartamentos = useTodosLosApartamentos()
-  const lista = useMemo(() => apartamentos.data ?? [], [apartamentos.data])
-  const fotoPortada = lista.find((a) => a.imagenes.length > 0)?.imagenes[0]
 
   return (
     <div className="flex flex-col gap-16">
       {/* ---------- Portada ---------- */}
       <section aria-labelledby="titulo-portada" className="relative">
         <div className="relative -mx-4 -mt-8 overflow-hidden sm:mx-0 sm:mt-0 sm:rounded-tarjeta">
-          <FotoApartamento src={fotoPortada} alt="" className="h-[26rem] w-full md:h-[32rem]" />
+          {/* Si la imagen no carga, FotoApartamento deja el fondo de ondas */}
+          <FotoApartamento src={IMAGEN_PORTADA_INICIO} alt="" className="h-[26rem] w-full md:h-[32rem]" />
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-ciruela/85 via-ciruela/40 to-ciruela/10" />
           <div className="absolute inset-x-0 top-0 flex flex-col gap-3 px-6 pt-14 text-white md:px-12 md:pt-20">
             <p className="text-xs font-semibold tracking-[0.28em] text-durazno uppercase">Bocagrande · Cartagena</p>

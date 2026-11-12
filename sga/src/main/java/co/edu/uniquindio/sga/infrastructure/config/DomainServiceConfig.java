@@ -24,6 +24,7 @@ import co.edu.uniquindio.sga.domain.service.LiquidacionSalidaService;
 import co.edu.uniquindio.sga.domain.service.ModificacionReservaService;
 import co.edu.uniquindio.sga.domain.service.PoliticaCancelacionService;
 import co.edu.uniquindio.sga.domain.service.RegistrarBloqueoService;
+import co.edu.uniquindio.sga.domain.service.ReportesService;
 import co.edu.uniquindio.sga.domain.service.RetiroApartamentoService;
 import co.edu.uniquindio.sga.domain.service.VencimientoReservasService;
 import co.edu.uniquindio.sga.domain.valueobject.DepositoGarantia;
@@ -37,7 +38,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 /**
- * Construye los 17 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
+ * Construye los 18 servicios de dominio del SGA como beans de Spring (Guía 09). Los servicios son Java puro y no
  * llevan @Service: la infraestructura los crea con new y el dominio nunca se entera de que existe Spring.
  * Spring resuelve el orden solo: si un servicio pide otro como parámetro, crea primero ese.
  */
@@ -167,6 +168,13 @@ public class DomainServiceConfig {
     public CalendarioOcupacionService calendarioOcupacionService(ReservaRepository reservas,
                                                                  BloqueoRepository bloqueos) {
         return new CalendarioOcupacionService(reservas, bloqueos);
+    }
+
+    /** 7.9: reportes de ocupación, ingresos y reservas por canal del administrador. */
+    @Bean
+    public ReportesService reportesService(ReservaRepository reservas, FolioRepository folios,
+                                           ApartamentoRepository apartamentos) {
+        return new ReportesService(reservas, folios, apartamentos);
     }
 
     @Bean

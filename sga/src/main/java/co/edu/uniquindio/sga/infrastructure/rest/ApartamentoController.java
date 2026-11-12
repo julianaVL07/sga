@@ -5,6 +5,7 @@ import co.edu.uniquindio.sga.application.dto.request.DefinirTarifasRequest;
 import co.edu.uniquindio.sga.application.dto.request.RegistrarApartamentoRequest;
 import co.edu.uniquindio.sga.application.dto.request.RegistrarBloqueoRequest;
 import co.edu.uniquindio.sga.application.dto.request.RegistrarNovedadRequest;
+import co.edu.uniquindio.sga.application.dto.request.SugerirGravedadRequest;
 import co.edu.uniquindio.sga.application.dto.response.ActualizacionApartamentoResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoDetalleResponse;
 import co.edu.uniquindio.sga.application.dto.response.ApartamentoDisponibleResponse;
@@ -13,6 +14,7 @@ import co.edu.uniquindio.sga.application.dto.response.BloqueoResponse;
 import co.edu.uniquindio.sga.application.dto.response.NovedadResponse;
 import co.edu.uniquindio.sga.application.dto.response.PaginaResponse;
 import co.edu.uniquindio.sga.application.dto.response.RegistroTarifaResponse;
+import co.edu.uniquindio.sga.application.dto.response.SugerenciaGravedadResponse;
 import co.edu.uniquindio.sga.application.usecase.ActivarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.ActualizarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.BuscarApartamentoDisponibleUseCase;
@@ -24,6 +26,7 @@ import co.edu.uniquindio.sga.application.usecase.RegistrarApartamentoUseCase;
 import co.edu.uniquindio.sga.application.usecase.RegistrarBloqueoUseCase;
 import co.edu.uniquindio.sga.application.usecase.RegistrarNovedadUseCase;
 import co.edu.uniquindio.sga.application.usecase.RetirarApartamentoUseCase;
+import co.edu.uniquindio.sga.application.usecase.SugerirGravedadNovedadUseCase;
 import co.edu.uniquindio.sga.application.usecase.TarifasApartamentoUseCase;
 import co.edu.uniquindio.sga.domain.entity.Apartamento;
 import co.edu.uniquindio.sga.domain.entity.Bloqueo;
@@ -85,6 +88,7 @@ public class ApartamentoController {
     private final ActualizarApartamentoUseCase actualizarApartamentoUseCase;
     private final TarifasApartamentoUseCase tarifasApartamentoUseCase;
     private final ActivarApartamentoUseCase activarApartamentoUseCase;
+    private final SugerirGravedadNovedadUseCase sugerirGravedadNovedadUseCase;
     private final ApartamentoMapper mapper;
 
     /** CU-01. GET /api/apartamentos/disponibles?entrada=&salida=&ocupantes=&...&pagina= */
@@ -299,6 +303,28 @@ public class ApartamentoController {
                 .buildAndExpand(novedad.getId())
                 .toUri();
         return ResponseEntity.created(location).body(mapper.aNovedadResponse(novedad));
+    }
+
+    /**
+     * 10.2. POST /api/apartamentos/novedades/sugerir-gravedad
+     * Solo sugiere: no guarda nada y la gravedad final la elige la persona al registrar la novedad (7.6).
+     */
+    @PostMapping("/novedades/sugerir-gravedad")
+    @PreAuthorize("hasAnyAuthority('PERSONAL_SERVICIO', 'ADMINISTRADOR')")
+    @Operation(summary = "Sugerir la gravedad de una novedad con IA",
+            description = "El modelo de IA configurado en sga.ia.proveedor sugiere BAJA, MEDIA o ALTA con una "
+                    + "explicación corta. No es bloqueante: si el modelo falla, tarda o está apagado responde 200 con "
+                    + "disponible=false (10.2)")
+    @ApiResponse(responseCode = "200", description = "Sugerencia, o disponible=false si no hay ninguna")
+    @ApiResponse(responseCode = "400", description = "Falta la descripción o supera los 1000 caracteres")
+    @ApiResponse(responseCode = "401", description = "Sin token o token inválido")
+    @ApiResponse(responseCode = "403", description = "El rol no lo permite")
+    public ResponseEntity<SugerenciaGravedadResponse> sugerirGravedad(
+            @Valid @RequestBody SugerirGravedadRequest request) {
+        SugerenciaGravedadResponse respuesta = sugerirGravedadNovedadUseCase.ejecutar(request.descripcion())
+                .map(SugerenciaGravedadResponse::de)
+                .orElseGet(SugerenciaGravedadResponse::noDisponible);
+        return ResponseEntity.ok(respuesta);
     }
 
     /** 7.6. GET /api/apartamentos/{id}/novedades?pagina= */

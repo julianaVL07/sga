@@ -33,6 +33,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
 
 /**
  * Datos iniciales del alojamiento Coral (Anexo A). H2 en memoria arranca vacía en cada ejecución y
@@ -55,6 +57,9 @@ public class DatosInicialesCoralConfig {
     private static final String BASE = "T-BASE";
     private static final String MEDIA = "T-MEDIA";
     private static final String ALTA = "T-ALTA";
+
+    /** Prefijo común de las imágenes: formato y calidad automáticos y 1600 px de ancho. */
+    private static final String CLOUDINARY = "https://res.cloudinary.com/xwkp6b4t/image/upload/f_auto,q_auto,w_1600/";
 
     @Bean
     @Order(1)
@@ -181,16 +186,47 @@ public class DatosInicialesCoralConfig {
         };
     }
 
+    /** 7.3: imágenes de cada apartamento en el servicio externo (Cloudinary); la primera es la principal. */
+    private static final Map<String, List<String>> IMAGENES = Map.of(
+            "APT-101", List.of(
+                    CLOUDINARY + "v1794457039/apt-101-1.jpg",
+                    CLOUDINARY + "v1794457042/apt-101-2.jpg",
+                    CLOUDINARY + "v1794457040/apt-101-3.jpg"),
+            "APT-102", List.of(
+                    CLOUDINARY + "v1794457043/apt-102-1.jpg",
+                    CLOUDINARY + "v1794457046/apt-102-2.jpg",
+                    CLOUDINARY + "v1794457046/apt-102-3.jpg"),
+            "APT-201", List.of(
+                    CLOUDINARY + "v1794457046/apt-201-1.jpg",
+                    CLOUDINARY + "v1794457042/apt-201-2.jpg",
+                    CLOUDINARY + "v1794457045/apt-201-3.jpg",
+                    CLOUDINARY + "v1794457047/apt-201-4.jpg"),
+            "APT-202", List.of(
+                    CLOUDINARY + "v1794457040/apt-202-1.jpg",
+                    CLOUDINARY + "v1794457039/apt-202-2.jpg",
+                    CLOUDINARY + "v1794457038/apt-202-3.jpg"),
+            "APT-301", List.of(
+                    CLOUDINARY + "v1794457048/apt-301-1.jpg",
+                    CLOUDINARY + "v1794457048/apt-301-2.jpg",
+                    CLOUDINARY + "v1794457049/apt-301-3.jpg"));
+
     private static Apartamento apartamento(String id, String nombre, String descripcion, int dormitorios,
                                            int capacidad, List<String> dotacion,
                                            long tarifaBase, long tarifaMedia, long tarifaAlta) {
         Apartamento apartamento = Apartamento.crear(new IdentificacionApartamento(id), nombre, descripcion,
-                dormitorios, new Capacidad(capacidad), new Dotacion(dotacion),
-                List.of(new Imagen("https://coral.co/img/" + id.toLowerCase() + ".jpg", true)));
+                dormitorios, new Capacidad(capacidad), new Dotacion(dotacion), imagenes(id));
         apartamento.definirTarifa(new Tarifa(BASE, Dinero.de(tarifaBase)));
         apartamento.definirTarifa(new Tarifa(MEDIA, Dinero.de(tarifaMedia)));
         apartamento.definirTarifa(new Tarifa(ALTA, Dinero.de(tarifaAlta)));
         return apartamento;
+    }
+
+    /** Todas las imágenes del apartamento en su orden; solo la primera queda como principal (7.3). */
+    private static List<Imagen> imagenes(String id) {
+        List<String> urls = IMAGENES.get(id);
+        return IntStream.range(0, urls.size())
+                .mapToObj(i -> new Imagen(urls.get(i), i == 0))
+                .toList();
     }
 
     private static RangoFechas rango(int anioInicio, int mesInicio, int diaInicio, int anioFin, int mesFin, int diaFin) {
