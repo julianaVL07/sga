@@ -1,6 +1,7 @@
 package co.edu.uniquindio.sga.infrastructure.rest.exception;
 
 import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
+import co.edu.uniquindio.sga.application.exception.CodigoRecuperacionInvalidoException;
 import co.edu.uniquindio.sga.application.exception.ContrasenaActualIncorrectaException;
 import co.edu.uniquindio.sga.application.exception.BloqueoNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.FolioNoEncontradoException;
@@ -57,6 +58,13 @@ public class GlobalExceptionHandler {
     /** 400: la contraseña actual del cambio de contraseña no coincide (Guía 12, 7.2). */
     @ExceptionHandler(ContrasenaActualIncorrectaException.class)
     public ResponseEntity<ErrorResponse> contrasenaActualIncorrecta(ContrasenaActualIncorrectaException ex,
+                                                                    HttpServletRequest req) {
+        return construir(HttpStatus.BAD_REQUEST, ex.getMessage(), req, null);
+    }
+
+    /** 400: el código para restablecer la contraseña no sirve (7.2). Mismo mensaje en todos los casos. */
+    @ExceptionHandler(CodigoRecuperacionInvalidoException.class)
+    public ResponseEntity<ErrorResponse> codigoRecuperacionInvalido(CodigoRecuperacionInvalidoException ex,
                                                                     HttpServletRequest req) {
         return construir(HttpStatus.BAD_REQUEST, ex.getMessage(), req, null);
     }

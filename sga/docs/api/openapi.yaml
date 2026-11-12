@@ -14,7 +14,8 @@ info:
     Todos los errores responden con el esquema `ErrorResponse`.
 
     Autenticación: `POST /api/auth/login` devuelve un JWT que se envía en `Authorization: Bearer <token>`.
-    Todas las operaciones lo exigen salvo `/api/auth/login`, `/api/auth/registro` y las consultas públicas del
+    Todas las operaciones lo exigen salvo `/api/auth/login`, `/api/auth/registro`,
+    `/api/auth/recuperacion/solicitar`, `/api/auth/recuperacion/restablecer` y las consultas públicas del
     visitante (`security: []`): `GET /api/apartamentos`, `GET /api/apartamentos/disponibles`,
     `GET /api/apartamentos/{id}`, `GET /api/alojamiento`, `GET /api/politica-cancelacion`, `GET /api/temporadas`,
     `GET /api/temporadas/{id}` y `POST /api/cotizaciones`.
@@ -38,7 +39,7 @@ tags:
   - name: Canal externo
     description: Integración con plataformas de terceros (CU-08)
   - name: Autenticación
-    description: Inicio de sesión, registro público y emisión del JWT (Guía 12)
+    description: Inicio de sesión, registro público, recuperación de contraseña y emisión del JWT (Guía 12, 7.2)
   - name: Usuarios
     description: Usuarios y roles internos, perfil propio y cambio de contraseña (Guía 12, 7.2)
   - name: Reportes
@@ -2093,6 +2094,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/auth/recuperacion/solicitar:
+    post:
+      tags: [Autenticación]
+      summary: Pedir un código para restablecer la contraseña
+      description: |
+        7.2. Si el correo es de una cuenta activa, genera un código de 6 dígitos, lo guarda cifrado y lo envía por
+        el puerto de notificaciones (con `sga.notificaciones.proveedor=local` queda en el log). El código vence a los
+        `sga.recuperacion.vigencia` (15 minutos), sirve una sola vez y se anula tras
+        `sga.recuperacion.intentos-maximos` (5) intentos fallidos. Pedir otro anula el anterior.
+
+        Responde **202 exista o no la cuenta**, para no revelar qué correos están registrados. El correo sale
+        después de responder: si falla, se registra en el log y la respuesta no cambia.
+      operationId: solicitarRecuperacionContrasena
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarRecuperacionRequest'
+            example:
+              correo: huesped1@sga.local
+      responses:
+        '202':
+          description: Solicitud recibida (no dice si el correo existe)
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+
+  /api/auth/recuperacion/restablecer:
+    post:
+      tags: [Autenticación]
+      summary: Restablecer la contraseña con el código
+      description: |
+        7.2. Cambia la contraseña si el código coincide, no ha vencido y no se ha usado. La contraseña nueva sigue la
+        regla del registro (8 a 72 caracteres, al menos una mayúscula y un número). Si el código no sirve (incorrecto,
+        vencido, usado, sin intentos o el correo no tiene cuenta activa) responde 400 con el mismo mensaje en todos los
+        casos.
+      operationId: restablecerContrasena
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestablecerContrasenaRequest'
+            example:
+              correo: huesped1@sga.local
+              codigo: '048213'
+              nuevaContrasena: Huesped2027
+      responses:
+        '204':
+          description: Contraseña restablecida; ya se puede iniciar sesión con la nueva
+        '400':
+          description: |
+            Datos inválidos (con `errores` por campo) o el código no sirve
+            (mensaje "El código no es válido o ya venció. Solicita uno nuevo.")
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ==================== USUARIOS (Guía 12, 7.2) ====================
 
   /api/usuarios:
@@ -3352,6 +3414,20 @@ components:
         nombre: { type: string }
         correo: { type: string }
         rol: { $ref: '#/components/schemas/RolUsuario' }
+
+    SolicitarRecuperacionRequest:
+      type: object
+      required: [ correo ]
+      properties:
+        correo: { type: string, format: email, maxLength: 120, example: huesped1@sga.local }
+
+    RestablecerContrasenaRequest:
+      type: object
+      required: [ correo, codigo, nuevaContrasena ]
+      properties:
+        correo: { type: string, format: email, maxLength: 120, example: huesped1@sga.local }
+        codigo: { type: string, pattern: '^\d{6}$', description: El código de 6 dígitos que llegó al correo, example: '048213' }
+        nuevaContrasena: { type: string, minLength: 8, maxLength: 72, description: Al menos una mayúscula y un número, example: Huesped2027 }
 
     CrearUsuarioRequest:
       type: object

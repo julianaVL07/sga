@@ -7,6 +7,8 @@ import { ServicioLayout } from '@/layouts/ServicioLayout'
 import { SitioLayout } from '@/layouts/SitioLayout'
 
 import Login from '@/pages/auth/Login'
+import RecuperarCodigo from '@/pages/auth/RecuperarCodigo'
+import RecuperarContrasena from '@/pages/auth/RecuperarContrasena'
 import Registro from '@/pages/auth/Registro'
 import NoEncontrada from '@/pages/errores/NoEncontrada'
 import SinPermiso from '@/pages/errores/SinPermiso'
@@ -53,6 +55,8 @@ export const router = createBrowserRouter([
           { path: '/apartamentos/:id', element: <DetalleApartamentoPublico /> },
           { path: '/login', element: <Login /> },
           { path: '/registro', element: <Registro /> },
+          { path: '/recuperar', element: <RecuperarContrasena /> },
+          { path: '/recuperar/codigo', element: <RecuperarCodigo /> },
           {
             element: <RutaProtegida roles={ROLES_HUESPED} />,
             children: [

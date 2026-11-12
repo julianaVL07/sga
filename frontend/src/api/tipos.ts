@@ -44,6 +44,18 @@ export interface LoginRequest {
   contrasena: string
 }
 
+/** POST /api/auth/recuperacion/solicitar: responde 202 exista o no la cuenta */
+export interface SolicitarRecuperacionRequest {
+  correo: string
+}
+
+/** POST /api/auth/recuperacion/restablecer: el código de 6 dígitos que llegó al correo */
+export interface RestablecerContrasenaRequest {
+  correo: string
+  codigo: string
+  nuevaContrasena: string
+}
+
 export interface TokenResponse {
   token: string
   tipo: string

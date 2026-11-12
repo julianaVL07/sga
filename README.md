@@ -287,6 +287,50 @@ El modelo (`sga.ia.gemini.modelo`, por defecto `gemini-2.5-flash`), la URL de la
 
 **Apagar la IA:** pon `sga.ia.proveedor=deshabilitado` en `application.properties` (o arranca con `--sga.ia.proveedor=deshabilitado`). No hace falta borrar la clave.
 
+## Notificaciones
+
+El SGA le escribe al titular de la reserva cuando la reserva se **crea**, se **confirma** o se **cancela** (con la retención), y le manda un **recordatorio** el día anterior a su llegada o a su salida. Cada correo, en español, lleva el código de la reserva, el apartamento, las fechas y el valor. Por el mismo canal sale el **código para recuperar la contraseña**.
+
+Los correos salen después de que la operación quedó guardada y en segundo plano: si el correo falla o tarda más de 5 segundos, la reserva sigue igual, el usuario no ve ningún error y el fallo queda en el log. Si la reserva no tiene correo del titular, no se envía nada y también queda en el log.
+
+El proveedor se elige con `sga.notificaciones.proveedor` en `application.properties`:
+
+| Valor | Qué hace |
+|---|---|
+| `local` (por defecto) | No envía nada por internet: guarda los mensajes en memoria y los escribe completos en el log (`Notificaciones (local): correo a ...`). Es el que usan las pruebas. En desarrollo, el código de recuperación de contraseña se lee ahí. |
+| `smtp` | Envía correos de verdad por SMTP. Necesita la cuenta y la clave. |
+
+**Enviar con Gmail usando una clave de aplicación.** Gmail no deja usar la contraseña normal de la cuenta desde una aplicación; hay que crear una "contraseña de aplicación":
+
+1. Entra a https://myaccount.google.com/security con la cuenta que va a enviar los correos y activa la **Verificación en dos pasos** (sin ella no aparece la opción del paso 2).
+2. Entra a https://myaccount.google.com/apppasswords, escribe un nombre (por ejemplo `SGA Coral`) y pulsa **Crear**. Google muestra una clave de 16 letras: cópiala sin los espacios. Solo se muestra una vez.
+3. Pega la cuenta y la clave en `src/main/resources/application-secrets.properties` (el mismo archivo de la clave del JWT, que nunca se sube al repositorio):
+
+   ```properties
+   sga.notificaciones.smtp.usuario=tu-cuenta@gmail.com
+   sga.notificaciones.smtp.clave=laclavedeaplicacion
+   ```
+
+4. Arranca con SMTP: cambia `sga.notificaciones.proveedor=smtp` en `application.properties` o, sin tocar el archivo, `./gradlew bootRun --args='--sga.notificaciones.proveedor=smtp'`.
+
+El servidor (`smtp.gmail.com`), el puerto (`587` con STARTTLS) y el tiempo de espera (`sga.notificaciones.smtp.tiempo-espera=PT5S`) ya están en `application.properties`. Con Gmail el remitente es la misma cuenta; `sga.notificaciones.remitente` vacío usa esa. La cuenta y la clave solo van en `application-secrets.properties`; en despliegue se pueden pasar con las variables de entorno `SGA_NOTIFICACIONES_SMTP_USUARIO` y `SGA_NOTIFICACIONES_SMTP_CLAVE`. Si la clave se filtra, bórrala en https://myaccount.google.com/apppasswords y crea otra.
+
+**Recuperar la contraseña.** En el login, el enlace **¿Olvidaste tu contraseña?** lleva a `/recuperar`, donde se escribe el correo, y luego a `/recuperar/codigo`, donde se escriben el código y la contraseña nueva. Por la API:
+
+- `POST /api/auth/recuperacion/solicitar` con `correo`: responde **202 siempre**, exista o no la cuenta, para no revelar qué correos están registrados. Si la cuenta existe y está activa, le envía un código de 6 dígitos.
+- `POST /api/auth/recuperacion/restablecer` con `correo`, `codigo` y `nuevaContrasena` (204). La contraseña nueva sigue la regla del registro. Si el código no sirve, responde 400.
+
+El código se guarda cifrado, vence a los 15 minutos (`sga.recuperacion.vigencia`), sirve una sola vez y se anula tras 5 intentos fallidos (`sga.recuperacion.intentos-maximos`). Pedir otro anula el anterior. Las dos rutas son públicas.
+
+**Recordatorios automáticos.** Todos los días a las 9:00 (hora de Colombia) el SGA avisa a los titulares de las reservas CONFIRMADAS que llegan mañana y de las EN_CURSO que salen mañana. Un mismo recordatorio no se envía dos veces: se guarda el último envío por reserva y motivo. Se configura en `application.properties`:
+
+```properties
+# false los apaga
+sga.recordatorios.activo=true
+# segundo minuto hora día mes día-de-la-semana
+sga.recordatorios.cron=0 0 9 * * *
+```
+
 ## Forma de trabajo
 
 Trabajamos sobre `develop` con una rama por integrante (`feature/sara-reservas`, `feature/laura-apartamentos` y `feature/juliana-folio`) y Pull Requests para integrar los cambios. `master` guarda las versiones entregadas.
