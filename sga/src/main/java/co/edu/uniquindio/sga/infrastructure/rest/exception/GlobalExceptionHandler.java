@@ -1,6 +1,8 @@
 package co.edu.uniquindio.sga.infrastructure.rest.exception;
 
 import co.edu.uniquindio.sga.application.exception.ApartamentoNoEncontradoException;
+import co.edu.uniquindio.sga.application.exception.CanalVentaNoEncontradoException;
+import co.edu.uniquindio.sga.application.exception.ConflictoCanalNoEncontradoException;
 import co.edu.uniquindio.sga.application.exception.CodigoRecuperacionInvalidoException;
 import co.edu.uniquindio.sga.application.exception.ContrasenaActualIncorrectaException;
 import co.edu.uniquindio.sga.application.exception.BloqueoNoEncontradoException;
@@ -72,7 +74,8 @@ public class GlobalExceptionHandler {
     /** 404: el identificador no existe (excepciones de aplicación). */
     @ExceptionHandler({ReservaNoEncontradaException.class, ApartamentoNoEncontradoException.class,
             FolioNoEncontradoException.class, TemporadaNoEncontradaException.class, BloqueoNoEncontradoException.class,
-            NovedadNoEncontradaException.class})
+            NovedadNoEncontradaException.class, CanalVentaNoEncontradoException.class,
+            ConflictoCanalNoEncontradoException.class})
     public ResponseEntity<ErrorResponse> noEncontrado(RuntimeException ex, HttpServletRequest req) {
         return construir(HttpStatus.NOT_FOUND, ex.getMessage(), req, null);
     }
