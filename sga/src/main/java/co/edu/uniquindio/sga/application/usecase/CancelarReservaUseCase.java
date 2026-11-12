@@ -1,11 +1,13 @@
 package co.edu.uniquindio.sga.application.usecase;
 
+import co.edu.uniquindio.sga.application.event.ReservaCanceladaEvento;
 import co.edu.uniquindio.sga.application.exception.ReservaNoEncontradaException;
 import co.edu.uniquindio.sga.domain.repository.ReservaRepository;
 import co.edu.uniquindio.sga.domain.service.CancelarReservaService;
 import co.edu.uniquindio.sga.domain.valueobject.CodigoReserva;
 import co.edu.uniquindio.sga.domain.valueobject.Dinero;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,18 +30,24 @@ public class CancelarReservaUseCase {
     private final ReservaRepository reservaRepository;
     private final CancelarReservaService cancelarReservaService;
     private final Clock reloj;
+    private final ApplicationEventPublisher eventos;
 
+    /** @param eventos avisa que la reserva se canceló; el correo al titular sale después de guardarla (7.8). */
     public CancelarReservaUseCase(ReservaRepository reservaRepository, CancelarReservaService cancelarReservaService,
-                                  Clock reloj) {
+                                  Clock reloj, ApplicationEventPublisher eventos) {
         this.reservaRepository = Objects.requireNonNull(reservaRepository);
         this.cancelarReservaService = Objects.requireNonNull(cancelarReservaService);
         this.reloj = Objects.requireNonNull(reloj);
+        this.eventos = Objects.requireNonNull(eventos);
     }
 
     @Transactional
     public Dinero ejecutar(CodigoReserva codigo, String motivo) {
         verificarQueExiste(codigo);
-        return cancelarReservaService.cancelar(codigo, LocalDate.now(reloj), motivo);
+        Dinero retencion = cancelarReservaService.cancelar(codigo, LocalDate.now(reloj), motivo);
+        reservaRepository.buscarPorCodigo(codigo)
+                .ifPresent(cancelada -> eventos.publishEvent(new ReservaCanceladaEvento(cancelada, retencion)));
+        return retencion;
     }
 
     private void verificarQueExiste(CodigoReserva codigo) {
