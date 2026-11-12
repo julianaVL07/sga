@@ -13,6 +13,7 @@ import { useCotizacion, useReglasAlojamiento, useTemporadasAlojamiento } from '.
 import { DesgloseCotizacion } from './comun/DesgloseCotizacion'
 import { estanciaAParams, leerEstancia, ocupantesParaCotizar } from './comun/estancia'
 import { iconoDotacion } from './comun/iconos'
+import { MapaAlojamiento } from './MapaAlojamiento'
 import { PildoraTemporada } from './comun/PildoraTemporada'
 import {
   avisoEstanciaMinima,
@@ -213,6 +214,8 @@ export default function DetalleApartamento() {
               </p>
             </div>
           </section>
+
+          <MapaAlojamiento />
         </div>
 
         <TarjetaCotizar identificacion={apto.identificacion} capacidad={apto.capacidadMaxima} />

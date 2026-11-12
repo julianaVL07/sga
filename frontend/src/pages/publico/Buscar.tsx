@@ -14,6 +14,7 @@ import { claseContenidoPlegable } from './comun/estilos'
 import { estanciaAParams, fechasCompletas, leerEstancia, resumenHuespedes } from './comun/estancia'
 import { avisoEstanciaMinima, nochesEntre } from './comun/reglas'
 import { TarjetaApartamento } from './comun/TarjetaApartamento'
+import { MapaAlojamiento } from './MapaAlojamiento'
 
 const FILTROS = ['capacidadMinima', 'caracteristica', 'precioMinimo', 'precioMaximo'] as const
 type Filtro = (typeof FILTROS)[number]
@@ -153,6 +154,8 @@ export default function Buscar() {
           )}
         </div>
       </div>
+
+      <MapaAlojamiento variante="franja" />
     </section>
   )
 }
