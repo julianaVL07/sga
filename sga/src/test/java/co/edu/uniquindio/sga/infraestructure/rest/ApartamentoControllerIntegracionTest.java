@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -17,6 +19,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.endsWith;
@@ -29,6 +32,8 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -611,6 +616,31 @@ class ApartamentoControllerIntegracionTest {
         put("/api/apartamentos/APT-401", actualizacion(0))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("RN-02")));
+    }
+
+    @Test
+    @DisplayName("Cuerpos de error de /api/apartamentos: 400 con errores por campo, 401, 403, 404 y 409")
+    void cuerposDeErrorDeApartamentos() throws Exception {
+        put("/api/apartamentos/APT-101/tarifas", "{\"tarifas\":[]}")
+                .andExpect(CuerpoError.validacion("/api/apartamentos/APT-101/tarifas",
+                        Map.of("tarifas", "Debe indicar al menos una tarifa")));
+
+        mvc.perform(MockMvcRequestBuilders.get("/api/apartamentos/pendientes-preparacion").with(anonymous()))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, CuerpoError.MENSAJE_401,
+                        "/api/apartamentos/pendientes-preparacion"));
+
+        mvc.perform(MockMvcRequestBuilders.put("/api/apartamentos/APT-101/retirar")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("HUESPED"))))
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, CuerpoError.MENSAJE_403,
+                        "/api/apartamentos/APT-101/retirar"));
+
+        get("/api/apartamentos/APT-999")
+                .andExpect(CuerpoError.error(HttpStatus.NOT_FOUND,
+                        "No se encontró el apartamento con identificación: APT-999", "/api/apartamentos/APT-999"));
+
+        get(disponibles(LocalDate.now(BOGOTA).plusDays(40), 1, "&capacidadMinima=0"))
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        "7.5: la capacidad mínima debe ser mayor que cero", "/api/apartamentos/disponibles"));
     }
 
     private static String apartamentoNuevo(String id, int capacidad, String tarifas) {

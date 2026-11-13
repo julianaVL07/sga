@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { endOfMonth, format, startOfMonth } from 'date-fns'
-import { BedDouble, HandCoins, Share2 } from 'lucide-react'
+import { BedDouble, FileDown, HandCoins, Loader2, Share2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { useAlojamiento } from '@/api/publico'
 import {
   useReporteIngresos,
   useReporteOcupacion,
@@ -8,6 +10,7 @@ import {
   type PeriodoReporte,
 } from '@/api/reportes'
 import { AvisoError, Campo, Dinero, formatearFecha } from '@/components/coral'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -30,11 +33,14 @@ export default function Reportes() {
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <header>
-        <h1 className="font-titulo text-3xl font-semibold">Reportes</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Ocupación, ingresos y reservas por canal del periodo elegido. Las dos fechas van incluidas.
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-titulo text-3xl font-semibold">Reportes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ocupación, ingresos y reservas por canal del periodo elegido. Las dos fechas van incluidas.
+          </p>
+        </div>
+        <BotonDescargarPdf periodo={periodo} habilitado={valido} />
       </header>
 
       {/* ---------- Selector de fechas ---------- */}
@@ -66,6 +72,53 @@ export default function Reportes() {
       <TablaIngresos periodo={periodo} habilitada={valido} />
       <TablaCanales periodo={periodo} habilitada={valido} />
     </section>
+  )
+}
+
+/**
+ * Descarga el PDF con las tres tablas. Usa las mismas consultas de la pantalla (React Query las comparte, no se
+ * piden de nuevo) y carga jspdf solo al pulsar el botón.
+ */
+function BotonDescargarPdf({ periodo, habilitado }: { periodo: PeriodoReporte; habilitado: boolean }) {
+  const ocupacion = useReporteOcupacion(periodo, habilitado)
+  const ingresos = useReporteIngresos(periodo, habilitado)
+  const canales = useReporteReservasPorCanal(periodo, habilitado)
+  const alojamiento = useAlojamiento()
+  const [generando, setGenerando] = useState(false)
+  // Con placeholderData los datos del periodo anterior siguen visibles mientras llegan los nuevos: no se exportan
+  const listos =
+    habilitado &&
+    !!ocupacion.data &&
+    !!ingresos.data &&
+    !!canales.data &&
+    !ocupacion.isPlaceholderData &&
+    !ingresos.isPlaceholderData &&
+    !canales.isPlaceholderData
+
+  async function descargar() {
+    if (!ocupacion.data || !ingresos.data || !canales.data) return
+    setGenerando(true)
+    try {
+      const { descargarReportePdf } = await import('./exportarPdf')
+      await descargarReportePdf({
+        alojamiento: alojamiento.data?.nombre ?? 'Apartahotel Coral',
+        periodo,
+        ocupacion: ocupacion.data,
+        ingresos: ingresos.data,
+        canales: canales.data,
+      })
+    } catch {
+      toast.error('No se pudo generar el PDF', { description: 'Inténtalo de nuevo.' })
+    } finally {
+      setGenerando(false)
+    }
+  }
+
+  return (
+    <Button onClick={descargar} disabled={!listos || generando} className="self-start">
+      {generando ? <Loader2 aria-hidden="true" className="animate-spin" /> : <FileDown aria-hidden="true" />}
+      {generando ? 'Generando…' : 'Descargar PDF'}
+    </Button>
   )
 }
 

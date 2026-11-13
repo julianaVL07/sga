@@ -432,3 +432,13 @@ Lo siguiente **no se implementa en esta entrega**:
   cierre del folio con saldo), CU-21 (retirar un apartamento) y poner fuera de servicio un apartamento corresponden
   solo al administrador. Entrará como adaptador de infraestructura (filtro de Spring Security y configuración de
   roles), sin tocar el dominio ni los casos de uso.
+
+## 14. Integración de salida y controladores
+
+- A.6: el proveedor de correo pasó de MailHog a SMTP de Gmail, con un adaptador local; se agregaron los recordatorios automáticos como segunda funcionalidad opcional.
+- Controladores: las operaciones de `/api/reservas` que estaban en `OperacionReservaController` (registrar la llegada y
+  la salida) y en `OcupacionController` (calendario de ocupación) pasaron a `ReservaController`, de modo que cada
+  controlador corresponde a un recurso. `FolioController` sigue aparte porque el folio es un subrecurso
+  (`/api/reservas/{codigo}/folio`), y `CanalExternoController` sigue separado de `CanalVentaController` porque lo
+  llama la plataforma externa con su propia credencial. El contrato no cambió: las 74 operaciones conservan su ruta,
+  método, cuerpos, códigos de respuesta, permisos y tags, y `openapi.yaml` queda idéntico.

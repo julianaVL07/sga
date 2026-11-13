@@ -11,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
+import java.util.Map;
+
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,6 +37,22 @@ class ManejoErroresIntegracionTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.path").value("/api/reservas"))
                 .andExpect(jsonPath("$.timestamp").exists());
+    }
+
+    @Test
+    @DisplayName("400: un parámetro de la URL que incumple su anotación trae el error por campo")
+    void parametroInvalidoResponde400ConErrorPorCampo() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get("/api/reservas").param("pagina", "-1"))
+                .andExpect(CuerpoError.validacion("/api/reservas",
+                        Map.of("pagina", "La página no puede ser negativa")));
+    }
+
+    @Test
+    @DisplayName("400: falta un parámetro obligatorio de la URL y el error lo nombra")
+    void parametroFaltanteResponde400ConErrorPorCampo() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get("/api/reportes/ingresos").param("desde", "2026-01-01"))
+                .andExpect(CuerpoError.validacion("/api/reportes/ingresos",
+                        Map.of("hasta", "El parámetro es obligatorio")));
     }
 
     @Test

@@ -231,7 +231,7 @@ function Parametros({ parametros: p }: { parametros: ParametrosAlojamientoRespon
     ['Anticipo', p.exigeAnticipo ? `${p.porcentajeAnticipo} % del valor de la estancia` : 'No se exige'],
   ]
   if (p.depositoGarantia !== null && p.depositoGarantia !== undefined) {
-    filas.push(['Depósito de garantía', <Dinero valor={p.depositoGarantia} />])
+    filas.push(['Depósito de garantía', <Dinero key="deposito" valor={p.depositoGarantia} />])
   }
   return (
     <div className="flex flex-col gap-3 rounded-tarjeta border border-border bg-card p-5 shadow-tarjeta md:p-6">

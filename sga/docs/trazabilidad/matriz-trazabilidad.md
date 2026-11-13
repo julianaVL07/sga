@@ -180,7 +180,7 @@ descripción del 403 de cada operación; las consultas públicas no tienen 403 y
 | `GET /api/reportes/reservas-por-canal` | `ReporteController.reservasPorCanal` | ADMINISTRADOR |
 | `GET /api/reservas` | `ReservaController.listar` | RECEPCIONISTA, ADMINISTRADOR |
 | `POST /api/reservas` | `ReservaController.crear` | HUESPED, RECEPCIONISTA, ADMINISTRADOR + canal por rol (`@canalPorRol.puedeCrear`) |
-| `GET /api/reservas/calendario` | `OcupacionController.calendario` | RECEPCIONISTA, ADMINISTRADOR |
+| `GET /api/reservas/calendario` | `ReservaController.calendario` | RECEPCIONISTA, ADMINISTRADOR |
 | `GET /api/reservas/llegadas` | `ReservaController.llegadas` | RECEPCIONISTA, ADMINISTRADOR |
 | `GET /api/reservas/mias` | `ReservaController.listarMias` | HUESPED |
 | `GET /api/reservas/salidas` | `ReservaController.salidas` | RECEPCIONISTA, ADMINISTRADOR |
@@ -195,8 +195,8 @@ descripción del 403 de cada operación; las consultas públicas no tienen 403 y
 | `POST /api/reservas/{codigo}/folio/correcciones` | `FolioController.registrarCorreccion` | RECEPCIONISTA, ADMINISTRADOR |
 | `POST /api/reservas/{codigo}/folio/pagos` | `FolioController.registrarPago` | RECEPCIONISTA, ADMINISTRADOR |
 | `PUT /api/reservas/{codigo}/no-show` | `ReservaController.declararNoShow` | RECEPCIONISTA, ADMINISTRADOR |
-| `PUT /api/reservas/{codigo}/registrar-llegada` | `OperacionReservaController.registrarLlegada` | RECEPCIONISTA, ADMINISTRADOR |
-| `PUT /api/reservas/{codigo}/registrar-salida` | `OperacionReservaController.registrarSalida` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/registrar-llegada` | `ReservaController.registrarLlegada` | RECEPCIONISTA, ADMINISTRADOR |
+| `PUT /api/reservas/{codigo}/registrar-salida` | `ReservaController.registrarSalida` | RECEPCIONISTA, ADMINISTRADOR |
 | `GET /api/temporadas` | `TemporadaController.listar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |
 | `POST /api/temporadas` | `TemporadaController.crear` | ADMINISTRADOR |
 | `GET /api/temporadas/{id}` | `TemporadaController.consultar` | Público (`permitAll` en `SecurityConfig` y `@PreAuthorize("permitAll()")`) |

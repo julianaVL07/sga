@@ -3,7 +3,7 @@ import { RouterProvider } from 'react-router-dom'
 import { esErrorApi } from '@/api/cliente'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { TemaProvider } from '@/lib/tema'
+import { TemaProvider } from '@/lib/TemaProvider'
 import { router } from './router'
 
 const queryClient = new QueryClient({

@@ -1,47 +1,30 @@
+import { lazy, Suspense, type ComponentType } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import { RutaProtegida } from '@/auth/RutaProtegida'
 import { ROLES_ADMIN, ROLES_HUESPED, ROLES_PANEL, ROLES_SERVICIO } from '@/auth/roles'
+import { CargandoPagina } from '@/components/coral/CargandoPagina'
 import { PanelLayout } from '@/layouts/PanelLayout'
 import { RaizApp } from '@/layouts/RaizApp'
 import { ServicioLayout } from '@/layouts/ServicioLayout'
 import { SitioLayout } from '@/layouts/SitioLayout'
 
-import Login from '@/pages/auth/Login'
-import RecuperarCodigo from '@/pages/auth/RecuperarCodigo'
-import RecuperarContrasena from '@/pages/auth/RecuperarContrasena'
-import Registro from '@/pages/auth/Registro'
-import NoEncontrada from '@/pages/errores/NoEncontrada'
-import SinPermiso from '@/pages/errores/SinPermiso'
+/**
+ * Cada página se descarga con React.lazy la primera vez que se visita, y Suspense muestra el indicador mientras
+ * llega. Así el paquete inicial solo trae los layouts, y Leaflet viaja con las páginas que tienen el mapa
+ * (búsqueda y detalle del apartamento).
+ */
+function pagina(cargar: () => Promise<{ default: ComponentType }>) {
+  const Pagina = lazy(cargar)
+  return (
+    <Suspense fallback={<CargandoPagina />}>
+      <Pagina />
+    </Suspense>
+  )
+}
 
-import Buscar from '@/pages/publico/Buscar'
-import DetalleApartamentoPublico from '@/pages/publico/DetalleApartamento'
-import Inicio from '@/pages/publico/Inicio'
-
-import DetalleMiReserva from '@/pages/huesped/DetalleMiReserva'
-import MisReservas from '@/pages/huesped/MisReservas'
-import Reservar from '@/pages/huesped/Reservar'
-import MiPerfil from '@/pages/perfil/MiPerfil'
-
-import DetalleApartamentoPanel from '@/pages/panel/apartamentos/DetalleApartamento'
-import FormularioApartamento from '@/pages/panel/apartamentos/FormularioApartamento'
-import ListadoApartamentos from '@/pages/panel/apartamentos/ListadoApartamentos'
-import NovedadesApartamento from '@/pages/panel/apartamentos/NovedadesApartamento'
-import Calendario from '@/pages/panel/calendario/Calendario'
-import Canales from '@/pages/panel/canales/Canales'
-import Alojamiento from '@/pages/panel/configuracion/Alojamiento'
-import Politica from '@/pages/panel/configuracion/Politica'
-import Temporadas from '@/pages/panel/configuracion/Temporadas'
-import Folio from '@/pages/panel/folio/Folio'
-import InicioRecepcion from '@/pages/panel/recepcion/InicioRecepcion'
-import DetalleReserva from '@/pages/panel/reservas/DetalleReserva'
-import ListadoReservas from '@/pages/panel/reservas/ListadoReservas'
-import NuevaReserva from '@/pages/panel/reservas/NuevaReserva'
-import Reportes from '@/pages/panel/reportes/Reportes'
-import Usuarios from '@/pages/panel/usuarios/Usuarios'
-
-import HistorialNovedades from '@/pages/servicio/HistorialNovedades'
-import NuevaNovedad from '@/pages/servicio/NuevaNovedad'
-import Pendientes from '@/pages/servicio/Pendientes'
+const miPerfil = () => import('@/pages/perfil/MiPerfil')
+const noEncontrada = () => import('@/pages/errores/NoEncontrada')
+const formularioApartamento = () => import('@/pages/panel/apartamentos/FormularioApartamento')
 
 export const router = createBrowserRouter([
   {
@@ -51,24 +34,24 @@ export const router = createBrowserRouter([
       {
         element: <SitioLayout />,
         children: [
-          { path: '/', element: <Inicio /> },
-          { path: '/buscar', element: <Buscar /> },
-          { path: '/apartamentos/:id', element: <DetalleApartamentoPublico /> },
-          { path: '/login', element: <Login /> },
-          { path: '/registro', element: <Registro /> },
-          { path: '/recuperar', element: <RecuperarContrasena /> },
-          { path: '/recuperar/codigo', element: <RecuperarCodigo /> },
+          { path: '/', element: pagina(() => import('@/pages/publico/Inicio')) },
+          { path: '/buscar', element: pagina(() => import('@/pages/publico/Buscar')) },
+          { path: '/apartamentos/:id', element: pagina(() => import('@/pages/publico/DetalleApartamento')) },
+          { path: '/login', element: pagina(() => import('@/pages/auth/Login')) },
+          { path: '/registro', element: pagina(() => import('@/pages/auth/Registro')) },
+          { path: '/recuperar', element: pagina(() => import('@/pages/auth/RecuperarContrasena')) },
+          { path: '/recuperar/codigo', element: pagina(() => import('@/pages/auth/RecuperarCodigo')) },
           {
             element: <RutaProtegida roles={ROLES_HUESPED} />,
             children: [
-              { path: '/reservar/:id', element: <Reservar /> },
-              { path: '/mis-reservas', element: <MisReservas /> },
-              { path: '/mis-reservas/:codigo', element: <DetalleMiReserva /> },
-              { path: '/perfil', element: <MiPerfil /> },
+              { path: '/reservar/:id', element: pagina(() => import('@/pages/huesped/Reservar')) },
+              { path: '/mis-reservas', element: pagina(() => import('@/pages/huesped/MisReservas')) },
+              { path: '/mis-reservas/:codigo', element: pagina(() => import('@/pages/huesped/DetalleMiReserva')) },
+              { path: '/perfil', element: pagina(miPerfil) },
             ],
           },
-          { path: '/sin-permiso', element: <SinPermiso /> },
-          { path: '*', element: <NoEncontrada /> },
+          { path: '/sin-permiso', element: pagina(() => import('@/pages/errores/SinPermiso')) },
+          { path: '*', element: pagina(noEncontrada) },
         ],
       },
 
@@ -81,30 +64,33 @@ export const router = createBrowserRouter([
           </RutaProtegida>
         ),
         children: [
-          { index: true, element: <InicioRecepcion /> },
-          { path: 'calendario', element: <Calendario /> },
-          { path: 'reservas', element: <ListadoReservas /> },
-          { path: 'reservas/nueva', element: <NuevaReserva /> },
-          { path: 'reservas/:codigo', element: <DetalleReserva /> },
-          { path: 'reservas/:codigo/folio', element: <Folio /> },
-          { path: 'apartamentos', element: <ListadoApartamentos /> },
-          { path: 'apartamentos/:id', element: <DetalleApartamentoPanel /> },
-          { path: 'perfil', element: <MiPerfil /> },
+          { index: true, element: pagina(() => import('@/pages/panel/recepcion/InicioRecepcion')) },
+          { path: 'calendario', element: pagina(() => import('@/pages/panel/calendario/Calendario')) },
+          { path: 'reservas', element: pagina(() => import('@/pages/panel/reservas/ListadoReservas')) },
+          { path: 'reservas/nueva', element: pagina(() => import('@/pages/panel/reservas/NuevaReserva')) },
+          { path: 'reservas/:codigo', element: pagina(() => import('@/pages/panel/reservas/DetalleReserva')) },
+          { path: 'reservas/:codigo/folio', element: pagina(() => import('@/pages/panel/folio/Folio')) },
+          { path: 'apartamentos', element: pagina(() => import('@/pages/panel/apartamentos/ListadoApartamentos')) },
+          { path: 'apartamentos/:id', element: pagina(() => import('@/pages/panel/apartamentos/DetalleApartamento')) },
+          { path: 'perfil', element: pagina(miPerfil) },
           {
             element: <RutaProtegida roles={ROLES_ADMIN} />,
             children: [
-              { path: 'apartamentos/nuevo', element: <FormularioApartamento /> },
-              { path: 'apartamentos/:id/editar', element: <FormularioApartamento /> },
-              { path: 'apartamentos/:id/novedades', element: <NovedadesApartamento /> },
-              { path: 'temporadas', element: <Temporadas /> },
-              { path: 'politica', element: <Politica /> },
-              { path: 'alojamiento', element: <Alojamiento /> },
-              { path: 'usuarios', element: <Usuarios /> },
-              { path: 'canales', element: <Canales /> },
-              { path: 'reportes', element: <Reportes /> },
+              { path: 'apartamentos/nuevo', element: pagina(formularioApartamento) },
+              { path: 'apartamentos/:id/editar', element: pagina(formularioApartamento) },
+              {
+                path: 'apartamentos/:id/novedades',
+                element: pagina(() => import('@/pages/panel/apartamentos/NovedadesApartamento')),
+              },
+              { path: 'temporadas', element: pagina(() => import('@/pages/panel/configuracion/Temporadas')) },
+              { path: 'politica', element: pagina(() => import('@/pages/panel/configuracion/Politica')) },
+              { path: 'alojamiento', element: pagina(() => import('@/pages/panel/configuracion/Alojamiento')) },
+              { path: 'usuarios', element: pagina(() => import('@/pages/panel/usuarios/Usuarios')) },
+              { path: 'canales', element: pagina(() => import('@/pages/panel/canales/Canales')) },
+              { path: 'reportes', element: pagina(() => import('@/pages/panel/reportes/Reportes')) },
             ],
           },
-          { path: '*', element: <NoEncontrada /> },
+          { path: '*', element: pagina(noEncontrada) },
         ],
       },
 
@@ -117,11 +103,11 @@ export const router = createBrowserRouter([
           </RutaProtegida>
         ),
         children: [
-          { index: true, element: <Pendientes /> },
-          { path: 'novedad', element: <NuevaNovedad /> },
-          { path: 'apartamentos/:id', element: <HistorialNovedades /> },
-          { path: 'perfil', element: <MiPerfil /> },
-          { path: '*', element: <NoEncontrada /> },
+          { index: true, element: pagina(() => import('@/pages/servicio/Pendientes')) },
+          { path: 'novedad', element: pagina(() => import('@/pages/servicio/NuevaNovedad')) },
+          { path: 'apartamentos/:id', element: pagina(() => import('@/pages/servicio/HistorialNovedades')) },
+          { path: 'perfil', element: pagina(miPerfil) },
+          { path: '*', element: pagina(noEncontrada) },
         ],
       },
     ],

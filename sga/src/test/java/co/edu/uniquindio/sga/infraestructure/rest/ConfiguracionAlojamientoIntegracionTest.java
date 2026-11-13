@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -16,6 +18,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
@@ -24,6 +27,8 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -296,6 +301,33 @@ class ConfiguracionAlojamientoIntegracionTest {
     }
 
     // ==================== Auxiliares ====================
+
+    @Test
+    @DisplayName("Cuerpos de error de alojamiento, temporadas y política: 400 con errores por campo, 401, 403, 404 y 409")
+    void cuerposDeErrorDeConfiguracion() throws Exception {
+        post("/api/temporadas", "{}")
+                .andExpect(CuerpoError.validacion("/api/temporadas", Map.of(
+                        "id", "El id de la temporada es obligatorio",
+                        "nombre", "El nombre de la temporada es obligatorio",
+                        "tipo", "El tipo de temporada es obligatorio")));
+
+        mvc.perform(MockMvcRequestBuilders.get("/api/politica-cancelacion/versiones").with(anonymous()))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, CuerpoError.MENSAJE_401,
+                        "/api/politica-cancelacion/versiones"));
+
+        mvc.perform(MockMvcRequestBuilders.put("/api/alojamiento").contentType(MediaType.APPLICATION_JSON)
+                        .content(alojamiento("Coral", 10.40, "\"15:00\"", "\"11:00\""))
+                        .with(jwt().authorities(new SimpleGrantedAuthority("RECEPCIONISTA"))))
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, CuerpoError.MENSAJE_403, "/api/alojamiento"));
+
+        post("/api/temporadas/T-NO-EXISTE/rangos", RANGO_FESTIVAL)
+                .andExpect(CuerpoError.error(HttpStatus.NOT_FOUND, "No se encontró la temporada con id: T-NO-EXISTE",
+                        "/api/temporadas/T-NO-EXISTE/rangos"));
+
+        put("/api/politica-cancelacion", politica("[{\"antelacionMinimaDias\":0,\"porcentajeRetencion\":50}]"))
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        startsWith("L-10: la política debe tener al menos dos tramos"), "/api/politica-cancelacion"));
+    }
 
     private static String alojamiento(String nombre, double latitud, String horaEntrada, String horaSalida) {
         return """

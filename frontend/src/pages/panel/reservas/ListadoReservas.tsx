@@ -77,16 +77,23 @@ export default function ListadoReservas() {
         </Link>
       ),
     },
-    { clave: 'titular', titulo: 'Titular', celda: (r) => r.nombreTitular },
+    // Titular y estancia pueden partirse en dos líneas para que la tabla quepa junto a la barra lateral
+    { clave: 'titular', titulo: 'Titular', className: 'whitespace-normal', celda: (r) => r.nombreTitular },
     { clave: 'apartamento', titulo: 'Apartamento', celda: (r) => r.apartamento },
     {
       clave: 'estancia',
       titulo: 'Estancia',
+      className: 'whitespace-normal',
       celda: (r) => {
         const noches = nochesEntre(r.fechaEntrada, r.fechaSalida)
         return (
-          <span className="whitespace-nowrap">
-            <Fecha valor={r.fechaEntrada} /> → <Fecha valor={r.fechaSalida} />
+          <span>
+            <span className="whitespace-nowrap">
+              <Fecha valor={r.fechaEntrada} /> →
+            </span>{' '}
+            <span className="whitespace-nowrap">
+              <Fecha valor={r.fechaSalida} />
+            </span>
             <span className="block text-xs text-muted-foreground">
               {noches} {noches === 1 ? 'noche' : 'noches'} · {r.totalOcupantes}{' '}
               {r.totalOcupantes === 1 ? 'huésped' : 'huéspedes'}

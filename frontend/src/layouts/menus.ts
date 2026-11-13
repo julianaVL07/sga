@@ -65,7 +65,8 @@ export function tituloPanel(pathname: string): string {
   if (/^\/panel\/reservas\/[^/]+$/.test(pathname)) return 'Detalle de la reserva'
   if (pathname === '/panel/apartamentos/nuevo') return 'Nuevo apartamento'
   if (/^\/panel\/apartamentos\/[^/]+\/editar$/.test(pathname)) return 'Editar apartamento'
-  if (/^\/panel\/apartamentos\/[^/]+\/novedades$/.test(pathname)) return 'Novedades del apartamento'
+  // Corto para que quepa en la barra superior del celular, como el encabezado de la página
+  if (/^\/panel\/apartamentos\/[^/]+\/novedades$/.test(pathname)) return 'Novedades'
   if (/^\/panel\/apartamentos\/[^/]+$/.test(pathname)) return 'Detalle del apartamento'
   if (pathname === '/panel/perfil') return 'Mi perfil'
   const todas = [...OPCIONES_RECEPCION, ...OPCIONES_ADMINISTRACION]
