@@ -153,6 +153,13 @@ Content-Type: application/json
         client.assert(response.body.resultado === "RECHAZADO_CONFLICTO", "El canal debía recibir RECHAZADO_CONFLICTO");
         client.assert(response.body.identificadorExterno === "BK-SIM-0002", "Identificador inesperado");
     });
+    client.test("4. cuerpo del rechazo: EventoCanalResponse, no ErrorResponse (RN-18, 7.8)", function () {
+        var e = response.body;
+        client.assert(e.tipoEvento === "CREACION_RESERVA", "tipoEvento: " + e.tipoEvento);
+        client.assert(e.resultado === "RECHAZADO_CONFLICTO" && e.identificadorExterno === "BK-SIM-0002",
+            "resultado/identificadorExterno: " + e.resultado + " " + e.identificadorExterno);
+        client.assert(e.status === undefined && e.mensaje === undefined, "No debía traer los campos de ErrorResponse");
+    });
 %}
 
 ### 5. Cancelar la reserva externa
@@ -180,5 +187,13 @@ GET {{host}}/api/canales/{{canal}}/disponibilidad?entrada={{simEntrada}}&salida=
         client.assert(response.body.status === 401, "El cuerpo debía ser un ErrorResponse con status 401");
         client.assert(response.body.mensaje.indexOf("X-Canal-Credencial") >= 0,
             "Mensaje inesperado: " + response.body.mensaje);
+    });
+    client.test("6. cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Falta la credencial del canal en el encabezado X-Canal-Credencial", "mensaje: " + e.mensaje);
+        client.assert(e.path.indexOf("/api/canales/") === 0 && e.path.slice(-"/disponibilidad".length) === "/disponibilidad",
+            "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
     });
 %}

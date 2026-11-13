@@ -6,7 +6,9 @@
 #   - Las fechas se calculan en la petición 0.1 a partir de hoy en Colombia (UTC-5), igual que los datos
 #     iniciales, que también son relativos a hoy.
 #   - Los códigos de reserva se capturan de las respuestas (client.global.set) y se reutilizan con {{...}}.
-#   - Cada petición valida su código HTTP con client.test; los 409 validan además el código de la regla.
+#   - Cada petición valida su código HTTP con client.test. Las de éxito comprueban además uno o dos campos clave
+#     y las de error todo el ErrorResponse: status, error, mensaje (en los 409, el código de la regla), path,
+#     timestamp y errores (los errores por campo en los 400 de validación; null en los demás).
 #   - La sección de inicio de sesión guarda un token por usuario; el recorrido usa tokenAdmin, que puede todo.
 #     Los tokens duran 30 minutos: si se vencen, vuelva a correr esa sección.
 # Si lo ejecuta dos veces sin reiniciar, fallan las que cambian estado (la reserva ya existe, etc.).
@@ -109,6 +111,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("0.1 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     // Hoy en Colombia (America/Bogota, UTC-5 sin horario de verano), la misma zona del reloj del SGA.
     var DIA = 86400000;
@@ -157,6 +160,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.1 200 listado", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.totalElementos === 7, "Se esperaban las 7 reservas iniciales: " + response.body.totalElementos);
     });
 %}
 
@@ -167,6 +171,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.2 200 página vacía", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 1 && response.body.contenido.length === 0, "La página 1 debía venir vacía");
     });
 %}
 
@@ -177,6 +182,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.3 200 filtro estado", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.length > 0 && response.body.contenido.every(function (r) { return r.estado === "CONFIRMADA"; }), "Todas debían estar CONFIRMADA");
     });
     client.global.set("confirmadaInicial", response.body.contenido[0].codigo);
 %}
@@ -188,6 +194,8 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.4 200 filtros combinados", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var r = response.body.contenido[0];
+        client.assert(r.apartamento === "APT-101" && r.estado === "PENDIENTE" && r.canalOrigen === "PORTAL", "Reserva inesperada: " + JSON.stringify(r));
     });
     client.global.set("pendientePortal", response.body.contenido[0].codigo);
 %}
@@ -199,6 +207,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.5 200 filtro canal", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido[0].canalOrigen === "EXTERNO" && response.body.contenido[0].estado === "PENDIENTE", "Se esperaba la PENDIENTE del canal EXTERNO");
     });
     client.global.set("pendienteExterna", response.body.contenido[0].codigo);
     client.global.set("valorPendienteExterna", response.body.contenido[0].valorTotal);
@@ -211,6 +220,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.6 200 filtro cancelada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido[0].estado === "CANCELADA", "Se esperaba una CANCELADA");
     });
     client.global.set("canceladaInicial", response.body.contenido[0].codigo);
 %}
@@ -222,6 +232,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.7 200 filtro en curso", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido[0].estado === "EN_CURSO" && response.body.contenido[0].apartamento === "APT-201", "Se esperaba la EN_CURSO de APT-201");
     });
     client.global.set("enCursoInicial", response.body.contenido[0].codigo);
 %}
@@ -233,6 +244,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.8 200 filtro titular", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.totalElementos === 1 && response.body.contenido[0].apartamento === "APT-102", "Se esperaba solo la reserva de APT-102");
     });
 %}
 
@@ -243,6 +255,8 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("1.9 200 filtro fechas", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        var desde = client.global.get("hoy"), hasta = client.global.get("hoyMas30");
+        client.assert(response.body.contenido.every(function (r) { return r.fechaEntrada >= desde && r.fechaEntrada <= hasta; }), "Hay entradas fuera del rango");
     });
 %}
 
@@ -259,6 +273,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("2.1 200 listado", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.tamano === 10, "Se esperaba la página 0 de 10 (12.4)");
     });
 %}
 
@@ -269,6 +284,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("2.2 200 detalle", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.identificacion === "APT-301" && response.body.tarifas.length > 0, "Detalle inesperado de APT-301");
     });
 %}
 
@@ -288,6 +304,13 @@ GET {{host}}/api/apartamentos/APT-202
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("2.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-202", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-202", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("2.4 404 retirado", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -310,6 +333,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("3.1 200 disponibles", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.some(function (a) { return a.identificacion === "APT-301"; }), "APT-301 debía estar disponible");
     });
 %}
 
@@ -320,6 +344,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("3.2 200 disponibles con filtros", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.every(function (a) { return a.capacidadMaxima >= 4; }), "Hay apartamentos con capacidad menor que 4");
     });
 %}
 
@@ -341,6 +366,7 @@ Content-Type: application/json
 > {%
     client.test("3.3 200 cotización", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.identificacionApartamento === "APT-301" && response.body.noches === 3, "Cotización inesperada");
     });
 %}
 
@@ -386,6 +412,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("3.5 200 consulta", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.codigo === client.global.get("codigo") && response.body.estado === "PENDIENTE", "Reserva inesperada: " + response.body.codigo);
     });
 %}
 
@@ -402,6 +429,7 @@ Content-Type: application/json
 > {%
     client.test("3.6 201 pago del anticipo", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.codigoReserva === client.global.get("codigo") && response.body.saldo > 0, "Folio inesperado; saldo: " + response.body.saldo);
     });
     client.global.set("saldo", response.body.saldo);
 %}
@@ -441,6 +469,7 @@ Content-Type: application/json
 > {%
     client.test("3.9 201 pago del saldo", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.codigoReserva === client.global.get("codigo") && response.body.saldo === 0, "El saldo debía quedar en 0: " + response.body.saldo);
     });
 %}
 
@@ -487,6 +516,7 @@ Content-Type: application/json
 > {%
     client.test("4.1 200 modificada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.reserva.codigo === client.global.get("pendientePortal") && response.body.reserva.ocupantes.length === 2, "La reserva debía quedar con 2 ocupantes");
     });
 %}
 
@@ -539,6 +569,13 @@ GET {{host}}/api/canales/booking/disponibilidad?entrada={{hoyMas30}}&salida={{ho
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("4.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Falta la credencial del canal") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/canales/booking/disponibilidad", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("4.4 401 el JWT no autentica al canal externo", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.status === 401, "El cuerpo debía ser un ErrorResponse con status 401");
@@ -717,6 +754,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.1 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-01: El apartamento APT-102 ya tiene la reserva") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.1 409 RN-01", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-01"), "Mensaje inesperado: " + response.body.mensaje);
@@ -735,6 +779,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.2 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-01: No se puede bloquear el apartamento APT-101") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-101/bloqueos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.2 409 RN-01 bloqueo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-01"), "Mensaje inesperado: " + response.body.mensaje);
@@ -761,6 +812,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-02: El apartamento APT-101 admite máximo 2 ocupantes") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.3 409 RN-02", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-02"), "Mensaje inesperado: " + response.body.mensaje);
@@ -783,6 +841,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "RN-03: la fecha de salida debe ser posterior a la de entrada", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.4 409 RN-03", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-03"), "Mensaje inesperado: " + response.body.mensaje);
@@ -805,6 +870,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.5 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-04: La fecha de entrada " + client.global.get("ayer")) === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.5 409 RN-04", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-04"), "Mensaje inesperado: " + response.body.mensaje);
@@ -816,6 +888,13 @@ GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-06: Se recibieron 1 fechas de nacimiento para 2 ocupantes") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/disponibles", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.6 409 RN-06", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-06"), "Mensaje inesperado: " + response.body.mensaje);
@@ -838,6 +917,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-07: El apartamento APT-301 tiene un bloqueo") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.7 409 RN-07", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-07"), "Mensaje inesperado: " + response.body.mensaje);
@@ -856,6 +942,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.8 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "RN-07: la fecha de fin debe ser posterior a la de inicio", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-102/bloqueos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.8 409 RN-07 rango", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-07"), "Mensaje inesperado: " + response.body.mensaje);
@@ -872,6 +965,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.9 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-08: No se puede cancelar la reserva " + client.global.get("canceladaInicial")) === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("canceladaInicial") + "/cancelar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.9 409 RN-08", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-08"), "Mensaje inesperado: " + response.body.mensaje);
@@ -883,6 +983,13 @@ PUT {{host}}/api/reservas/{{pendienteExterna}}/no-show
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-08: Solo una reserva CONFIRMADA puede declararse no-show") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendienteExterna") + "/no-show", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.10 409 RN-08 no-show", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-08"), "Mensaje inesperado: " + response.body.mensaje);
@@ -894,6 +1001,13 @@ PUT {{host}}/api/reservas/{{pendientePortal}}/confirmar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.11 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-11: Para confirmar la reserva " + client.global.get("pendientePortal")) === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendientePortal") + "/confirmar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.11 409 L-11", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("L-11"), "Mensaje inesperado: " + response.body.mensaje);
@@ -913,6 +1027,7 @@ Content-Type: application/json
 > {%
     client.test("5.12 201 pago", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.codigoReserva === client.global.get("pendienteExterna"), "Folio inesperado: " + response.body.codigoReserva);
     });
 %}
 
@@ -921,6 +1036,13 @@ PUT {{host}}/api/reservas/{{pendienteExterna}}/confirmar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.13 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-09: La reserva " + client.global.get("pendienteExterna")) === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendienteExterna") + "/confirmar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.13 409 RN-09", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-09"), "Mensaje inesperado: " + response.body.mensaje);
@@ -932,6 +1054,13 @@ PUT {{host}}/api/reservas/{{confirmadaInicial}}/registrar-llegada
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.14 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-10: No se permite el registro antes de la fecha de entrada") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("confirmadaInicial") + "/registrar-llegada", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.14 409 RN-10", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-10"), "Mensaje inesperado: " + response.body.mensaje);
@@ -956,6 +1085,7 @@ Content-Type: application/json
 > {%
     client.test("5.15 201 reserva", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.estado === "PENDIENTE" && response.body.horaEstimadaLlegada === "21:00:00", "Reserva inesperada: " + response.body.horaEstimadaLlegada);
     });
     client.global.set("codigoNocturna", response.body.codigo);
     client.global.set("valorNocturna", response.body.valorTotal);
@@ -974,6 +1104,7 @@ Content-Type: application/json
 > {%
     client.test("5.16 201 pago", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.codigoReserva === client.global.get("codigoNocturna"), "Folio inesperado: " + response.body.codigoReserva);
     });
 %}
 
@@ -984,6 +1115,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("5.17 200 confirmada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "CONFIRMADA", "Estado: " + response.body.estado);
     });
 %}
 
@@ -992,6 +1124,13 @@ PUT {{host}}/api/reservas/{{codigoNocturna}}/registrar-llegada
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.18 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-11: El apartamento no está PREPARADO") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("codigoNocturna") + "/registrar-llegada", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.18 409 RN-11", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-11"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1005,6 +1144,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("5.19 200 EN_PREPARACION", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estadoOperativo === "EN_PREPARACION", "Estado: " + response.body.estadoOperativo);
     });
 %}
 
@@ -1015,6 +1155,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("5.20 200 PREPARADO", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estadoOperativo === "PREPARADO", "Estado: " + response.body.estadoOperativo);
     });
 %}
 
@@ -1025,6 +1166,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("5.21 200 llegada", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "EN_CURSO", "Estado: " + response.body.estado);
     });
 %}
 
@@ -1033,6 +1175,13 @@ PUT {{host}}/api/apartamentos/APT-102/iniciar-preparacion
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.22 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.6: El apartamento APT-102 está PREPARADO") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-102/iniciar-preparacion", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.22 409 7.6", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.6"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1047,6 +1196,13 @@ Content-Type: application/json
 {}
 
 > {%
+    client.test("5.23 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "RN-14: La modificación debe cambiar al menos un dato", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendientePortal"), "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.23 409 RN-14", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-14"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1064,6 +1220,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.24 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-16: El folio FOL-" + client.global.get("codigo") + " está cerrado") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("codigo") + "/folio/pagos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.24 409 RN-16", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-16"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1075,6 +1238,13 @@ PUT {{host}}/api/reservas/{{pendientePortal}}/folio/cerrar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.25 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-17: El folio FOL-" + client.global.get("pendientePortal") + " tiene saldo") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendientePortal") + "/folio/cerrar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.25 409 RN-17", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-17"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1086,6 +1256,13 @@ PUT {{host}}/api/reservas/{{enCursoInicial}}/registrar-salida
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.26 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-17: No se puede registrar la salida de la reserva " + client.global.get("enCursoInicial")) === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("enCursoInicial") + "/registrar-salida", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.26 409 RN-17 salida", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RN-17"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1110,6 +1287,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.28 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.28 403 EXTERNO no entra por POST /api/reservas", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -1132,6 +1316,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.29 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RP-01: Una estancia que incluye viernes o sábado") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.29 409 RP-01", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("RP-01"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1143,6 +1334,13 @@ PUT {{host}}/api/reservas/{{confirmadaInicial}}/no-show
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.30 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-15: El no-show solo puede declararse a partir de") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("confirmadaInicial") + "/no-show", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.30 409 L-15", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("L-15"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1165,6 +1363,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.31 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "3.3: El apartamento APT-202 no está activo para la venta", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.31 409 3.3", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("3.3"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1176,6 +1381,13 @@ PUT {{host}}/api/apartamentos/APT-101/retirar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.32 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.3: El apartamento APT-101 tiene reservas activas o futuras") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-101/retirar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.32 409 7.3", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.3"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1187,6 +1399,13 @@ PUT {{host}}/api/apartamentos/APT-202/retirar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.33 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.3: El apartamento APT-202 ya fue retirado de la venta", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-202/retirar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.33 409 7.3 ya retirado", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.3"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1198,6 +1417,13 @@ GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.34 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.5: el precio mínimo no puede ser mayor que el precio máximo") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/disponibles", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.34 409 7.5 precio", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1209,6 +1435,13 @@ GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.35 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.5: la capacidad mínima debe ser mayor que cero", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/disponibles", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.35 409 7.5 capacidad", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1220,6 +1453,13 @@ GET {{host}}/api/reservas?desde={{hoyMas30}}&hasta={{hoy}}
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.36 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.5: la fecha desde (" + client.global.get("hoyMas30") + ") no puede ser posterior") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.36 409 7.5 fechas", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("7.5"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1231,6 +1471,13 @@ GET {{host}}/api/reservas/RESERVA-1
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("5.37 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("El código de la reserva debe tener el formato RES-YYYY-NNNNN") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RESERVA-1", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.37 409 formato del código", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("El código de la reserva"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1253,6 +1500,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.38 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("3.2: El titular debe ser un ocupante facturable") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.38 409 3.2", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("3.2"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1277,6 +1531,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("5.39 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-16: Se aceptan máximo 2 mascotas de hasta 10 kg") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("5.39 409 L-16", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.startsWith("L-16"), "Mensaje inesperado: " + response.body.mensaje);
@@ -1313,6 +1574,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("6.2 200 salida", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.estado === "FINALIZADA", "Estado: " + response.body.estado);
     });
 %}
 
@@ -1351,6 +1613,16 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("7.1 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.fechaEntrada === "La fecha de entrada es obligatoria", "errores.fechaEntrada: " + e.errores.fechaEntrada);
+        client.assert(e.errores.fechaSalida === "La fecha de salida es obligatoria", "errores.fechaSalida: " + e.errores.fechaSalida);
+        client.assert(e.errores["titular.email"] === "El email del titular no tiene un formato válido", "errores.titular.email: " + e.errores["titular.email"]);
+    });
     client.test("7.1 400 validación", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1367,6 +1639,14 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("7.2 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("confirmadaInicial") + "/folio/pagos", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.valor === "El valor del pago debe ser mayor que cero", "errores.valor: " + e.errores.valor);
+    });
     client.test("7.2 400 valor negativo", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1385,6 +1665,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("7.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Formato inválido: revise el JSON") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/cotizaciones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("7.3 400 fecha en el cuerpo", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1395,6 +1682,13 @@ GET {{host}}/api/apartamentos/disponibles?entrada=31-12-2026&salida={{hoyMas3}}&
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("7.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Formato inválido: revise el JSON") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/disponibles", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("7.4 400 fecha en la URL", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1415,6 +1709,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("7.5 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Formato inválido: revise el JSON") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("7.5 400 enum en el cuerpo", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1432,6 +1733,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("7.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Formato inválido: revise el JSON") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-101/novedades", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("7.6 400 enum gravedad de novedad", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1442,6 +1750,13 @@ GET {{host}}/api/reservas?estado=PERDIDA
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("7.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("Formato inválido: revise el JSON") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("7.7 400 enum en la URL", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1452,6 +1767,14 @@ GET {{host}}/api/reservas?pagina=-1
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("7.8 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.pagina === "La página no puede ser negativa", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("7.8 400 página negativa", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1462,6 +1785,14 @@ GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas40}}&salida={{hoyMas43
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("7.9 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/disponibles", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.ocupantes === "El parámetro es obligatorio", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("7.9 400 falta parámetro", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1478,6 +1809,13 @@ GET {{host}}/api/reservas/RES-2026-99999
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.1 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la reserva con código: RES-2026-99999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RES-2026-99999", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.1 404 reserva", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1488,6 +1826,13 @@ GET {{host}}/api/apartamentos/APT-999
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.2 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-999", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.2 404 apartamento", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1504,6 +1849,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("8.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la reserva con código: RES-2026-99999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RES-2026-99999/folio/pagos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.3 404 folio", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1522,6 +1874,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("8.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/cotizaciones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.4 404 cotización", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1539,6 +1898,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("8.5 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-999/bloqueos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.5 404 bloqueo", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1549,6 +1915,13 @@ GET {{host}}/api/apartamentos/APT-999/novedades
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-999/novedades", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.6 404 historial de novedades", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1559,6 +1932,13 @@ GET {{host}}/api/apartamentos/APT-102/bloqueos/BLQ-no-existe
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("No se encontró el bloqueo BLQ-no-existe del apartamento APT-102") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-102/bloqueos/BLQ-no-existe", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.7 404 bloqueo inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1569,6 +1949,13 @@ GET {{host}}/api/apartamentos/APT-101/bloqueos/{{idBloqueo}}
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.8 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("No se encontró el bloqueo " + client.global.get("idBloqueo") + " del apartamento APT-101") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-101/bloqueos/" + client.global.get("idBloqueo"), "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.8 404 bloqueo de otro apartamento", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1579,6 +1966,13 @@ GET {{host}}/api/apartamentos/APT-301/novedades/NOV-no-existe
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.9 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("No se encontró la novedad NOV-no-existe del apartamento APT-301") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-301/novedades/NOV-no-existe", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.9 404 novedad inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1589,6 +1983,13 @@ GET {{host}}/api/apartamentos/APT-101/novedades/{{idNovedad}}
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("8.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("No se encontró la novedad " + client.global.get("idNovedad") + " del apartamento APT-101") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-101/novedades/" + client.global.get("idNovedad"), "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("8.10 404 novedad de otro apartamento", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1610,6 +2011,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("9.0 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     var DIA = 86400000;
     var hoy = new Date(Date.now() - 5 * 3600000);
@@ -1678,6 +2080,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-04: Ya existe un apartamento con la identificación APT-101") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.3 409 L-04 identificación duplicada", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("L-04") === 0, "Se esperaba L-04: " + response.body.mensaje);
@@ -1702,6 +2111,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("El apartamento debe tener exactamente una imagen principal") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.4 409 imagen principal única", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("imagen principal") >= 0, "Mensaje inesperado: " + response.body.mensaje);
@@ -1713,6 +2129,13 @@ PUT {{host}}/api/apartamentos/APT-401/activar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("9.5 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.4: El apartamento APT-401 no tiene tarifa en todas las temporadas") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-401/activar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.5 409 7.4 activar sin tarifas completas", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -1729,6 +2152,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.4: La temporada T-NAVIDAD no existe en el alojamiento", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-401/tarifas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.6 409 7.4 temporada inexistente", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -1745,6 +2175,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.4: el valor de la tarifa debe ser mayor que cero", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-401/tarifas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.7 409 7.4 valor no positivo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -1761,6 +2198,14 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.8 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-401/tarifas", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.tarifas === "Debe indicar al menos una tarifa", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("9.8 400 sin tarifas", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -1838,6 +2283,7 @@ Content-Type: application/json
 > {%
     client.test("9.12 201 reserva de 3 ocupantes", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.identificacionApartamento === "APT-401" && response.body.ocupantes.length === 3, "Reserva inesperada");
     });
     client.global.set("codigoApt401", response.body.codigo);
 %}
@@ -1907,6 +2353,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.16 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "RN-02: la capacidad debe ser de al menos una persona", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-401", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.16 409 RN-02 capacidad mínima", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("RN-02") === 0, "Se esperaba RN-02: " + response.body.mensaje);
@@ -1918,6 +2371,13 @@ PUT {{host}}/api/apartamentos/APT-202/activar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("9.17 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.3: Un apartamento desactivado (eliminado lógicamente)") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-202/activar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.17 409 7.3 activar retirado", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.3") === 0, "Se esperaba 7.3: " + response.body.mensaje);
@@ -1937,6 +2397,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("9.18 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-202", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/APT-202", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("9.18 404 actualizar retirado", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -1961,6 +2428,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("10.0 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     var DIA = 86400000;
     var hoy = new Date(Date.now() - 5 * 3600000);
@@ -2082,6 +2550,13 @@ GET {{host}}/api/reservas/calendario?apartamento=APT-101&desde={{cu26HoyMas5}}&h
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("10.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.1: la fecha desde debe ser anterior a la fecha hasta", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/calendario", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("10.7 409 7.1 rango invertido", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.1") === 0, "Se esperaba 7.1: " + response.body.mensaje);
@@ -2093,6 +2568,13 @@ GET {{host}}/api/reservas/calendario?apartamento=APT-101&desde={{cu26Hoy}}&hasta
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("10.8 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.1: el calendario abarca máximo 62 noches y se pidieron 63", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/calendario", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("10.8 409 7.1 rango demasiado largo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.1") === 0, "Se esperaba 7.1: " + response.body.mensaje);
@@ -2104,6 +2586,13 @@ GET {{host}}/api/reservas/calendario?apartamento=APT-999&desde={{cu26Hoy}}&hasta
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("10.9 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró el apartamento con identificación: APT-999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/calendario", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("10.9 404 apartamento inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -2205,6 +2694,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "7.3: la latitud debe estar entre -90 y 90", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/alojamiento", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.3 409 7.3 coordenada fuera de rango", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.3") === 0, "Se esperaba 7.3: " + response.body.mensaje);
@@ -2225,6 +2721,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La hora de salida es obligatoria (L-12)", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/alojamiento", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.4 409 L-12 horario incompleto", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("L-12") >= 0, "Se esperaba L-12: " + response.body.mensaje);
@@ -2300,6 +2803,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.8 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.4: Todo apartamento activo debe tener tarifa en todas las") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.8 409 7.4 falta la tarifa de un apartamento activo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -2323,6 +2833,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.9 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.4: La temporada Navidad se solapa con Alta") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.9 409 7.4 temporada solapada", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -2344,6 +2861,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("F-05: El alojamiento ya tiene una temporada base") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.10 409 F-05 segunda temporada base", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("F-05") === 0, "Se esperaba F-05: " + response.body.mensaje);
@@ -2372,6 +2896,13 @@ Content-Type: application/json
 { "fechaInicio": "2026-12-20", "fechaFin": "2026-12-26" }
 
 > {%
+    client.test("11.12 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.4: El rango 2026-12-20 a 2026-12-26 se solapa con la temporada") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas/T-FESTIVAL/rangos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.12 409 7.4 rango solapado", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.4") === 0, "Se esperaba 7.4: " + response.body.mensaje);
@@ -2386,6 +2917,13 @@ Content-Type: application/json
 { "fechaInicio": "2027-05-01", "fechaFin": "2027-05-03" }
 
 > {%
+    client.test("11.13 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la temporada con id: T-NO-EXISTE", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas/T-NO-EXISTE/rangos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.13 404 temporada inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -2524,6 +3062,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("11.20 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-10: la política debe tener al menos dos tramos") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/politica-cancelacion", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("11.20 409 L-10 un solo tramo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("L-10") === 0, "Se esperaba L-10: " + response.body.mensaje);
@@ -2547,6 +3092,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("12.0 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     var DIA = 86400000;
     var hoy = new Date(Date.now() - 5 * 3600000);
@@ -2583,6 +3129,7 @@ Content-Type: application/json
 > {%
     client.test("12.1 201 reserva creada", function () {
         client.assert(response.status === 201, "Se esperaba 201 y llegó " + response.status);
+        client.assert(response.body.estado === "PENDIENTE" && response.body.identificacionApartamento === "APT-201", "Reserva inesperada");
     });
     client.global.set("cu12Codigo", response.body.codigo);
 %}
@@ -2615,6 +3162,13 @@ Content-Type: application/json
 { "idServicio": "SRV-SPA" }
 
 > {%
+    client.test("12.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("L-17: El alojamiento no ofrece el servicio adicional SRV-SPA") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("cu12Codigo") + "/folio/cargos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.3 409 L-17 servicio inexistente", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("L-17") === 0, "Se esperaba L-17: " + response.body.mensaje);
@@ -2629,6 +3183,13 @@ Content-Type: application/json
 { "idServicio": "SRV-CENA-BALCON" }
 
 > {%
+    client.test("12.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la reserva con código: RES-2026-99999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RES-2026-99999/folio/cargos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.4 404 reserva inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -2661,6 +3222,13 @@ Content-Type: application/json
 { "indiceCargo": 99, "motivo": "Cargo inexistente" }
 
 > {%
+    client.test("12.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-16: El folio FOL-" + client.global.get("cu12Codigo") + " no tiene un cargo") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("cu12Codigo") + "/folio/correcciones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.6 409 RN-16 cargo inexistente", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
@@ -2675,6 +3243,13 @@ Content-Type: application/json
 { "indiceCargo": 0, "motivo": "Reserva inexistente" }
 
 > {%
+    client.test("12.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la reserva con código: RES-2026-99999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RES-2026-99999/folio/correcciones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.7 404 reserva inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -2702,6 +3277,13 @@ Content-Type: application/json
 { "idServicio": "SRV-PASEO-BAHIA" }
 
 > {%
+    client.test("12.9 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-16: El folio FOL-" + client.global.get("cu12Codigo") + " está cerrado") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("cu12Codigo") + "/folio/cargos", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.9 409 RN-16 cargo en folio cerrado", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
@@ -2716,6 +3298,13 @@ Content-Type: application/json
 { "indiceCargo": 0, "motivo": "Corrección tardía" }
 
 > {%
+    client.test("12.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("RN-16: El folio FOL-" + client.global.get("cu12Codigo") + " está cerrado") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("cu12Codigo") + "/folio/correcciones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("12.10 409 RN-16 corrección en folio cerrado", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("RN-16") === 0, "Se esperaba RN-16: " + response.body.mensaje);
@@ -2752,6 +3341,13 @@ Content-Type: application/json
 { "correo": "recepcion@sga.local", "contrasena": "Errada2026" }
 
 > {%
+    client.test("13.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Credenciales inválidas", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/login", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.4 login con contraseña errada", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.mensaje === "Credenciales inválidas", response.body.mensaje);
@@ -2765,6 +3361,14 @@ Content-Type: application/json
 { "correo": "no-es-un-correo", "contrasena": "Recepcion2026" }
 
 > {%
+    client.test("13.5 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/login", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.correo === "El correo no tiene un formato válido", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("13.5 login con correo sin formato", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.errores.correo, "Faltó el campo correo en errores");
@@ -2775,6 +3379,13 @@ Content-Type: application/json
 GET {{host}}/api/reservas?estado=PENDIENTE
 
 > {%
+    client.test("13.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.6 listar sin token", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
     });
@@ -2785,6 +3396,13 @@ GET {{host}}/api/reservas?estado=PENDIENTE
 Authorization: Bearer {{tokenHuesped1}}
 
 > {%
+    client.test("13.7 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.7 huésped 1 lista reservas", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2798,6 +3416,7 @@ Authorization: Bearer {{tokenRecepcion}}
 > {%
     client.test("13.8 recepción lista reservas", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.every(function (r) { return r.estado === "PENDIENTE"; }), "Todas debían estar PENDIENTE");
     });
 %}
 
@@ -2817,6 +3436,13 @@ GET {{host}}/api/reservas/{{pendientePortal}}
 Authorization: Bearer {{tokenHuesped2}}
 
 > {%
+    client.test("13.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendientePortal"), "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.10 huésped 2 ve la reserva del huésped 1", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2828,6 +3454,13 @@ GET {{host}}/api/reservas/RES-2000-99999
 Authorization: Bearer {{tokenRecepcion}}
 
 > {%
+    client.test("13.11 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se encontró la reserva con código: RES-2000-99999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/RES-2000-99999", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.11 recepción con código inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -2838,6 +3471,13 @@ PUT {{host}}/api/reservas/{{pendientePortal}}/confirmar
 Authorization: Bearer {{tokenServicio}}
 
 > {%
+    client.test("13.12 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/" + client.global.get("pendientePortal") + "/confirmar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.12 servicio confirma una reserva", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2848,6 +3488,13 @@ Authorization: Bearer {{tokenServicio}}
 GET {{host}}/api/reservas?estado=PENDIENTE
 
 > {%
+    client.test("13.13 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.13 401 sin token con ErrorResponse", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.status === 401, "status: " + response.body.status);
@@ -2875,6 +3522,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("13.14 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.14 403 huésped crea DIRECTO", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2897,6 +3551,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("13.15 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.15 403 huésped crea a nombre de otro", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2919,6 +3580,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("13.16 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.16 403 recepción crea PORTAL", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -2946,6 +3614,7 @@ GET {{host}}/api/apartamentos/disponibles?entrada={{hoyMas50}}&salida={{hoyMas52
 > {%
     client.test("13.18 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.length > 0 && response.body.contenido[0].valorEstimado > 0, "Se esperaban apartamentos con su valor estimado");
     });
 %}
 
@@ -2965,6 +3634,7 @@ GET {{host}}/api/alojamiento
 > {%
     client.test("13.20 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === "ALO-CORAL" && response.body.ciudad === "Cartagena de Indias", "Alojamiento inesperado: " + response.body.id);
     });
 %}
 
@@ -2974,6 +3644,7 @@ GET {{host}}/api/politica-cancelacion
 > {%
     client.test("13.21 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.version >= 1 && response.body.tramos.length >= 2, "Política inesperada");
     });
 %}
 
@@ -2983,6 +3654,7 @@ GET {{host}}/api/temporadas?pagina=0
 > {%
     client.test("13.22 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.some(function (t) { return t.id === "T-BASE"; }), "Faltó la temporada base");
     });
 %}
 
@@ -2992,6 +3664,7 @@ GET {{host}}/api/temporadas/T-BASE
 > {%
     client.test("13.23 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.id === "T-BASE" && response.body.tipo === "BASE", "Temporada inesperada");
     });
 %}
 
@@ -3012,6 +3685,7 @@ Content-Type: application/json
 > {%
     client.test("13.24 200 sin token", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.identificacionApartamento === "APT-101" && response.body.noches === 2, "Cotización inesperada");
     });
 %}
 
@@ -3019,6 +3693,13 @@ Content-Type: application/json
 GET {{host}}/api/apartamentos/pendientes-preparacion
 
 > {%
+    client.test("13.25 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/pendientes-preparacion", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.25 401 sin token", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.path === "/api/apartamentos/pendientes-preparacion", "path: " + response.body.path);
@@ -3032,6 +3713,13 @@ Content-Type: application/json
 { "nombre": "Apartahotel Coral" }
 
 > {%
+    client.test("13.26 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/alojamiento", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.26 401 sin token", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.path === "/api/alojamiento", "path: " + response.body.path);
@@ -3042,6 +3730,13 @@ Content-Type: application/json
 GET {{host}}/api/politica-cancelacion/versiones
 
 > {%
+    client.test("13.27 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/politica-cancelacion/versiones", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.27 401 sin token", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.path === "/api/politica-cancelacion/versiones", "path: " + response.body.path);
@@ -3055,6 +3750,13 @@ Content-Type: application/json
 { "id": "T-SIN-TOKEN", "nombre": "Sin token" }
 
 > {%
+    client.test("13.28 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Debe iniciar sesión o el token no es válido", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/temporadas", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("13.28 401 sin token", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.path === "/api/temporadas", "path: " + response.body.path);
@@ -3077,6 +3779,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("14.0 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     var DIA = 86400000;
     var hoy = new Date(Date.now() - 5 * 3600000);
@@ -3142,6 +3845,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("14.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Ya existe un usuario registrado con ese correo o documento", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.3 409 correo repetido", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje === "Ya existe un usuario registrado con ese correo o documento", response.body.mensaje);
@@ -3164,6 +3874,13 @@ Content-Type: application/json
 }
 
 > {%
+    client.test("14.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.4 403 huésped crea usuario", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -3190,6 +3907,13 @@ GET {{host}}/api/usuarios/999999
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("14.6 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 404 && e.error === "Not Found", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No existe un usuario con id 999999", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios/999999", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.6 404 usuario inexistente", function () {
         client.assert(response.status === 404, "Se esperaba 404 y llegó " + response.status);
     });
@@ -3217,6 +3941,14 @@ Content-Type: application/json
 { "rol": "GERENTE" }
 
 > {%
+    client.test("14.8 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios/" + client.global.get("usuarioNuevoId") + "/rol", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.rol === "El rol debe ser HUESPED, RECEPCIONISTA, ADMINISTRADOR o PERSONAL_SERVICIO", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("14.8 400 rol inexistente", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.errores.rol, "Faltó el campo rol en errores");
@@ -3244,7 +3976,7 @@ Authorization: Bearer {{tokenNuevo}}
 > {%
     client.test("14.10 200 mi perfil", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
-        client.assert(response.body.id === client.global.get("usuarioNuevoId"), "Id: " + response.body.id);
+        client.assert(String(response.body.id) === String(client.global.get("usuarioNuevoId")), "Id: " + response.body.id);
         client.assert(response.body.correo === "recepcion.noche@sga.local", "Correo: " + response.body.correo);
     });
 %}
@@ -3279,6 +4011,13 @@ Content-Type: application/json
 { "contrasenaActual": "Errada2026", "contrasenaNueva": "Noche2027" }
 
 > {%
+    client.test("14.12 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La contraseña actual no es correcta", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios/me/contrasena", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.12 400 contraseña actual errada", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.mensaje === "La contraseña actual no es correcta", response.body.mensaje);
@@ -3295,6 +4034,7 @@ Content-Type: application/json
 > {%
     client.test("14.13 204 contraseña cambiada", function () {
         client.assert(response.status === 204, "Se esperaba 204 y llegó " + response.status);
+        client.assert(!response.body, "El 204 no debe traer cuerpo");
     });
 %}
 
@@ -3307,6 +4047,7 @@ Content-Type: application/json
 > {%
     client.test("14.14 200 login con la contraseña nueva", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.token != null && response.body.tipo === "Bearer", "Faltó el token");
     });
 %}
 
@@ -3374,6 +4115,13 @@ GET {{host}}/api/reservas/mias
 Authorization: Bearer {{tokenRecepcion}}
 
 > {%
+    client.test("14.19 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reservas/mias", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.19 403 recepción en mis reservas", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
         client.assert(response.body.mensaje === "No tiene permiso para realizar esta operación", response.body.mensaje);
@@ -3397,6 +4145,13 @@ PUT {{host}}/api/usuarios/{{adminId}}/desactivar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("14.21 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No se puede desactivar a sí mismo", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios/" + client.global.get("adminId") + "/desactivar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.21 409 desactivarse a sí mismo", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje === "No se puede desactivar a sí mismo", response.body.mensaje);
@@ -3410,6 +4165,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("14.22 200 huéspedes", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.contenido.every(function (u) { return u.rol === "HUESPED"; }), "Todos debían ser HUESPED");
     });
     var huesped1 = response.body.contenido.filter(function (u) { return u.correo === "huesped1@sga.local"; })[0];
     client.global.set("huesped1Id", huesped1.id);
@@ -3420,6 +4176,13 @@ PUT {{host}}/api/usuarios/{{huesped1Id}}/desactivar
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("14.23 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("No se puede desactivar: el usuario es titular de reservas") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/usuarios/" + client.global.get("huesped1Id") + "/desactivar", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.23 409 titular de reservas activas", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("titular de reservas") >= 0, response.body.mensaje);
@@ -3444,6 +4207,13 @@ Content-Type: application/json
 { "correo": "recepcion.noche@sga.local", "contrasena": "Noche2027" }
 
 > {%
+    client.test("14.25 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 401 && e.error === "Unauthorized", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "Credenciales inválidas", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/login", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("14.25 401 login de un usuario inactivo", function () {
         client.assert(response.status === 401, "Se esperaba 401 y llegó " + response.status);
         client.assert(response.body.mensaje === "Credenciales inválidas", response.body.mensaje);
@@ -3466,6 +4236,7 @@ Authorization: Bearer {{tokenAdmin}}
 > {%
     client.test("15.0 la app responde", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.pagina === 0 && response.body.contenido.length > 0, "Se esperaba la página 0 con apartamentos");
     });
     var DIA = 86400000;
     var hoy = new Date(Date.now() - 5 * 3600000);
@@ -3520,6 +4291,14 @@ Content-Type: application/json
 { "descripcion": "" }
 
 > {%
+    client.test("15.3 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/novedades/sugerir-gravedad", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.descripcion === "La descripción de la novedad es obligatoria", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("15.3 400 falta la descripción", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -3533,6 +4312,13 @@ Content-Type: application/json
 { "descripcion": "Huele a gas en la cocina" }
 
 > {%
+    client.test("15.4 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/apartamentos/novedades/sugerir-gravedad", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("15.4 403 rol sin permiso", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
     });
@@ -3588,6 +4374,13 @@ GET {{host}}/api/reportes/ocupacion?desde={{reporteHasta}}&hasta={{reporteDesde}
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("15.8 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 409 && e.error === "Conflict", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje.indexOf("7.9: la fecha desde (" + client.global.get("reporteHasta") + ") no puede ser posterior") === 0, "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reportes/ocupacion", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("15.8 409 periodo invertido", function () {
         client.assert(response.status === 409, "Se esperaba 409 y llegó " + response.status);
         client.assert(response.body.mensaje.indexOf("7.9") === 0, response.body.mensaje);
@@ -3599,6 +4392,14 @@ GET {{host}}/api/reportes/ingresos?desde={{reporteDesde}}
 Authorization: Bearer {{tokenAdmin}}
 
 > {%
+    client.test("15.9 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reportes/ingresos", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.hasta === "El parámetro es obligatorio", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("15.9 400 falta un parámetro", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
     });
@@ -3609,6 +4410,13 @@ GET {{host}}/api/reportes/ocupacion?desde={{reporteDesde}}&hasta={{reporteHasta}
 Authorization: Bearer {{tokenRecepcion}}
 
 > {%
+    client.test("15.10 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 403 && e.error === "Forbidden", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "No tiene permiso para realizar esta operación", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/reportes/ocupacion", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("15.10 403 recepción no ve reportes", function () {
         client.assert(response.status === 403, "Se esperaba 403 y llegó " + response.status);
     });
@@ -3635,6 +4443,7 @@ Content-Type: application/json
 > {%
     client.test("16.1 202 solicitud de recuperación", function () {
         client.assert(response.status === 202, "Se esperaba 202 y llegó " + response.status);
+        client.assert(!response.body, "El 202 no trae cuerpo: no revela si la cuenta existe");
     });
 %}
 
@@ -3647,6 +4456,7 @@ Content-Type: application/json
 > {%
     client.test("16.2 202 también sin cuenta", function () {
         client.assert(response.status === 202, "Se esperaba 202 y llegó " + response.status);
+        client.assert(!response.body, "El 202 no trae cuerpo: no revela si la cuenta existe");
     });
 %}
 
@@ -3657,6 +4467,13 @@ Content-Type: application/json
 { "correo": "huesped1@sga.local", "codigo": "000000", "nuevaContrasena": "Huesped2027" }
 
 > {%
+    client.test("16.3 cuerpo del error", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "El código no es válido o ya venció. Solicita uno nuevo.", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/recuperacion/restablecer", "path: " + e.path);
+        client.assert(e.timestamp != null && e.errores == null, "timestamp o errores: " + JSON.stringify(e));
+    });
     client.test("16.3 400 código que no sirve", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.mensaje === "El código no es válido o ya venció. Solicita uno nuevo.",
@@ -3671,6 +4488,18 @@ Content-Type: application/json
 { "correo": "huesped1@sga.local", "codigo": "12ab", "nuevaContrasena": "corta" }
 
 > {%
+    client.test("16.4 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/recuperacion/restablecer", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.codigo === "El código tiene 6 dígitos", "errores.codigo: " + e.errores.codigo);
+        // La contraseña incumple dos reglas del campo; Bean Validation no garantiza cuál informa primero
+        client.assert(["La contraseña debe tener entre 8 y 72 caracteres",
+            "La contraseña debe tener al menos una mayúscula y un número"].indexOf(e.errores.nuevaContrasena) >= 0,
+            "errores.nuevaContrasena: " + e.errores.nuevaContrasena);
+    });
     client.test("16.4 400 datos inválidos", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.errores.codigo !== undefined, "Falta el error del código");
@@ -3685,6 +4514,14 @@ Content-Type: application/json
 { "correo": "no-es-un-correo" }
 
 > {%
+    client.test("16.5 cuerpo del error con los errores por campo", function () {
+        var e = response.body;
+        client.assert(e.status === 400 && e.error === "Bad Request", "status/error: " + e.status + " " + e.error);
+        client.assert(e.mensaje === "La petición tiene datos inválidos", "mensaje: " + e.mensaje);
+        client.assert(e.path === "/api/auth/recuperacion/solicitar", "path: " + e.path);
+        client.assert(e.timestamp != null, "Falta timestamp");
+        client.assert(e.errores.correo === "El correo no tiene un formato válido", "errores: " + JSON.stringify(e.errores));
+    });
     client.test("16.5 400 correo inválido", function () {
         client.assert(response.status === 400, "Se esperaba 400 y llegó " + response.status);
         client.assert(response.body.errores.correo !== undefined, "Falta el error del correo");
@@ -3700,5 +4537,6 @@ Content-Type: application/json
 > {%
     client.test("16.6 200 la contraseña sigue igual", function () {
         client.assert(response.status === 200, "Se esperaba 200 y llegó " + response.status);
+        client.assert(response.body.token != null && response.body.roles.join() === "HUESPED", "Login inesperado");
     });
 %}
