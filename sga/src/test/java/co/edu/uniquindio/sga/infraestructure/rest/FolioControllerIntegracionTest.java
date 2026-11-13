@@ -8,17 +8,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -234,6 +239,31 @@ class FolioControllerIntegracionTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("RN-16")));
         get(folio).andExpect(jsonPath("$.cargos.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("Cuerpos de error del folio: 400 con errores por campo, 401, 403, 404 y 409")
+    void cuerposDeErrorDelFolio() throws Exception {
+        post(RESERVA_INEXISTENTE + "/pagos", "{\"valor\":-5,\"medio\":\"TARJETA_DEBITO_CREDITO\"}")
+                .andExpect(CuerpoError.validacion(RESERVA_INEXISTENTE + "/pagos",
+                        Map.of("valor", "El valor del pago debe ser mayor que cero")));
+
+        mvc.perform(MockMvcRequestBuilders.get(RESERVA_INEXISTENTE).with(anonymous()))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, CuerpoError.MENSAJE_401, RESERVA_INEXISTENTE));
+
+        mvc.perform(MockMvcRequestBuilders.put(RESERVA_INEXISTENTE + "/cerrar")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("HUESPED"))))
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, CuerpoError.MENSAJE_403,
+                        RESERVA_INEXISTENTE + "/cerrar"));
+
+        post(RESERVA_INEXISTENTE + "/pagos", pago(100_000))
+                .andExpect(CuerpoError.error(HttpStatus.NOT_FOUND,
+                        "No se encontró la reserva con código: RES-2026-99999", RESERVA_INEXISTENTE + "/pagos"));
+
+        String folio = "/api/reservas/" + codigo(crearReserva(LocalDate.now(BOGOTA).plusDays(195))) + "/folio";
+        post(folio + "/cargos", cargo("SRV-SPA"))
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        startsWith("L-17: El alojamiento no ofrece el servicio adicional SRV-SPA"), folio + "/cargos"));
     }
 
     private void cerrarConAutorizacion(String folio) throws Exception {

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
@@ -227,6 +229,28 @@ class CanalVentaControllerIntegracionTest {
     }
 
     // ---------------------------------------------------------------- apoyo
+
+    @Test
+    @DisplayName("Cuerpos de error de /api/canales: 400 con errores por campo, 401, 403, 404 y 409")
+    void cuerposDeErrorDeCanales() throws Exception {
+        crear("{}").andExpect(CuerpoError.validacion("/api/canales",
+                Map.of("nombre", "El nombre del canal es obligatorio")));
+
+        mvc.perform(MockMvcRequestBuilders.get("/api/canales"))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, CuerpoError.MENSAJE_401, "/api/canales"));
+
+        mvc.perform(MockMvcRequestBuilders.get("/api/canales").with(rol("RECEPCIONISTA")))
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, CuerpoError.MENSAJE_403, "/api/canales"));
+
+        admin(MockMvcRequestBuilders.put("/api/canales/no-existe-err/desactivar"))
+                .andExpect(CuerpoError.error(HttpStatus.NOT_FOUND, "No se encontró el canal de venta: no-existe-err",
+                        "/api/canales/no-existe-err/desactivar"));
+
+        crearCanal("canal-err");
+        crear("{\"nombre\":\"canal-err\"}")
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT, "10.3.1: Ya existe un canal llamado canal-err",
+                        "/api/canales"));
+    }
 
     private static JwtRequestPostProcessor rol(String rol) {
         return jwt().authorities(new SimpleGrantedAuthority(rol)).jwt(token -> token.subject(ADMIN));

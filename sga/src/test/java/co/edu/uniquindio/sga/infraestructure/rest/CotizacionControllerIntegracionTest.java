@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.startsWith;
@@ -77,6 +79,26 @@ class CotizacionControllerIntegracionTest {
         cotizar(cuerpo("APT-201", entrada, entrada.minusDays(1), ADULTO))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensaje", startsWith("RN-03")));
+    }
+
+    @Test
+    @DisplayName("Cuerpos de error de /api/cotizaciones (pública: sin 401 ni 403): 400 con errores por campo, 404 y 409")
+    void cuerposDeErrorDeCotizaciones() throws Exception {
+        cotizar("{}")
+                .andExpect(CuerpoError.validacion("/api/cotizaciones", Map.of(
+                        "identificacionApartamento", "La identificación del apartamento es obligatoria",
+                        "fechaEntrada", "La fecha de entrada es obligatoria",
+                        "fechaSalida", "La fecha de salida es obligatoria",
+                        "ocupantes", "La cotización debe tener al menos un ocupante")));
+
+        LocalDate entrada = LocalDate.now(BOGOTA).plusDays(40);
+        cotizar(cuerpo("APT-999", entrada, entrada.plusDays(2), ADULTO))
+                .andExpect(CuerpoError.error(HttpStatus.NOT_FOUND,
+                        "No se encontró el apartamento con identificación: APT-999", "/api/cotizaciones"));
+
+        cotizar(cuerpo("APT-101", entrada, entrada, ADULTO))
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        "RN-03: la fecha de salida debe ser posterior a la de entrada", "/api/cotizaciones"));
     }
 
     private static String cuerpo(String apartamento, LocalDate entrada, LocalDate salida, String ocupantes) {

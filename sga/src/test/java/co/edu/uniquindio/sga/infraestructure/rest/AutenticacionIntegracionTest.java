@@ -6,10 +6,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+
+import java.util.Map;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.startsWith;
@@ -90,6 +93,21 @@ class AutenticacionIntegracionTest {
                 .andExpect(jsonPath("$.mensaje", startsWith("Ya existe un usuario registrado")));
         registrar(registro("distinto@correo.co", "1095000002"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Cuerpos de error de /api/auth (pública: sin 403 ni 404): 400 con errores por campo, 401 y 409")
+    void cuerposDeErrorDeAutenticacion() throws Exception {
+        login("no-es-un-correo", "Recepcion2026")
+                .andExpect(CuerpoError.validacion("/api/auth/login",
+                        Map.of("correo", "El correo no tiene un formato válido")));
+
+        login("recepcion@sga.local", "Errada2026")
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas", "/api/auth/login"));
+
+        registrar(registro("huesped1@sga.local", "1094777888"))
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        "Ya existe un usuario registrado con ese correo o documento", "/api/auth/registro"));
     }
 
     private ResultActions login(String correo, String contrasena) throws Exception {

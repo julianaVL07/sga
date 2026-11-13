@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -225,6 +226,28 @@ class CanalExternoControllerIntegracionTest {
     }
 
     // ---------------------------------------------------------------- apoyo
+
+    @Test
+    @DisplayName("Cuerpos de error del canal externo: 400 con errores por campo, 401 y 403 (los rechazos del negocio "
+            + "responden EventoCanalResponse, no ErrorResponse)")
+    void cuerposDeErrorDelCanalExterno() throws Exception {
+        String canal = "errores-ext";
+        String ruta = "/api/canales/" + canal;
+
+        post(canal, "{}").andExpect(CuerpoError.validacion(ruta + "/reservas", Map.of(
+                "identificadorExterno", "El identificador de la reserva en el canal es obligatorio",
+                "fechaEntrada", "La fecha de entrada es obligatoria",
+                "ocupantes", "La reserva debe tener al menos un ocupante")));
+
+        mvc.perform(MockMvcRequestBuilders.get(ruta + "/disponibilidad"))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED,
+                        "Falta la credencial del canal en el encabezado X-Canal-Credencial", ruta + "/disponibilidad"));
+
+        mvc.perform(MockMvcRequestBuilders.put(ruta + "/desactivar")).andExpect(status().isOk());
+        get(canal, ruta + "/disponibilidad")
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, "El canal " + canal + " está inactivo",
+                        ruta + "/disponibilidad"));
+    }
 
     /** Crea el canal la primera vez (la credencial solo se muestra al crearlo) y la recuerda. */
     private String credencial(String canal) {

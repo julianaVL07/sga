@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -100,6 +101,21 @@ class ReporteControllerIntegracionTest {
         get("/api/reportes/ingresos" + PERIODO, "PERSONAL_SERVICIO").andExpect(status().isForbidden());
         mvc.perform(MockMvcRequestBuilders.get("/api/reportes/reservas-por-canal" + PERIODO))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Cuerpos de error de /api/reportes: 401, 403 y 409 (el 400 está en ManejoErroresIntegracionTest)")
+    void cuerposDeErrorDeReportes() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get("/api/reportes/ocupacion" + PERIODO))
+                .andExpect(CuerpoError.error(HttpStatus.UNAUTHORIZED, CuerpoError.MENSAJE_401,
+                        "/api/reportes/ocupacion"));
+
+        get("/api/reportes/ocupacion" + PERIODO, "RECEPCIONISTA")
+                .andExpect(CuerpoError.error(HttpStatus.FORBIDDEN, CuerpoError.MENSAJE_403, "/api/reportes/ocupacion"));
+
+        get("/api/reportes/ingresos?desde=" + HOY + "&hasta=" + HOY.minusDays(1), "ADMINISTRADOR")
+                .andExpect(CuerpoError.error(HttpStatus.CONFLICT,
+                        startsWith("7.9: la fecha desde (" + HOY + ") no puede ser posterior"), "/api/reportes/ingresos"));
     }
 
     private ResultActions get(String url, String rol) throws Exception {
