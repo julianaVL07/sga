@@ -42,7 +42,7 @@ export function TablaResponsive<T>({
           <TableHeader>
             <TableRow className="bg-muted/60 hover:bg-muted/60">
               {columnas.map((col) => (
-                <TableHead key={col.clave} className={cn('h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground', col.className)}>
+                <TableHead key={col.clave} className={cn('h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground', col.className, 'whitespace-nowrap')}>
                   {col.titulo}
                 </TableHead>
               ))}
