@@ -176,7 +176,7 @@ Los errores siempre vuelven con el mismo formato (`ErrorResponse`): **400** cuan
 
 ## Probar la API
 
-En `sga/docs/api/sga.http` dejamos una colección de 233 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404, los casos de seguridad (401, 403 por rol, por propietario y por canal) y la gestión de usuarios. Cada petición valida su respuesta con `client.test`.
+En `sga/docs/api/sga.http` dejamos una colección de 233 peticiones que recorre el flujo completo de una reserva y prueba un 409 por cada regla que expone la API, además de los 400 y 404, los casos de seguridad (401, 403 por rol, por propietario y por canal) y la gestión de usuarios. Con las 6 del simulador `canal-externo.http` son 239 peticiones. Cada petición valida su respuesta con `client.test`: las de éxito, el código y uno o dos campos clave; las de error, el código y todo el `ErrorResponse` (`status`, `error`, `mensaje`, `path`, `timestamp` y los `errores` por campo de los 400).
 
 1. Arranca la app desde cero.
 2. Abre `sga.http` en IntelliJ y dale a **Run All Requests in File**. En VS Code se puede usar la extensión REST Client.
@@ -196,7 +196,7 @@ En `sga/docs/api/sga.http` dejamos una colección de 233 peticiones que recorre 
     - Apartamentos y operación: operaciones del estado operativo en lugar del cambio genérico, cada una con su estado de origen, `Location` en bloqueos y novedades con su consulta por id, historial de novedades y apartamentos pendientes de preparación.
     - Folio y transversal: depósito como `AJUSTE_MODIFICACION`, consulta del folio, cargos de servicios adicionales y correcciones (RN-16), `Location` en pagos y temporadas, consulta de una temporada y disponibilidad del canal paginada.
     - Pruebas unitarias de las reglas de configuración (L-03, L-06, L-09, L-12, L-13, L-14 y L-17), del titular facturable (3.2), del apartamento activo (3.3) y del formato del código de reserva.
-- **Verificación:** las 399 pruebas pasan (`./gradlew clean test`), las 233 peticiones de `sga.http` pasan contra la app recién arrancada y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
+- **Verificación:** las 411 pruebas pasan (`./gradlew clean test`), las 233 peticiones de `sga.http` y las 6 de `canal-externo.http` pasan contra la app recién arrancada, las pruebas de integración de cada módulo comprueban el cuerpo de error de un 400, 401, 403, 404 y 409 y la matriz de trazabilidad dice qué prueba unitaria y de integración cubre cada regla.
 
 ## Seguridad
 
@@ -376,6 +376,31 @@ WARN ... DatosInicialesCanalesConfig : Falta sga.canales.credencial-demo en appl
 4. Para ver el resultado como administrador, entra a **Canales de venta**: en **Bitácora** salen los seis mensajes y en **Conflictos** el del paso 4, listo para resolverlo con un motivo (la reserva vigente no cambia).
 
 Si lo corres dos veces sin reiniciar, el paso 2 responde `DUPLICADO_IGNORADO` y el 5 `RECHAZADO_INVALIDO`, porque esa reserva ya se aceptó y se canceló.
+
+## Integraciones
+
+Cada servicio externo entra por un puerto y tiene un adaptador real y uno local, de modo que si el servicio falla o no hay red el sistema sigue funcionando.
+
+| Integración | Puerto | Adaptador real | Adaptador local | Propiedad que la elige o la apaga | Tiempo de espera | Qué pasa si falla |
+|---|---|---|---|---|---|---|
+| Canal externo | `AutenticarCanalUseCase` y `RecibirReservaExternaUseCase` (entrada) | `CanalExternoController` con `CanalCredencialFilter` (credencial en `X-Canal-Credencial`) | El simulador `sga/docs/api/canal-externo.http` y el canal `booking` de los datos iniciales (`sga.canales.credencial-demo`) | No tiene propiedad: el administrador apaga cada canal con `PUT /api/canales/{nombre}/desactivar` | No espera a nadie: el canal llama al SGA y la respuesta es inmediata | 401 o 403 con `ErrorResponse`, 409 `RECHAZADO_CONFLICTO` con el conflicto registrado; todo queda en la bitácora |
+| Notificaciones por correo | `NotificadorTitular` | `NotificadorTitularSmtp` (SMTP de Gmail) | `NotificadorTitularLocal` (en memoria y en el log) | `sga.notificaciones.proveedor` (`smtp` o `local`); los recordatorios se apagan con `sga.recordatorios.activo=false` | `sga.notificaciones.smtp.tiempo-espera=PT5S` | La operación ya quedó guardada: el usuario no ve ningún error y el fallo queda en el log |
+| Modelo de IA | `SugeridorGravedad` | `SugeridorGravedadGemini` (Google AI Studio) | `SugeridorGravedadLocal` (palabras clave); `SugeridorGravedadDeshabilitado` la apaga | `sga.ia.proveedor` (`gemini`, `local` o `deshabilitado`) | `sga.ia.gemini.tiempo-espera=PT4S` | No hay sugerencia: el formulario muestra "Sugerencia no disponible", la novedad se guarda igual y el fallo queda en el log |
+| Imágenes en Cloudinary | URL de cada imagen del apartamento (`imagenes`) y de la portada (`frontend/src/lib/imagenes.ts`) | `FotoApartamento` carga la imagen de `res.cloudinary.com` | El fondo crema con ondas de `FotoApartamento` | No tiene propiedad: basta con que la imagen no cargue | El del navegador | Se muestra el fondo con ondas en lugar de la foto, sin errores en pantalla |
+| Mapa con OpenStreetMap | Latitud y longitud de `GET /api/alojamiento` | `MapaAlojamiento` con Leaflet y los mosaicos de `tile.openstreetmap.org` | La dirección con las coordenadas y el enlace a OpenStreetMap | No tiene propiedad: basta con que el mapa no cargue | 8 segundos (`ESPERA_MAXIMA_MS` en `MapaAlojamiento.tsx`) | Se muestra "El mapa no está disponible en este momento" con la dirección y las coordenadas |
+
+**Funcionar sin internet.** Para la demostración sin red, arranca con la IA deshabilitada, las notificaciones locales y los recordatorios apagados:
+
+```bash
+./gradlew bootRun --args='--sga.ia.proveedor=deshabilitado --sga.notificaciones.proveedor=local --sga.recordatorios.activo=false'
+```
+
+El sistema funciona completo: se reserva, se paga, se registran llegadas y salidas, se cierran folios y se generan los reportes y su PDF. Los correos (también el código para recuperar la contraseña) se leen en el log, el formulario de novedades muestra "Sugerencia no disponible" y deja elegir la gravedad, las fotos se reemplazan por el fondo con ondas y el mapa por la dirección con sus coordenadas.
+
+## Funcionalidades opcionales
+
+- **Exportación de reportes a PDF.** En **Administración → Reportes** (`/panel/reportes`), el botón **Descargar PDF** genera `reporte-coral-<desde>-<hasta>.pdf` con el nombre del alojamiento, el rango de fechas y las tres tablas (ocupación, ingresos y reservas por canal) con los mismos datos de la pantalla. Las librerías `jspdf` y `jspdf-autotable` se descargan solo al pulsar el botón.
+- **Recordatorios automáticos.** Un día antes de la llegada o de la salida el SGA le escribe al titular (ver [Notificaciones](#notificaciones)). Se encienden o apagan con `sga.recordatorios.activo`.
 
 ## Forma de trabajo
 
