@@ -42,6 +42,7 @@ import java.time.LocalDate;
  * inactivo). Todo mensaje queda en la bitácora (7.8), también los rechazados: por eso el caso de uso devuelve el
  * resultado en vez de lanzar una excepción, y este controlador lo traduce al código HTTP (estadoHttp).
  */
+// Separado de CanalVentaController: lo llama la plataforma externa con su credencial (X-Canal-Credencial), no un usuario con JWT
 @RestController
 @RequestMapping("/api/canales/{canal}")
 @RequiredArgsConstructor
