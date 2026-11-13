@@ -145,9 +145,10 @@ export default function Folio() {
         )}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start">
+      {/* Lado a lado solo en pantallas muy anchas: con la barra lateral del panel, a 1280 px no caben las dos */}
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:items-start">
         {/* ---------- Movimientos ---------- */}
-        <div className="order-2 flex flex-col gap-4 rounded-tarjeta border border-border bg-card p-5 shadow-tarjeta md:p-6 lg:order-1">
+        <div className="order-2 flex flex-col gap-4 rounded-tarjeta border border-border bg-card p-5 shadow-tarjeta md:p-6 2xl:order-1">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-titulo text-xl font-semibold">Movimientos</h2>
             <p className="text-xs text-muted-foreground">
@@ -190,11 +191,11 @@ export default function Folio() {
         </div>
 
         {/* ---------- Saldo y acciones ---------- */}
-        <aside className="order-1 flex flex-col gap-4 lg:order-2">
+        <aside className="order-1 flex flex-col gap-4 2xl:order-2">
           <Saldo folio={f} />
 
           {abierto ? (
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+            <div className="grid grid-cols-2 gap-2 2xl:grid-cols-1">
               <Button onClick={() => setDialogo('pago')}>
                 <Banknote aria-hidden="true" /> Registrar pago
               </Button>
@@ -215,12 +216,12 @@ export default function Folio() {
                 <CircleCheckBig aria-hidden="true" /> Cerrar folio
               </Button>
               {esAdministrador && (
-                <Button variant="outline" className="col-span-2 lg:col-span-1" onClick={() => setDialogo('autorizar')}>
+                <Button variant="outline" className="col-span-2 2xl:col-span-1" onClick={() => setDialogo('autorizar')}>
                   <ShieldCheck aria-hidden="true" /> Autorizar cierre con saldo
                 </Button>
               )}
               {f.saldo !== 0 && (
-                <p className="col-span-2 text-xs text-muted-foreground lg:col-span-1">
+                <p className="col-span-2 text-xs text-muted-foreground 2xl:col-span-1">
                   El folio se cierra solo con saldo en cero.
                   {esAdministrador ? ' Con saldo, autoriza el cierre indicando el motivo.' : ''}
                 </p>
