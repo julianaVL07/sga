@@ -23,8 +23,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
@@ -48,6 +50,25 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors()
                 .forEach(e -> errores.putIfAbsent(e.getField(), e.getDefaultMessage()));
         return construir(HttpStatus.BAD_REQUEST, "La petición tiene datos inválidos", req, errores);
+    }
+
+    /** 400: falló una anotación de un parámetro de la URL, por ejemplo @Min en pagina. */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> validacionParametros(HandlerMethodValidationException ex,
+                                                              HttpServletRequest req) {
+        Map<String, String> errores = new LinkedHashMap<>();
+        ex.getParameterValidationResults().forEach(resultado -> resultado.getResolvableErrors()
+                .forEach(e -> errores.putIfAbsent(resultado.getMethodParameter().getParameterName(),
+                        e.getDefaultMessage())));
+        return construir(HttpStatus.BAD_REQUEST, "La petición tiene datos inválidos", req, errores);
+    }
+
+    /** 400: falta un parámetro obligatorio de la URL. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> parametroFaltante(MissingServletRequestParameterException ex,
+                                                           HttpServletRequest req) {
+        return construir(HttpStatus.BAD_REQUEST, "La petición tiene datos inválidos", req,
+                Map.of(ex.getParameterName(), "El parámetro es obligatorio"));
     }
 
     /** 400: JSON mal formado, fecha imposible o valor de enum que no existe. */
